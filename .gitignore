@@ -1,1 +1,7 @@
 .idea
+
+# Hugo build output — regenerated and deployed by GitHub Actions, not served
+# from the committed copy, so it does not belong in version control.
+/public/
+/resources/_gen/
+.hugo_build.lock

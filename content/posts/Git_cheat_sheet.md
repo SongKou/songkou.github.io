@@ -198,7 +198,7 @@ With no arguments, shows a list of existing remotes. Several subcommands are ava
 
 add
 
-Add a remote named <name> for the repository at <URL>. The command  `git fetch <name>`  can then be used to create and update remote-tracking branches <name>/<branch>.
+Add a remote named `<name>` for the repository at `<URL>`. The command  `git fetch <name>`  can then be used to create and update remote-tracking branches `<name>/<branch>`.
 
 With  `-f`  option,  `git fetch <name>`  is run immediately after the remote information is set up.
 
@@ -218,14 +218,14 @@ When a push mirror is created with  `--mirror=push`, then  `git push`  will alwa
 
 rename
 
-Rename the remote named <old> to <new>. All remote-tracking branches and configuration settings for the remote are updated.
+Rename the remote named `<old>` to `<new>`. All remote-tracking branches and configuration settings for the remote are updated.
 
-In case <old> and <new> are the same, and <old> is a file under  `$GIT_DIR/remotes`  or  `$GIT_DIR/branches`, the remote is converted to the configuration file format.
+In case `<old>` and `<new>` are the same, and `<old>` is a file under  `$GIT_DIR/remotes`  or  `$GIT_DIR/branches`, the remote is converted to the configuration file format.
 
 remove
 rm
 
-Remove the remote named <name>. All remote-tracking branches and configuration settings for the remote are removed.
+Remove the remote named `<name>`. All remote-tracking branches and configuration settings for the remote are removed.
 
 set-head
 
@@ -255,25 +255,25 @@ With  `--all`, all URLs for the remote will be listed.
 
 set-url
 
-Changes URLs for the remote. Sets first URL for remote <name> that matches regex <oldurl> (first URL if no <oldurl> is given) to <newurl>. If <oldurl> doesn’t match any URL, an error occurs and nothing is changed.
+Changes URLs for the remote. Sets first URL for remote `<name>` that matches regex `<oldurl>` (first URL if no `<oldurl>` is given) to `<newurl>`. If `<oldurl>` doesn’t match any URL, an error occurs and nothing is changed.
 
 With  `--push`, push URLs are manipulated instead of fetch URLs.
 
 With  `--add`, instead of changing existing URLs, new URL is added.
 
-With  `--delete`, instead of changing existing URLs, all URLs matching regex <URL> are deleted for remote <name>. Trying to delete all non-push URLs is an error.
+With  `--delete`, instead of changing existing URLs, all URLs matching regex `<URL>` are deleted for remote `<name>`. Trying to delete all non-push URLs is an error.
 
 Note that the push URL and the fetch URL, even though they can be set differently, must still refer to the same place. What you pushed to the push URL should be what you would see if you immediately fetched from the fetch URL. If you are trying to fetch from one place (e.g. your upstream) and push to another (e.g. your publishing repository), use two separate remotes.
 
 show
 
-Gives some information about the remote <name>.
+Gives some information about the remote `<name>`.
 
 With  `-n`  option, the remote heads are not queried first with  `git ls-remote <name>`; cached information is used instead.
 
 prune
 
-Deletes stale references associated with <name>. By default, stale remote-tracking branches under <name> are deleted, but depending on global configuration and the configuration of the remote we might even prune local tags that haven’t been pushed there. Equivalent to  `git fetch --prune <name>`, except that no new references will be fetched.
+Deletes stale references associated with `<name>`. By default, stale remote-tracking branches under `<name>` are deleted, but depending on global configuration and the configuration of the remote we might even prune local tags that haven’t been pushed there. Equivalent to  `git fetch --prune <name>`, except that no new references will be fetched.
 
 See the PRUNING section of  [git-fetch[1]](https://git-scm.com/docs/git-fetch)  for what it’ll prune depending on various configuration.
 
@@ -302,75 +302,91 @@ With  `--prune`  option, run pruning against all the remotes that are updated.
 
 (3). fetch
 
-`# get all branch update to local 
-git fetch <remote host name>  `
-  
+```
+# get all branch update to local
+git fetch <remote host name>
+```
+
 #### get certain branch update
-git fetch <remote host name> <branch name>  
-  
-#### get origin's master branch update  
-`git fetch origin master`  
-  
+```
+git fetch <remote host name> <branch name>
+```
+
+#### get origin's master branch update
+```
+git fetch origin master
+```
 
 > the update that you get need to be get by "remote host name/branch
 > name" , eg: origin host master branch, need to get via
 > `origin/master`. Can use `git merge` or `git rebase` command to merge
 > remote branch.
 
-    git merge origin/master  
-    git rebase origin/master
+```
+git merge origin/master
+git rebase origin/master
+```
 
 (4). pull
 
->        # get origion host's next branch, merge with master branch on local 
->        git pull origin next:master
-
- 
-  
-##### if remote branch is to merge with current branch, then info after :  is not required. 
-
-`git pull origin next`  
-  
-#### above command is equal to do a git fetch, then do git merge.   
 ```
-git fetch origin  
-git merge origin/next  
-```  
-####  merge use rebase mode 
+# get origion host's next branch, merge with master branch on local
+git pull origin next:master
 ```
-git pull --rebase  <remote host name> <remote branch name>:<local branch name>
+
+##### if remote branch is to merge with current branch, then info after :  is not required.
+
+```
+git pull origin next
+```
+
+#### above command is equal to do a git fetch, then do git merge.
+```
+git fetch origin
+git merge origin/next
+```
+
+####  merge use rebase mode
+```
+git pull --rebase <remote host name> <remote branch name>:<local branch name>
 ```
 
 (5). push
 
 >  push local master branch to remote origin host name, master branch.  if remote doesn't exist, it will recreate  `git push origin master`
 
-  
-#### Omitted local branch, same as 2nd one, delete origin host master branch  
-git push origin :master  
-git push origin --delete master  
-  
-#### if current branch have track relationship with remote branch, then local and remote branch all not required. 
+#### Omitted local branch, same as 2nd one, delete origin host master branch
 ```
-git push origin  
-  ```
-#### if current branch have just one tracking branch, then even host name is not required 
+git push origin :master
+git push origin --delete master
 ```
-git push  
-  ```
-#### if current branch have tracking relationship with multiple host, can use -u to designate one default host, then in the future no need to put host info in git push.  
+
+#### if current branch have track relationship with remote branch, then local and remote branch all not required.
 ```
-git push -u origin master  
-  ```
-#### Regardless there is a corresponding remote branch, push all local branch to remote host. 
+git push origin
 ```
-git push --all origin  
-  ```
+
+#### if current branch have just one tracking branch, then even host name is not required
+```
+git push
+```
+
+#### if current branch have tracking relationship with multiple host, can use -u to designate one default host, then in the future no need to put host info in git push.
+```
+git push -u origin master
+```
+
+#### Regardless there is a corresponding remote branch, push all local branch to remote host.
+```
+git push --all origin
+```
+
 ##### force push
-```  
-git push --force origin  
 ```
-#### git push won't push tag (tag), unless you use –tags option  
+git push --force origin
+```
+
+#### git push won't push tag (tag), unless you use –tags option
 ```
 git push origin --tags
 ```

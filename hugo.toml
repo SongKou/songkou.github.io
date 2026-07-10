@@ -1,6 +1,6 @@
 baseURL = 'https://songkou.github.io/'
 #baseURL = '/'
-languageCode = 'en-us'
+locale = "en"
 title = 'Council of Elrond'
 #relativeURLs = true
 #canonifyURLs = true

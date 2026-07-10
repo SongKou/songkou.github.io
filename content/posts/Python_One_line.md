@@ -156,6 +156,7 @@ new_set
 
 ### Change to generator:
 
+```
 new_list = (item for item in lists if item % 2 == 0)
 new_list
 Out[87]: <generator object <genexpr> at 0x000001FFDE2D5080>
@@ -165,6 +166,7 @@ next(new_list)
 Out[89]: 0
 type(new_list)
 Out[90]: generator
+```
 
 ### Chinese magic
 ```

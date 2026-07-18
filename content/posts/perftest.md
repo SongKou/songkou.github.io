@@ -10,16 +10,44 @@ tags = ['RDMA', 'RoCE', 'Perftest', 'Linux']
 
 **perftest** is the standard micro-benchmark suite for RDMA — it validates and benchmarks InfiniBand, hardware RoCE, and Soft-RoCE links, not ordinary TCP networking. Each tool measures one RDMA verb:
 
-| Test | Measures | Typical use |
+| Test | Measures | Real-world workloads it models |
 |---|---|---|
-| `ib_write_bw` | RDMA Write bandwidth | Maximum one-way throughput |
-| `ib_write_lat` | RDMA Write latency | Small one-sided write latency |
-| `ib_read_bw` | RDMA Read bandwidth | Remote-memory read performance |
-| `ib_read_lat` | RDMA Read latency | Storage/database-style remote reads |
-| `ib_send_bw` | Send/Receive bandwidth | Message-passing and MPI-style traffic |
-| `ib_send_lat` | Send/Receive latency | Small request/response messages |
+| `ib_write_bw` | RDMA Write bandwidth | Data replication, storage writes, GPU/bulk data transfers |
+| `ib_write_lat` | RDMA Write latency | Updating remote memory — small one-sided writes |
+| `ib_read_bw` | RDMA Read bandwidth | Distributed storage and database reads, remote memory access |
+| `ib_read_lat` | RDMA Read latency | Fetching remote memory — storage/database-style lookups |
+| `ib_send_bw` | Send/Receive bandwidth | MPI messages, RPC, request queues |
+| `ib_send_lat` | Send/Receive latency | Small request/response round trips — RPC and MPI latency |
 | `ib_atomic_bw` | Atomic operation rate | Distributed locks and counters |
-| `ib_atomic_lat` | Atomic latency | Synchronization performance |
+| `ib_atomic_lat` | Atomic latency | Synchronization primitives |
+
+### Write, Read, and Send are different operations
+
+The grouping in the table is not accidental — the three verbs have different semantics:
+
+**RDMA Write** — the client writes directly into registered memory on the server. The server CPU does not process each operation:
+
+```text
+Client memory --write--> Server memory
+```
+
+Commonly used for high-throughput replication and pushing data into remote buffers.
+
+**RDMA Read** — the client fetches data directly from registered server memory, again without the remote CPU in the data path:
+
+```text
+Client memory <--read-- Server memory
+```
+
+Useful for distributed caches, databases, remote-memory systems, and storage reads.
+
+**Send/Receive** — a **two-sided** operation: the client sends a message and the server must already have a receive buffer posted:
+
+```text
+Client Send --message--> Server Receive
+```
+
+This is closer to RPC or MPI messaging — which is why the one-sided verbs model memory/storage access while the send tests model message exchange.
 
 Common use cases:
 
@@ -31,7 +59,17 @@ Common use cases:
 - Burn-in and stability testing
 - Measuring GPUDirect RDMA when built with CUDA support
 
-Every test is client–server: run the command with no host argument on one machine (it becomes the server and waits), then run the same command plus the server's IP on the other. The two sides negotiate parameters over ordinary TCP (default port 18515) before the RDMA traffic starts.
+Every test is client–server, always following the same pattern:
+
+```bash
+# Server: start and wait
+ib_write_bw [options]
+
+# Client: same command, same options, plus the server's IP
+ib_write_bw [options] SERVER_IP
+```
+
+Use the same test and the same options on both machines. The two sides negotiate parameters over ordinary TCP (default port 18515) before the RDMA traffic starts.
 
 ## The lab: two Ubuntu VMs with Soft-RoCE
 
@@ -151,6 +189,97 @@ ekou@ubuntu2:~$ ib_send_lat -d rxe0 -s 64 10.10.80.91
 ```
 
 How to read the columns: `t_typical` (the median-ish value, **86 µs** here) is the honest headline number; `t_avg` is dragged up by outliers; and the gap between `t_typical` and `t_max`/`p99.9` (86 µs → **1.6 ms**!) is the *jitter* — in this lab it is enormous, which is exactly what VM scheduling does to latency.
+
+## More recipes: duration, iterations, and all sizes
+
+My runs above used the defaults (5000 iterations of one 64 KiB size, direct GID exchange). Three variations worth knowing — shown here with RDMA-CM connection setup (`-R`), which is also what enables ToS/DSCP marking with `-T`:
+
+**Bandwidth for a fixed duration** — 64 KiB messages for 10 seconds:
+
+```bash
+# Server:
+ib_write_bw -d rxe0 -R -s 65536 -D 10
+# Client:
+ib_write_bw -d rxe0 -R -s 65536 -D 10 10.10.80.91
+```
+
+`ib_read_bw` and `ib_send_bw` follow exactly the same pattern — swap the command name to benchmark the Read or Send verb instead.
+
+**Latency with a larger sample** — 10,000 exchanges of 64-byte messages:
+
+```bash
+# Server:
+ib_write_lat -d rxe0 -R -s 64 -n 10000
+# Client:
+ib_write_lat -d rxe0 -R -s 64 -n 10000 10.10.80.91
+```
+
+Again, `ib_read_lat` and `ib_send_lat` are identical in usage. Note how the latency tools measure: they perform a round trip and report **half of it** as the estimated one-way latency.
+
+**Sweep every message size** — `-a` runs from 2 B up to 8 MiB, revealing where the link saturates:
+
+```bash
+# Server:
+ib_write_bw -d rxe0 -R -a
+# Client:
+ib_write_bw -d rxe0 -R -a 10.10.80.91
+```
+
+Flag recap for these recipes: `-d` selects the RDMA device, `-R` connects through the RDMA Connection Manager, `-s` sets the message size, `-D` runs for a fixed number of seconds (pairs nicely with `--cpu_util`), and `-n` sets the iteration count.
+
+## Atomic operations: ib_atomic_bw and ib_atomic_lat
+
+`ib_atomic_bw` and `ib_atomic_lat` benchmark **remote RDMA atomic operations**. An atomic modifies an 8-byte value in remote registered memory as one indivisible operation, so no other participant can ever observe a partially updated value. perftest supports two atomic types:
+
+| Atomic type | Behavior | Common use |
+|---|---|---|
+| `FETCH_AND_ADD` | Returns the old value and adds a number | Shared counters, sequence numbers, work allocation |
+| `CMP_AND_SWAP` | Replaces a value only if it equals an expected value | Distributed locks, ownership, synchronization |
+
+### ib_atomic_bw
+
+Measures how many remote atomic operations complete per second. For atomics the **operation/message rate is more meaningful than data bandwidth** — every operation touches only 8 bytes.
+
+```bash
+# Server:
+ib_atomic_bw -d rxe0 -R -A FETCH_AND_ADD -D 10
+# Client:
+ib_atomic_bw -d rxe0 -R -A FETCH_AND_ADD -D 10 10.10.80.91
+```
+
+Throughput often scales with the number of in-flight requests — allow multiple outstanding atomics with `-o`:
+
+```bash
+# Server:
+ib_atomic_bw -d rxe0 -R -A FETCH_AND_ADD -o 16 -D 10
+# Client:
+ib_atomic_bw -d rxe0 -R -A FETCH_AND_ADD -o 16 -D 10 10.10.80.91
+```
+
+### ib_atomic_lat
+
+Measures the time to complete one remote atomic operation:
+
+```bash
+# Compare-and-Swap latency (server / client):
+ib_atomic_lat -d rxe0 -R -A CMP_AND_SWAP -n 10000
+ib_atomic_lat -d rxe0 -R -A CMP_AND_SWAP -n 10000 10.10.80.91
+
+# Fetch-and-Add latency: same pattern
+ib_atomic_lat -d rxe0 -R -A FETCH_AND_ADD -n 10000 10.10.80.91
+```
+
+The new flags beyond the earlier recipes: `-A` selects the atomic operation type, and `-o` sets the number of outstanding requests.
+
+Two practical notes:
+
+- Atomics require the **reliable-connected (RC)** transport — perftest's default, so nothing to change. Check whether your device exposes atomic support at all:
+
+```bash
+ibv_devinfo -v | grep -i atomic
+```
+
+- These tests represent **synchronization and metadata operations, not bulk data**. Use `ib_write_bw` or `ib_read_bw` for data throughput.
 
 ## Why the VM numbers look like this
 

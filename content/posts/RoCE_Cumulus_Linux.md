@@ -802,6 +802,53 @@ DSCP 48 -> switch priority 6 -> traffic class 6
 
 These values are only examples. Check the RNIC and reference architecture.
 
+#### Host-side commands (ConnectX / MLNX_OFED)
+
+For a ConnectX host implementing the example policy (RoCE data DSCP 26 → priority 3, lossless):
+
+```bash
+# Trust DSCP (not PCP) for priority classification on the NIC
+sudo mlnx_qos -i ens6f0np0 --trust dscp
+
+# Map DSCP 26 to priority 3 on the host NIC (must match the switch policy)
+sudo mlnx_qos -i ens6f0np0 --dscp2prio set,26,3
+
+# Enable PFC on priority 3 only (must match the switch)
+sudo mlnx_qos -i ens6f0np0 --pfc 0,0,0,1,0,0,0,0
+
+# Mark RDMA-CM connections with ToS 106
+# (ToS = DSCP x 4 + ECN bits: 26 x 4 = 104, plus ECT(0) = 106)
+sudo cma_roce_tos -d mlx5_0 -t 106
+
+# Default RDMA-CM connections to RoCEv2 on port 1 (mode 2 = RoCEv2)
+sudo cma_roce_mode -d mlx5_0 -p 1 -m 2
+
+# Device-wide default ToS for all QPs on the port. This is a fallback:
+# applications that set their own ToS override it.
+echo 106 | sudo tee /sys/class/infiniband/mlx5_0/tc/1/traffic_class
+```
+
+Applications can also mark for themselves:
+
+```bash
+# perftest: use -T/--tos together with -R (RDMA-CM connected QPs).
+# Careful: lowercase -t is tx-depth, not ToS.
+ib_write_bw -d mlx5_0 -R -T 106 192.168.100.12 --report_gbits
+
+# NCCL: set the traffic class for NCCL's QPs
+export NCCL_IB_TC=106
+```
+
+Verify the host NIC state — trust mode, the DSCP-to-priority table, and per-priority PFC — with the bare command:
+
+```bash
+mlnx_qos -i ens6f0np0
+```
+
+CNPs sent by the notification point default to **DSCP 48, priority 6** on ConnectX. If the fabric uses different values, they are tunable via `/sys/class/net/<iface>/ecn/roce_np/cnp_dscp` and `.../cnp_802p_prio`.
+
+On the switch side, confirm the same mappings:
+
 ```bash
 nv show interface swp1 qos mapping dscp
 nv show interface swp1 qos mapping pcp
@@ -809,7 +856,7 @@ nv show interface swp1 qos egress-queue-mapping
 nv show interface swp1 qos remark
 ```
 
-Linux host tools that may participate include `mlnx_qos`, `cma_roce_tos`, `tc`, and `dcb`. Their availability and syntax depend on the host software stack.
+Other host tools such as `tc` and `dcb`/`lldptool` can also participate. The commands above assume MLNX_OFED / DOCA-Host tooling; availability and exact syntax depend on the host software stack.
 
 ### 12. Testing RoCE with perftest
 

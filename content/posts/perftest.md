@@ -192,7 +192,7 @@ How to read the columns: `t_typical` (the median-ish value, **86 µs** here) is 
 
 ## More recipes: duration, iterations, and all sizes
 
-My runs above used the defaults (5000 iterations of one 64 KiB size, direct GID exchange). Three variations worth knowing — shown here with RDMA-CM connection setup (`-R`), which is also what enables ToS/DSCP marking with `-T`:
+My runs above used the defaults (5000 iterations of one 64 KiB size, direct GID exchange). Three variations worth knowing — shown here with RDMA-CM connection setup (`-R`), which is also what enables ToS/DSCP marking with `-T`. You can spot the difference in the output header: with `-R` the test reports `rdma_cm QPs : ON` and `Data ex. method : rdma_cm` instead of the `OFF` / `Ethernet` of the direct runs.
 
 **Bandwidth for a fixed duration** — 64 KiB messages for 10 seconds:
 
@@ -216,6 +216,23 @@ ib_write_lat -d rxe0 -R -s 64 -n 10000 10.10.80.91
 
 Again, `ib_read_lat` and `ib_send_lat` are identical in usage. Note how the latency tools measure: they perform a round trip and report **half of it** as the estimated one-way latency.
 
+The `-D` duration flag works on latency tests too. A real 60-second run from the lab:
+
+```text
+ekou@ubuntu2:~$ ib_send_lat -d rxe0 -s 64 -D 60 10.10.80.91
+---------------------------------------------------------------------------------------
+                    Send Latency Test
+ Connection type : RC           Using SRQ      : OFF
+ Mtu             : 1024[B]
+ Link type       : Ethernet
+---------------------------------------------------------------------------------------
+ #bytes        #iterations       t_avg[usec]    tps average
+ 64            151456            99.03          5048.78
+---------------------------------------------------------------------------------------
+```
+
+Duration mode reports only the average and the transactions-per-second — no percentile columns. The numbers are self-consistent: 99.03 µs one-way means a ~198 µs round trip, and 1 / 198 µs ≈ the 5,049 tps reported. Over 151,456 exchanges the 99 µs average also agrees with the earlier short run (t_typical 86 µs plus the long jitter tail pulling the mean up).
+
 **Sweep every message size** — `-a` runs from 2 B up to 8 MiB, revealing where the link saturates:
 
 ```bash
@@ -224,6 +241,43 @@ ib_write_bw -d rxe0 -R -a
 # Client:
 ib_write_bw -d rxe0 -R -a 10.10.80.91
 ```
+
+That sweep on the lab produced:
+
+```text
+ #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]
+ 2          5000             0.09               0.06               0.028957
+ 4          5000             0.23               0.11               0.029573
+ 8          5000             0.49               0.26               0.033853
+ 16         5000             0.89               0.43               0.028452
+ 32         5000             1.92               1.11               0.036419
+ 64         5000             4.00               2.22               0.036406
+ 128        5000             7.09               4.08               0.033438
+ 256        5000             16.17              8.19               0.033541
+ 512        5000             26.46              14.07              0.028824
+ 1024       5000             59.16              31.37              0.032124
+ 2048       5000             63.48              36.53              0.018704
+ 4096       5000             72.21              36.67              0.009388
+ 8192       5000             77.82              42.38              0.005424
+ 16384      5000             46.29              35.53              0.002274
+ 32768      5000             51.99              40.16              0.001285
+ 65536      5000             43.33              39.65              0.000634
+ 131072     5000             45.07              39.31              0.000314
+ 262144     5000             40.65              36.55              0.000146
+ 524288     5000             37.57              37.19              0.000074
+ 1048576    5000             37.80              37.08              0.000037
+ 2097152    5000             40.55              38.46              0.000019
+ 4194304    5000             109.60             75.31              0.000019
+ 8388608    5000             113.01             107.23             0.000013
+---------------------------------------------------------------------------------------
+```
+
+Reading the curve:
+
+- **2 B – 1 KiB: operation-rate bound.** The message rate stays flat (~0.03 Mpps ≈ 30k ops/s) while bandwidth grows almost linearly with size — the signature of a per-operation bottleneck. rxe's software path caps how many operations per second it can push, so a bigger message simply carries more bytes per operation.
+- **2 KiB – 2 MiB: plateau** around 36–42 MB/s.
+- **4–8 MiB: jump to 75–107 MB/s.** Per-operation overhead is now fully amortized and VM scheduling jitter averages out across each long transfer; peak and average converging (113 vs 107) marks a stable run.
+- On bare-metal ConnectX the same sweep instead climbs quickly and pins at line rate for every large size — a very different shape from this software curve.
 
 Flag recap for these recipes: `-d` selects the RDMA device, `-R` connects through the RDMA Connection Manager, `-s` sets the message size, `-D` runs for a fixed number of seconds (pairs nicely with `--cpu_util`), and `-n` sets the iteration count.
 
@@ -247,6 +301,26 @@ ib_atomic_bw -d rxe0 -R -A FETCH_AND_ADD -D 10
 ib_atomic_bw -d rxe0 -R -A FETCH_AND_ADD -D 10 10.10.80.91
 ```
 
+On the lab this returned:
+
+```text
+ekou@ubuntu2:~$ ib_atomic_bw -d rxe0 -R -A FETCH_AND_ADD -D 10 10.10.80.91
+ WARNING: BW peak won't be measured in this run.
+Device not recognized to implement inline feature. Disabling it
+---------------------------------------------------------------------------------------
+                    Atomic FETCH_AND_ADD BW Test
+ Connection type : RC           Using SRQ      : OFF
+ Outstand reads  : 128
+ rdma_cm QPs     : ON
+ Data ex. method : rdma_cm
+---------------------------------------------------------------------------------------
+ #bytes     #iterations    BW peak[MB/sec]    BW average[MB/sec]   MsgRate[Mpps]
+ 8          578000           0.00               0.73               0.096329
+---------------------------------------------------------------------------------------
+```
+
+This is the op-rate point made concrete: the "bandwidth" is a laughable **0.73 MB/s**, but the message rate is **0.096 Mpps ≈ 96,000 atomic operations per second** (578,000 in 10 s) — for 8-byte synchronization operations, the second number is the one that matters. The two warnings are normal: peak bandwidth is not computed in duration mode, and rxe has no inline-data support.
+
 Throughput often scales with the number of in-flight requests — allow multiple outstanding atomics with `-o`:
 
 ```bash
@@ -255,6 +329,8 @@ ib_atomic_bw -d rxe0 -R -A FETCH_AND_ADD -o 16 -D 10
 # Client:
 ib_atomic_bw -d rxe0 -R -A FETCH_AND_ADD -o 16 -D 10 10.10.80.91
 ```
+
+(A confession from my own captures: I accidentally started the server with `-o 16` but the client without it — each side's header showed its own `Outstand reads` value and the test still completed. It ran, but it violates the "same options on both machines" rule; keep them identical so the header tells you what was actually measured.)
 
 ### ib_atomic_lat
 
@@ -278,6 +354,15 @@ Two practical notes:
 ```bash
 ibv_devinfo -v | grep -i atomic
 ```
+
+On the Soft-RoCE lab:
+
+```text
+ekou@ubuntu2:~$ ibv_devinfo -v | grep -i atomic
+        atomic_cap:                     ATOMIC_HCA (1)
+```
+
+`ATOMIC_HCA` means the device guarantees atomicity between its own operations — rxe supports atomics, which is why the tests above work at all.
 
 - These tests represent **synchronization and metadata operations, not bulk data**. Use `ib_write_bw` or `ib_read_bw` for data throughput.
 

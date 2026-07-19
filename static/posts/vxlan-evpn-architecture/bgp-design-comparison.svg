@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" fill="#e5eef9" font-family="Inter,Segoe UI,Arial,sans-serif" text-anchor="middle" role="img" aria-labelledby="title description">
+  <title id="title">iBGP overlay with IGP underlay compared with eBGP everywhere</title>
+  <desc id="description">The iBGP design uses one autonomous system and spine route reflectors. The eBGP-everywhere design uses a spine autonomous system and a separate autonomous system per leaf or rack.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto"><path d="M0,0 L0,8 L9,4 z" fill="#64748b"/></marker>
+    <filter id="shadow"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-opacity=".22"/></filter>
+  </defs>
+  <rect width="1280" height="720" fill="#07111f"/>
+  <text x="64" y="62" text-anchor="start" font-size="34" font-weight="700">BGP architecture choices</text>
+  <text x="64" y="96" text-anchor="start" font-size="18" fill="#9fb0c5">The underlay resolves VTEPs; the EVPN overlay distributes tenant reachability</text>
+
+  <g filter="url(#shadow)">
+    <rect x="44" y="134" width="570" height="500" rx="22" fill="#101e31" stroke="#38bdf8" stroke-width="2" stroke-dasharray="8 8"/>
+    <text x="329" y="180" font-size="24" font-weight="700">iBGP overlay + IGP underlay</text>
+    <text x="329" y="210" font-size="17" fill="#9fb0c5">One AS; spines reflect EVPN</text>
+
+    <rect x="85" y="252" width="205" height="105" rx="16" fill="#211e46" stroke="#a78bfa" stroke-width="3"/>
+    <rect x="368" y="252" width="205" height="105" rx="16" fill="#211e46" stroke="#a78bfa" stroke-width="3"/>
+    <text x="188" y="294" font-size="22" font-weight="650">Spine 1</text><text x="188" y="326" font-size="17" fill="#c4b5fd">EVPN RR</text>
+    <text x="471" y="294" font-size="22" font-weight="650">Spine 2</text><text x="471" y="326" font-size="17" fill="#c4b5fd">EVPN RR</text>
+
+    <rect x="85" y="465" width="205" height="105" rx="16" fill="#113b36" stroke="#34d399" stroke-width="3"/>
+    <rect x="368" y="465" width="205" height="105" rx="16" fill="#113b36" stroke="#34d399" stroke-width="3"/>
+    <text x="188" y="507" font-size="22" font-weight="650">Leaf 1</text><text x="188" y="539" font-size="17" fill="#6ee7b7">VTEP · AS 65000</text>
+    <text x="471" y="507" font-size="22" font-weight="650">Leaf 2</text><text x="471" y="539" font-size="17" fill="#6ee7b7">VTEP · AS 65000</text>
+
+    <path d="M188 357 L188 465 M188 357 L471 465 M471 357 L188 465 M471 357 L471 465" fill="none" stroke="#64748b" stroke-width="2"/>
+    <text x="329" y="610" font-size="16" fill="#38bdf8">IGP: loopbacks · iBGP: EVPN Type 2/3/5</text>
+
+    <rect x="666" y="134" width="570" height="500" rx="22" fill="#101e31" stroke="#fbbf24" stroke-width="2" stroke-dasharray="8 8"/>
+    <text x="951" y="180" font-size="27" font-weight="700">eBGP everywhere</text>
+    <text x="951" y="210" font-size="17" fill="#9fb0c5">BGP underlay and EVPN overlay</text>
+
+    <rect x="707" y="252" width="205" height="105" rx="16" fill="#211e46" stroke="#a78bfa" stroke-width="3"/>
+    <rect x="990" y="252" width="205" height="105" rx="16" fill="#211e46" stroke="#a78bfa" stroke-width="3"/>
+    <text x="810" y="294" font-size="22" font-weight="650">Spine 1</text><text x="810" y="326" font-size="17" fill="#c4b5fd">AS 65000</text>
+    <text x="1093" y="294" font-size="22" font-weight="650">Spine 2</text><text x="1093" y="326" font-size="17" fill="#c4b5fd">AS 65000</text>
+
+    <rect x="707" y="465" width="205" height="105" rx="16" fill="#113b36" stroke="#34d399" stroke-width="3"/>
+    <rect x="990" y="465" width="205" height="105" rx="16" fill="#113b36" stroke="#34d399" stroke-width="3"/>
+    <text x="810" y="507" font-size="22" font-weight="650">Leaf 1</text><text x="810" y="539" font-size="17" fill="#6ee7b7">VTEP · AS 65101</text>
+    <text x="1093" y="507" font-size="22" font-weight="650">Leaf 2</text><text x="1093" y="539" font-size="17" fill="#6ee7b7">VTEP · AS 65102</text>
+
+    <path d="M810 357 L810 465 M810 357 L1093 465 M1093 357 L810 465 M1093 357 L1093 465" fill="none" stroke="#64748b" stroke-width="2"/>
+    <text x="951" y="610" font-size="16" fill="#fbbf24">Explicit next-hop, RT, and AS-path policy</text>
+  </g>
+  <text x="1216" y="686" text-anchor="end" font-size="15" fill="#9fb0c5">VXLAN EVPN Architecture</text>
+</svg>

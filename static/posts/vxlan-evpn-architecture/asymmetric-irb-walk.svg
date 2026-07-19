@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" fill="#e5eef9" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="16" font-weight="500" text-anchor="middle" role="img" aria-labelledby="title description">
+  <title id="title">Asymmetric IRB packet walk</title>
+  <desc id="description">Host A sends routed traffic to its local anycast gateway. The ingress VTEP routes once into the destination L2 VNI. The egress VTEP bridges the frame to Host B without a second routing lookup.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L10,4 z" fill="#637c98"/>
+    </marker>
+    <filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/></filter>
+    <style>
+      .title{font:700 34px Inter,Segoe UI,Arial,sans-serif;fill:#e5eef9}
+      .subtitle{font:450 18px Inter,Segoe UI,Arial,sans-serif;fill:#9fb0c5}
+      .label{font:650 21px Inter,Segoe UI,Arial,sans-serif;fill:#e5eef9;text-anchor:middle}
+      .small{font:500 16px Inter,Segoe UI,Arial,sans-serif;fill:#9fb0c5;text-anchor:middle}
+      .note{font:650 18px Inter,Segoe UI,Arial,sans-serif;fill:#fbbf24;text-anchor:middle}
+      .step{font:700 16px Inter,Segoe UI,Arial,sans-serif;fill:#07111f;text-anchor:middle}
+      .footer{font:500 15px Inter,Segoe UI,Arial,sans-serif;fill:#9fb0c5;text-anchor:end}
+    </style>
+  </defs>
+
+  <rect width="1280" height="720" fill="#07111f"/>
+  <text x="64" y="68" class="title" font-size="34" font-weight="700" text-anchor="start">Asymmetric IRB packet walk</text>
+  <text x="64" y="102" class="subtitle" font-size="18" fill="#9fb0c5" text-anchor="start">The ingress VTEP routes once; the egress VTEP only bridges in the destination L2 VNI</text>
+
+  <g filter="url(#shadow)">
+    <rect x="54" y="248" width="176" height="126" rx="16" fill="#152944" stroke="#38bdf8" stroke-width="3"/>
+    <text x="142" y="298" class="label">Host A</text>
+    <text x="142" y="329" class="small" style="font-size:14px">Subnet A / L2 VNI 10100</text>
+
+    <rect x="280" y="205" width="252" height="212" rx="16" fill="#152944" stroke="#22d3ee" stroke-width="3"/>
+    <text x="406" y="255" class="label">Ingress VTEP</text>
+    <text x="406" y="282" class="small">Anycast gateway</text>
+    <text x="406" y="306" class="small">receives frame</text>
+    <rect x="320" y="318" width="172" height="54" rx="27" fill="#fbbf24"/>
+    <text x="406" y="351" class="step" style="font-size:14px;fill:#07111f">ONLY ROUTING LOOKUP</text>
+    <text x="406" y="397" class="small">Route into destination segment</text>
+
+    <rect x="582" y="248" width="230" height="126" rx="16" fill="#152944" stroke="#a78bfa" stroke-width="3"/>
+    <text x="697" y="297" class="label">VXLAN transit</text>
+    <text x="697" y="329" class="small">Destination L2 VNI 10200</text>
+
+    <rect x="862" y="205" width="190" height="212" rx="16" fill="#152944" stroke="#34d399" stroke-width="3"/>
+    <text x="957" y="255" class="label">Egress VTEP</text>
+    <text x="957" y="297" class="small">Decapsulate</text>
+    <text x="957" y="329" class="small">Bridge only</text>
+    <rect x="893" y="354" width="128" height="42" rx="21" fill="#113b36" stroke="#34d399" stroke-width="2"/>
+    <text x="957" y="381" class="small" style="font-size:14px;fill:#34d399">No VRF lookup</text>
+
+    <rect x="1102" y="248" width="126" height="126" rx="16" fill="#152944" stroke="#34d399" stroke-width="3"/>
+    <text x="1165" y="298" class="label">Host B</text>
+    <text x="1165" y="329" class="small">Subnet B</text>
+
+    <line x1="230" y1="311" x2="275" y2="311" stroke="#637c98" stroke-width="4" marker-end="url(#arrow)"/>
+    <line x1="532" y1="311" x2="577" y2="311" stroke="#637c98" stroke-width="4" marker-end="url(#arrow)"/>
+    <line x1="812" y1="311" x2="857" y2="311" stroke="#637c98" stroke-width="4" marker-end="url(#arrow)"/>
+    <line x1="1052" y1="311" x2="1097" y2="311" stroke="#637c98" stroke-width="4" marker-end="url(#arrow)"/>
+
+    <circle cx="252" cy="286" r="15" fill="#38bdf8"/><text x="252" y="292" class="step" fill="#07111f">1</text>
+    <circle cx="557" cy="286" r="15" fill="#22d3ee"/><text x="557" y="292" class="step" fill="#07111f">2</text>
+    <circle cx="837" cy="286" r="15" fill="#a78bfa"/><text x="837" y="292" class="step" fill="#07111f">3</text>
+    <circle cx="1077" cy="286" r="15" fill="#34d399"/><text x="1077" y="292" class="step" fill="#07111f">4</text>
+  </g>
+
+  <rect x="210" y="500" width="860" height="88" rx="16" fill="#101e31" stroke="#fbbf24" stroke-width="2"/>
+  <text x="640" y="536" class="note">Scaling consequence</text>
+  <text x="640" y="568" class="small">Every routing VTEP must instantiate every possible destination L2 VNI, even without local hosts.</text>
+
+  <text x="1216" y="685" class="footer" font-size="15" fill="#9fb0c5" text-anchor="end">VXLAN EVPN Architecture</text>
+</svg>

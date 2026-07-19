@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title description">
+  <title id="title">BUM handling: ingress replication versus multicast underlay</title>
+  <desc id="description">Ingress replication sends one unicast VXLAN copy to each remote VTEP. A multicast underlay sends one copy into a PIM tree, which replicates the packet at fabric branch points.</desc>
+  <defs>
+    <marker id="arrow-orange" markerWidth="12" markerHeight="12" refX="9" refY="4" orient="auto"><path d="M0,0 L0,8 L10,4 z" fill="#fb923c"/></marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="9" refY="4" orient="auto"><path d="M0,0 L0,8 L10,4 z" fill="#34d399"/></marker>
+    <filter id="shadow"><feDropShadow dx="0" dy="7" stdDeviation="9" flood-opacity=".26"/></filter>
+  </defs>
+
+  <rect width="1280" height="720" fill="#07111f"/>
+  <text x="64" y="66" text-anchor="start" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="700" fill="#e5eef9">BUM replication choices</text>
+  <text x="64" y="100" text-anchor="start" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" fill="#9fb0c5">EVPN Type 3 IMET signals the tunnel type; the data plane determines where replication occurs</text>
+
+  <g filter="url(#shadow)">
+    <rect x="48" y="140" width="558" height="500" rx="22" fill="#101e31" stroke="#fb923c" stroke-width="2"/>
+    <text x="327" y="190" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="28" font-weight="700" fill="#e5eef9">Ingress replication</text>
+    <text x="327" y="222" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" fill="#fdba74">N unicast VXLAN copies from the ingress VTEP</text>
+
+    <rect x="207" y="268" width="240" height="106" rx="16" fill="#3a211c" stroke="#fb923c" stroke-width="3"/>
+    <text x="327" y="310" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="23" font-weight="650" fill="#ffedd5">Ingress VTEP</text>
+    <text x="327" y="343" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" fill="#fdba74">Head-end replication list</text>
+
+    <line x1="270" y1="374" x2="147" y2="486" stroke="#fb923c" stroke-width="4" marker-end="url(#arrow-orange)"/>
+    <line x1="327" y1="374" x2="327" y2="486" stroke="#fb923c" stroke-width="4" marker-end="url(#arrow-orange)"/>
+    <line x1="384" y1="374" x2="507" y2="486" stroke="#fb923c" stroke-width="4" marker-end="url(#arrow-orange)"/>
+
+    <rect x="78" y="495" width="138" height="78" rx="14" fill="#113b36" stroke="#34d399" stroke-width="3"/>
+    <rect x="258" y="495" width="138" height="78" rx="14" fill="#113b36" stroke="#34d399" stroke-width="3"/>
+    <rect x="438" y="495" width="138" height="78" rx="14" fill="#113b36" stroke="#34d399" stroke-width="3"/>
+    <text x="147" y="542" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20" font-weight="650" fill="#d1fae5">VTEP 2</text>
+    <text x="327" y="542" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20" font-weight="650" fill="#d1fae5">VTEP 3</text>
+    <text x="507" y="542" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20" font-weight="650" fill="#d1fae5">VTEP 4</text>
+    <text x="327" y="610" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="16" fill="#9fb0c5">Three copies consume ingress-leaf uplink bandwidth</text>
+
+    <rect x="674" y="140" width="558" height="500" rx="22" fill="#101e31" stroke="#34d399" stroke-width="2"/>
+    <text x="953" y="190" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="28" font-weight="700" fill="#e5eef9">Multicast underlay</text>
+    <text x="953" y="222" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" fill="#6ee7b7">One VXLAN copy enters a shared PIM tree</text>
+
+    <rect x="708" y="495" width="138" height="78" rx="14" fill="#3a211c" stroke="#fb923c" stroke-width="3"/>
+    <text x="777" y="530" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="19" font-weight="650" fill="#ffedd5">Ingress</text>
+    <text x="777" y="554" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="15" fill="#fdba74">one copy</text>
+
+    <rect x="861" y="266" width="184" height="108" rx="16" fill="#211e46" stroke="#a78bfa" stroke-width="3"/>
+    <text x="953" y="309" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="23" font-weight="650" fill="#ede9fe">Spine / RP</text>
+    <text x="953" y="342" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="17" fill="#c4b5fd">PIM tree replicates</text>
+
+    <line x1="808" y1="495" x2="910" y2="380" stroke="#34d399" stroke-width="4" marker-end="url(#arrow-green)"/>
+    <line x1="953" y1="374" x2="953" y2="486" stroke="#34d399" stroke-width="4" marker-end="url(#arrow-green)"/>
+    <line x1="997" y1="374" x2="1127" y2="486" stroke="#34d399" stroke-width="4" marker-end="url(#arrow-green)"/>
+
+    <rect x="884" y="495" width="138" height="78" rx="14" fill="#113b36" stroke="#34d399" stroke-width="3"/>
+    <rect x="1060" y="495" width="138" height="78" rx="14" fill="#113b36" stroke="#34d399" stroke-width="3"/>
+    <text x="953" y="542" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20" font-weight="650" fill="#d1fae5">VTEP 3</text>
+    <text x="1129" y="542" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="20" font-weight="650" fill="#d1fae5">VTEP 4</text>
+    <text x="953" y="610" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="16" fill="#9fb0c5">Fabric branch points create the additional copies</text>
+  </g>
+
+  <text x="1216" y="686" text-anchor="end" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="15" fill="#9fb0c5">VXLAN EVPN Architecture</text>
+</svg>

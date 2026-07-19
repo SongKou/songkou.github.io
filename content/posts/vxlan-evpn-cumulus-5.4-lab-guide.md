@@ -12,6 +12,7 @@ This lab builds a VXLAN EVPN fabric on Cumulus Linux 5.4: one BGP spine, an MLAG
 
 - VLAN 100: Linux1 `192.168.100.10/24`, gateway `192.168.100.1`
 - VLAN 121: Linux21 `192.168.121.21/24`, Linux22 `192.168.121.22/24`, anycast gateway `192.168.121.1` on all leaves
+
 ## Lab environment
 
 This lab runs in EVE-NG. The four switches (`spine`, `leaf1`, `leaf2`, `leaf3`) are Cumulus VX 5.4 nodes, and the three hosts (`Linux1`, `Linux21`, `Linux22`) are lightweight Alpine-style Linux nodes configured through `/etc/network/interfaces` and OpenRC's `rc-service`. Any emulator that boots Cumulus VX 5.4 with the port mapping in section 2 will work; adjust the host commands if your Linux image uses a different init system or network configuration method.
@@ -494,6 +495,24 @@ The switch ports are untagged access ports, so Linux1 does not need a VLAN subin
 
 The Linux hosts in this lab are Alpine-based EVE-NG nodes, which use `apk` for packages, `/etc/network/interfaces` for network configuration, and OpenRC (`rc-service networking restart`) to apply changes. If your image is Debian or Ubuntu based, install packages with `apt` and apply the equivalent network configuration with that image's tooling (netplan or systemd-networkd) instead.
 
+Package installation needs internet access through the management network. If `eth2` (the management interface) is not configured yet, bring it up temporarily first:
+
+```bash
+ip address add 192.168.0.102/24 dev eth2
+ip link set eth2 up
+ip route add default via 192.168.0.1
+```
+
+Optional but convenient: create a personal sudo user instead of working as root (the Alpine image ships without `sudo`, so install it first):
+
+```bash
+apk add sudo
+adduser ekou
+echo 'ekou ALL=(ALL) ALL' >> /etc/sudoers
+```
+
+After logging in as the new user, prefix the host commands below with `sudo`.
+
 If bonding support is not already installed:
 
 ```bash
@@ -514,16 +533,24 @@ iface eth0 inet manual
 auto eth1
 iface eth1 inet manual
 
+auto eth2
+iface eth2 inet static
+        address 192.168.0.102
+        netmask 255.255.255.0
+        gateway 192.168.0.1
+
 auto bond0
 iface bond0 inet static
         address 192.168.100.10
         netmask 255.255.255.0
-        gateway 192.168.100.1
+        up ip route add 192.168.121.0/24 via 192.168.100.1
         bond-slaves eth0 eth1
         bond-mode 802.3ad
         bond-miimon 100
         bond-xmit-hash-policy layer3+4
 ```
+
+`eth2` is the management interface, connected to the EVE-NG Cloud/NAT network (`192.168.0.0/24` here — substitute your management subnet). The **default route lives on `eth2`**: package installs (`apk add ...`) need internet access, which only the management network provides. `bond0` therefore has **no** `gateway` line; instead, the `up ip route add 192.168.121.0/24 via 192.168.100.1` hook installs a specific route for the remote lab subnet through the fabric gateway, so the cross-VLAN tests in section 13 use the fabric rather than leaking out the management interface. Keep exactly one default route — two default gateways is the pitfall noted in section 12. If you add more lab subnets later, add an `up ip route add ...` line for each.
 
 Remove any old DHCP configuration from `eth0` and `eth1`, then apply:
 
@@ -544,7 +571,8 @@ Expected results:
 - `bond0` has `192.168.100.10/24`.
 - Both `eth0` and `eth1` appear as bond slaves.
 - The aggregator is using 802.3ad/LACP.
-- The default route points to `192.168.100.1`.
+- The default route points to `192.168.0.1` on `eth2` (management/internet).
+- `ip route` shows `192.168.121.0/24 via 192.168.100.1` for the lab fabric.
 
 One traffic flow normally uses only one physical bond member. LACP load-balances flows, not individual packets.
 

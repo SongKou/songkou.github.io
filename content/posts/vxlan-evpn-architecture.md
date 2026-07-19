@@ -1,5 +1,5 @@
 +++
-title = 'VXLAN EVPN Architecture: From Overlay Fundamentals to Multi-Site and Multi-Tenant Design'
+title = 'VXLAN EVPN Architecture'
 date = 2026-07-19T12:00:00+08:00
 draft = false
 categories = ['Network']
@@ -8,7 +8,9 @@ tags = ['VXLAN', 'EVPN', 'BGP', 'Cisco Nexus', 'Data Center', 'Multi-Site', 'Net
 
 VXLAN EVPN combines a scalable Layer 2 data plane with a standards-based MP-BGP control plane. VXLAN carries Ethernet frames across a routed IP fabric; EVPN distributes endpoint, subnet, and tunnel-reachability information so the fabric does not have to discover everything by flooding.
 
-### Standards and implementation scope
+{{< toc >}}
+
+## Standards and implementation scope
 
 VXLAN EVPN is not defined by one document. The architecture is assembled from a data-plane encapsulation, an EVPN control plane, a mapping between EVPN and network-virtualization overlays, and later IRB and prefix-route extensions:
 

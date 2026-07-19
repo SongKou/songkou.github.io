@@ -1,0 +1,34 @@
+<style>
+  .post-toc {
+    margin: 1.5rem 0 2rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid rgba(87, 204, 138, 0.45);
+    border-radius: 0.4rem;
+    background: rgba(36, 41, 48, 0.55);
+  }
+
+  .post-toc summary {
+    cursor: pointer;
+    color: #fff;
+  }
+
+  .post-toc nav {
+    max-height: 32rem;
+    margin-top: 0.75rem;
+    padding-right: 0.75rem;
+    overflow-y: auto;
+  }
+
+  .post-toc ul {
+    padding-left: 1.25rem;
+  }
+
+  .post-toc li {
+    margin: 0.25rem 0;
+  }
+</style>
+
+<details class="post-toc" open>
+  <summary><strong>Table of contents</strong></summary>
+  {{ .Page.TableOfContents }}
+</details>

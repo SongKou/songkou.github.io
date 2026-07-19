@@ -8,7 +8,7 @@ tags = ['VXLAN', 'EVPN', 'BGP', 'Cisco Nexus', 'Data Center', 'Multi-Site', 'Net
 
 VXLAN EVPN combines a scalable Layer 2 data plane with a standards-based MP-BGP control plane. VXLAN carries Ethernet frames across a routed IP fabric; EVPN distributes endpoint, subnet, and tunnel-reachability information so the fabric does not have to discover everything by flooding.
 
-{{< toc >}}
+{{< toc title="Contents — 22 sections" closed="true" >}}
 
 ## Standards and implementation scope
 

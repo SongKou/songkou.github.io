@@ -1,0 +1,105 @@
+// Project-specific CSS. Overrides themes/m10c/assets/css/_extra.scss and is
+// imported last by main.scss, so the theme's SCSS variables are in scope here.
+
+// ---------------------------------------------------------------------------
+// Post index / table of contents — rendered by layouts/shortcodes/toc.html
+// ---------------------------------------------------------------------------
+.post-toc {
+  margin: 1.5em 0 2.5em;
+  padding: 1em 1.25em;
+  background: $darkest-color;
+  // Matches the left-accent treatment the theme uses for blockquotes and code.
+  border-left: 0.4em solid rgba($primary-color, 0.8);
+  border-radius: 0 0.3em 0.3em 0;
+
+  > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    cursor: pointer;
+    color: $lightest-color;
+    font-weight: 700;
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+
+    // Custom disclosure triangle that rotates when the index is open.
+    &::before {
+      content: "";
+      width: 0;
+      height: 0;
+      border-left: 0.45em solid $primary-color;
+      border-top: 0.32em solid transparent;
+      border-bottom: 0.32em solid transparent;
+      transition: transform 0.2s ease;
+    }
+  }
+
+  &[open] > summary::before {
+    transform: rotate(90deg);
+  }
+
+  #TableOfContents {
+    margin-top: 0.9em;
+    padding-top: 0.9em;
+    border-top: 1px solid rgba($light-color, 0.18);
+
+    // A long post can produce 80+ entries. Flowing the top-level list into
+    // columns roughly halves the height instead of pushing the article a full
+    // screen down. Note: no max-height/overflow here — a fixed height would
+    // make multi-column content overflow sideways instead of wrapping.
+    > ul {
+      column-gap: 2.5em;
+
+      @media (min-width: 34em) {
+        columns: 2;
+      }
+
+      // Keep a section and its subsections together in the same column.
+      > li {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin: 0 0 0.85em;
+      }
+
+      // Top-level entries carry the section structure, so give them weight.
+      > li > a {
+        color: $lightest-color;
+        font-weight: 600;
+      }
+    }
+  }
+
+  // Headings in these posts are already numbered ("2.1 ..."), so list markers
+  // would just duplicate that.
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  ul ul {
+    margin: 0.25em 0 0;
+    padding-left: 0.85em;
+    border-left: 1px solid rgba($light-color, 0.18);
+  }
+
+  ul ul a {
+    font-size: 0.94em;
+  }
+
+  li {
+    margin: 0.2em 0;
+    line-height: 1.45;
+  }
+
+  a {
+    color: rgba($light-color, 0.9);
+
+    &:hover {
+      color: $primary-color;
+    }
+  }
+}

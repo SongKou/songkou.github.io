@@ -1,34 +1,16 @@
-<style>
-  .post-toc {
-    margin: 1.5rem 0 2rem;
-    padding: 1rem 1.25rem;
-    border: 1px solid rgba(87, 204, 138, 0.45);
-    border-radius: 0.4rem;
-    background: rgba(36, 41, 48, 0.55);
-  }
+{{/*
+  Post index / table of contents.
 
-  .post-toc summary {
-    cursor: pointer;
-    color: #fff;
-  }
+    {{< toc >}}
+    {{< toc title="On this page" >}}
+    {{< toc closed="true" >}}   starts collapsed — useful on very long posts
 
-  .post-toc nav {
-    max-height: 32rem;
-    margin-top: 0.75rem;
-    padding-right: 0.75rem;
-    overflow-y: auto;
-  }
-
-  .post-toc ul {
-    padding-left: 1.25rem;
-  }
-
-  .post-toc li {
-    margin: 0.25rem 0;
-  }
-</style>
-
-<details class="post-toc" open>
-  <summary><strong>Table of contents</strong></summary>
+  Depth comes from Hugo's [markup.tableOfContents] settings (h2–h3 by default).
+  Styling lives in assets/css/_extra.scss under .post-toc.
+*/ -}}
+{{- $title := or (.Get "title") "Table of contents" -}}
+{{- $closed := eq (lower (string (.Get "closed"))) "true" -}}
+<details class="post-toc"{{ if not $closed }} open{{ end }}>
+  <summary>{{ $title }}</summary>
   {{ .Page.TableOfContents }}
 </details>

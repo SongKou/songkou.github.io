@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="700" viewBox="0 0 1280 700">
+  <rect width="1280" height="700" fill="#07111f"/>
+  <text x="64" y="68" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="700" fill="#e5eef9">Pluggable transceiver form factors</text>
+  <text x="64" y="104" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" fill="#9fb0c5">“SFP” is often used generically, but 400G and 800G normally use QSFP112, QSFP-DD or OSFP.</text>
+  <g font-family="Inter,Segoe UI,Arial,sans-serif">
+    <g transform="translate(70 175)">
+      <rect x="0" y="70" width="210" height="105" rx="12" fill="#152944" stroke="#38bdf8" stroke-width="3"/>
+      <rect x="-22" y="92" width="55" height="62" rx="8" fill="#0b2038" stroke="#38bdf8" stroke-width="3"/>
+      <text x="105" y="36" text-anchor="middle" font-size="26" font-weight="700" fill="#e5eef9">SFP family</text>
+      <text x="105" y="215" text-anchor="middle" font-size="20" fill="#38bdf8">1 electrical lane</text>
+      <text x="105" y="247" text-anchor="middle" font-size="17" fill="#9fb0c5">1G SFP · 10G SFP+ · 25G SFP28</text>
+    </g>
+    <g transform="translate(355 175)">
+      <rect x="0" y="46" width="235" height="153" rx="12" fill="#152944" stroke="#34d399" stroke-width="3"/>
+      <rect x="-22" y="80" width="58" height="85" rx="8" fill="#0b2038" stroke="#34d399" stroke-width="3"/>
+      <text x="118" y="22" text-anchor="middle" font-size="26" font-weight="700" fill="#e5eef9">QSFP / QSFP112</text>
+      <text x="118" y="239" text-anchor="middle" font-size="20" fill="#34d399">4 electrical lanes</text>
+      <text x="118" y="271" text-anchor="middle" font-size="17" fill="#9fb0c5">40G · 100G · 200G · modern 400G</text>
+    </g>
+    <g transform="translate(665 175)">
+      <rect x="0" y="35" width="245" height="175" rx="12" fill="#152944" stroke="#fbbf24" stroke-width="3"/>
+      <rect x="-22" y="76" width="60" height="94" rx="8" fill="#0b2038" stroke="#fbbf24" stroke-width="3"/>
+      <text x="123" y="22" text-anchor="middle" font-size="26" font-weight="700" fill="#e5eef9">QSFP-DD</text>
+      <text x="123" y="250" text-anchor="middle" font-size="20" fill="#fbbf24">8 electrical lanes</text>
+      <text x="123" y="282" text-anchor="middle" font-size="17" fill="#9fb0c5">400G · QSFP-DD800</text>
+    </g>
+    <g transform="translate(985 175)">
+      <rect x="0" y="10" width="225" height="225" rx="12" fill="#152944" stroke="#a78bfa" stroke-width="3"/>
+      <path d="M20 45h185M20 65h185M20 85h185" stroke="#a78bfa" stroke-width="5"/>
+      <rect x="-22" y="75" width="62" height="95" rx="8" fill="#0b2038" stroke="#a78bfa" stroke-width="3"/>
+      <text x="112" y="-12" text-anchor="middle" font-size="26" font-weight="700" fill="#e5eef9">OSFP</text>
+      <text x="112" y="275" text-anchor="middle" font-size="20" fill="#a78bfa">8 electrical lanes</text>
+      <text x="112" y="307" text-anchor="middle" font-size="17" fill="#9fb0c5">400G · 800G · more thermal headroom</text>
+    </g>
+  </g>
+  <line x1="70" y1="545" x2="1210" y2="545" stroke="#49627e" stroke-width="2"/>
+  <text x="70" y="588" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="21" font-weight="650" fill="#e5eef9">Mechanical fit does not guarantee electrical compatibility.</text>
+  <text x="70" y="624" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" fill="#9fb0c5">The port must support the module’s lane rate, FEC, power class, firmware application and cooling requirement.</text>
+</svg>

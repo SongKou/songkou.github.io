@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#07111f"/>
+  <text x="64" y="68" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="700" fill="#e5eef9">Three ways a high-speed module organizes light</text>
+  <text x="64" y="104" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" fill="#9fb0c5">The same Ethernet rate can use parallel fibers, multiple wavelengths on two fibers, or one coherent DWDM carrier.</text>
+  <g font-family="Inter,Segoe UI,Arial,sans-serif">
+    <g transform="translate(55 165)">
+      <rect width="360" height="440" rx="14" fill="#10233b" stroke="#38bdf8" stroke-width="3"/>
+      <text x="180" y="48" text-anchor="middle" font-size="27" font-weight="700" fill="#e5eef9">Parallel optics</text>
+      <text x="180" y="82" text-anchor="middle" font-size="19" fill="#38bdf8">DR4 · DR8 · VR4 · VR8</text>
+      <g transform="translate(72 125)">
+        <g fill="#38bdf8"><rect y="0" width="216" height="14"/><rect y="28" width="216" height="14"/><rect y="56" width="216" height="14"/><rect y="84" width="216" height="14"/></g>
+        <g fill="#34d399"><rect y="140" width="216" height="14"/><rect y="168" width="216" height="14"/><rect y="196" width="216" height="14"/><rect y="224" width="216" height="14"/></g>
+      </g>
+      <text x="180" y="390" text-anchor="middle" font-size="18" fill="#e5eef9">One wavelength per fiber lane</text>
+      <text x="180" y="420" text-anchor="middle" font-size="16" fill="#9fb0c5">MPO · easy breakout · high fiber count</text>
+    </g>
+    <g transform="translate(460 165)">
+      <rect width="360" height="440" rx="14" fill="#10233b" stroke="#fbbf24" stroke-width="3"/>
+      <text x="180" y="48" text-anchor="middle" font-size="27" font-weight="700" fill="#e5eef9">Wavelength multiplexing</text>
+      <text x="180" y="82" text-anchor="middle" font-size="19" fill="#fbbf24">FR4 · LR4</text>
+      <g transform="translate(55 135)" fill="none" stroke-width="7"><path d="M0 0L115 90L250 90" stroke="#38bdf8"/><path d="M0 45L115 90" stroke="#34d399"/><path d="M0 90H115" stroke="#fbbf24"/><path d="M0 135L115 90" stroke="#a78bfa"/></g>
+      <g transform="translate(55 285)" fill="none" stroke-width="7"><path d="M250 0L135 90L0 90" stroke="#38bdf8"/><path d="M250 45L135 90" stroke="#34d399"/><path d="M250 90H135" stroke="#fbbf24"/><path d="M250 135L135 90" stroke="#a78bfa"/></g>
+      <text x="180" y="390" text-anchor="middle" font-size="18" fill="#e5eef9">Four wavelengths on a duplex pair</text>
+      <text x="180" y="420" text-anchor="middle" font-size="16" fill="#9fb0c5">LC · low fiber count · normally not passive breakout</text>
+    </g>
+    <g transform="translate(865 165)">
+      <rect width="360" height="440" rx="14" fill="#10233b" stroke="#a78bfa" stroke-width="3"/>
+      <text x="180" y="48" text-anchor="middle" font-size="27" font-weight="700" fill="#e5eef9">Coherent</text>
+      <text x="180" y="82" text-anchor="middle" font-size="19" fill="#a78bfa">ZR · ZR+</text>
+      <circle cx="180" cy="220" r="88" fill="none" stroke="#a78bfa" stroke-width="4"/>
+      <path d="M92 220C120 110 240 330 268 220M92 220C120 330 240 110 268 220" fill="none" stroke="#38bdf8" stroke-width="5"/>
+      <path d="M60 220H300" stroke="#fbbf24" stroke-width="4"/>
+      <text x="180" y="350" text-anchor="middle" font-size="17" fill="#e5eef9">Amplitude + phase + polarization</text>
+      <text x="180" y="390" text-anchor="middle" font-size="18" fill="#e5eef9">One tunable DWDM wavelength</text>
+      <text x="180" y="420" text-anchor="middle" font-size="16" fill="#9fb0c5">LC · amplifiers/ROADMs · long reach</text>
+    </g>
+  </g>
+</svg>

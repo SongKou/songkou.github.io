@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="590" viewBox="0 0 1200 590" role="img" aria-labelledby="title desc">
+  <title id="title">MPO-8, MPO-12, and MPO-16 fiber-position comparison</title>
+  <desc id="desc">Front-face diagrams compare an eight-active-fiber mapping in a twelve-position MPO ferrule, a fully populated twelve-fiber MPO ferrule, and a sixteen-fiber MPO ferrule.</desc>
+  <defs>
+    <style>
+      .heading { font: 700 30px Arial, sans-serif; fill: #0f172a; }
+      .subheading { font: 700 24px Arial, sans-serif; fill: #0f172a; }
+      .body { font: 18px Arial, sans-serif; fill: #334155; }
+      .small { font: 15px Arial, sans-serif; fill: #475569; }
+      .position { font: 12px Arial, sans-serif; fill: #64748b; text-anchor: middle; }
+      .ferrule { fill: #1f2937; stroke: #0f172a; stroke-width: 3; }
+      .guide { fill: #cbd5e1; stroke: #64748b; stroke-width: 2; }
+      .active { fill: #22c55e; stroke: #14532d; stroke-width: 2; }
+      .unused { fill: #e2e8f0; stroke: #94a3b8; stroke-width: 2; }
+      .fiber12 { fill: #38bdf8; stroke: #075985; stroke-width: 2; }
+      .fiber16 { fill: #fb923c; stroke: #9a3412; stroke-width: 2; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="590" rx="24" fill="#f8fafc"/>
+  <text x="600" y="48" class="heading" text-anchor="middle">MPO fiber count is determined at the ferrule end face</text>
+  <text x="600" y="78" class="body" text-anchor="middle">The outer connector housing may look the same, so verify the end face and cable part number.</text>
+
+  <!-- MPO-8 mapping -->
+  <g transform="translate(40 120)">
+    <rect width="350" height="390" rx="20" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="175" y="42" class="subheading" text-anchor="middle">MPO-8 / Base-8</text>
+    <text x="175" y="70" class="small" text-anchor="middle">8 active fibers in a 12-position footprint</text>
+    <path d="M148 93h54l-27 18z" fill="#64748b"/>
+    <text x="175" y="129" class="small" text-anchor="middle">center key</text>
+    <rect x="28" y="155" width="294" height="105" rx="12" class="ferrule"/>
+    <circle cx="48" cy="207" r="10" class="guide"/>
+    <circle cx="302" cy="207" r="10" class="guide"/>
+    <g>
+      <circle cx="78" cy="207" r="9" class="active"/><circle cx="96" cy="207" r="9" class="active"/>
+      <circle cx="114" cy="207" r="9" class="active"/><circle cx="132" cy="207" r="9" class="active"/>
+      <circle cx="150" cy="207" r="9" class="unused"/><circle cx="168" cy="207" r="9" class="unused"/>
+      <circle cx="186" cy="207" r="9" class="unused"/><circle cx="204" cy="207" r="9" class="unused"/>
+      <circle cx="222" cy="207" r="9" class="active"/><circle cx="240" cy="207" r="9" class="active"/>
+      <circle cx="258" cy="207" r="9" class="active"/><circle cx="276" cy="207" r="9" class="active"/>
+    </g>
+    <g class="position">
+      <text x="78" y="280">1</text><text x="96" y="280">2</text><text x="114" y="280">3</text><text x="132" y="280">4</text>
+      <text x="150" y="280">5</text><text x="168" y="280">6</text><text x="186" y="280">7</text><text x="204" y="280">8</text>
+      <text x="222" y="280">9</text><text x="240" y="280">10</text><text x="258" y="280">11</text><text x="276" y="280">12</text>
+    </g>
+    <circle cx="72" cy="323" r="8" class="active"/><text x="90" y="329" class="small">active Tx/Rx fiber</text>
+    <circle cx="72" cy="352" r="8" class="unused"/><text x="90" y="358" class="small">unused position</text>
+    <text x="175" y="382" class="small" text-anchor="middle">Typical SR4, DR4, PSM4 mapping</text>
+  </g>
+
+  <!-- MPO-12 -->
+  <g transform="translate(425 120)">
+    <rect width="350" height="390" rx="20" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="175" y="42" class="subheading" text-anchor="middle">MPO-12 / Base-12</text>
+    <text x="175" y="70" class="small" text-anchor="middle">All 12 positions populated</text>
+    <path d="M148 93h54l-27 18z" fill="#64748b"/>
+    <text x="175" y="129" class="small" text-anchor="middle">center key</text>
+    <rect x="28" y="155" width="294" height="105" rx="12" class="ferrule"/>
+    <circle cx="48" cy="207" r="10" class="guide"/>
+    <circle cx="302" cy="207" r="10" class="guide"/>
+    <g>
+      <circle cx="78" cy="207" r="9" class="fiber12"/><circle cx="96" cy="207" r="9" class="fiber12"/>
+      <circle cx="114" cy="207" r="9" class="fiber12"/><circle cx="132" cy="207" r="9" class="fiber12"/>
+      <circle cx="150" cy="207" r="9" class="fiber12"/><circle cx="168" cy="207" r="9" class="fiber12"/>
+      <circle cx="186" cy="207" r="9" class="fiber12"/><circle cx="204" cy="207" r="9" class="fiber12"/>
+      <circle cx="222" cy="207" r="9" class="fiber12"/><circle cx="240" cy="207" r="9" class="fiber12"/>
+      <circle cx="258" cy="207" r="9" class="fiber12"/><circle cx="276" cy="207" r="9" class="fiber12"/>
+    </g>
+    <g class="position">
+      <text x="78" y="280">1</text><text x="96" y="280">2</text><text x="114" y="280">3</text><text x="132" y="280">4</text>
+      <text x="150" y="280">5</text><text x="168" y="280">6</text><text x="186" y="280">7</text><text x="204" y="280">8</text>
+      <text x="222" y="280">9</text><text x="240" y="280">10</text><text x="258" y="280">11</text><text x="276" y="280">12</text>
+    </g>
+    <circle cx="72" cy="323" r="8" class="fiber12"/><text x="90" y="329" class="small">populated fiber position</text>
+    <text x="175" y="365" class="small" text-anchor="middle">Common for Base-12 trunks and cassettes;</text>
+    <text x="175" y="386" class="small" text-anchor="middle">not every transceiver uses all 12 fibers</text>
+  </g>
+
+  <!-- MPO-16 -->
+  <g transform="translate(810 120)">
+    <rect width="350" height="390" rx="20" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text x="175" y="42" class="subheading" text-anchor="middle">MPO-16</text>
+    <text x="175" y="70" class="small" text-anchor="middle">16 active positions on a tighter pitch</text>
+    <path d="M216 93h54l-27 18z" fill="#64748b"/>
+    <text x="243" y="129" class="small" text-anchor="middle">offset key</text>
+    <rect x="28" y="155" width="294" height="105" rx="12" class="ferrule"/>
+    <circle cx="48" cy="207" r="10" class="guide"/>
+    <circle cx="302" cy="207" r="10" class="guide"/>
+    <g>
+      <circle cx="72" cy="207" r="7" class="fiber16"/><circle cx="86" cy="207" r="7" class="fiber16"/>
+      <circle cx="100" cy="207" r="7" class="fiber16"/><circle cx="114" cy="207" r="7" class="fiber16"/>
+      <circle cx="128" cy="207" r="7" class="fiber16"/><circle cx="142" cy="207" r="7" class="fiber16"/>
+      <circle cx="156" cy="207" r="7" class="fiber16"/><circle cx="170" cy="207" r="7" class="fiber16"/>
+      <circle cx="184" cy="207" r="7" class="fiber16"/><circle cx="198" cy="207" r="7" class="fiber16"/>
+      <circle cx="212" cy="207" r="7" class="fiber16"/><circle cx="226" cy="207" r="7" class="fiber16"/>
+      <circle cx="240" cy="207" r="7" class="fiber16"/><circle cx="254" cy="207" r="7" class="fiber16"/>
+      <circle cx="268" cy="207" r="7" class="fiber16"/><circle cx="282" cy="207" r="7" class="fiber16"/>
+    </g>
+    <text x="175" y="283" class="small" text-anchor="middle">positions 1–16</text>
+    <circle cx="72" cy="323" r="8" class="fiber16"/><text x="90" y="329" class="small">active Tx/Rx fiber</text>
+    <text x="175" y="365" class="small" text-anchor="middle">Typical single-connector interface for</text>
+    <text x="175" y="386" class="small" text-anchor="middle">800G DR8/VR8 parallel optics</text>
+  </g>
+
+  <g transform="translate(265 545)">
+    <circle cx="0" cy="0" r="9" class="guide"/><text x="18" y="6" class="small">guide pin (shown as a pinned/male cable connector)</text>
+  </g>
+</svg>

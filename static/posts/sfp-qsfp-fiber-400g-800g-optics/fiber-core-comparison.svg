@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="650" viewBox="0 0 1280 650">
+  <rect width="1280" height="650" fill="#07111f"/>
+  <text x="64" y="68" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="34" font-weight="700" fill="#e5eef9">Multimode and single-mode fiber</text>
+  <text x="64" y="104" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="18" fill="#9fb0c5">The cladding is the same nominal 125 µm; the core and supported optical modes are different.</text>
+  <g font-family="Inter,Segoe UI,Arial,sans-serif">
+    <g transform="translate(160 170)">
+      <circle cx="180" cy="180" r="155" fill="#163453" stroke="#38bdf8" stroke-width="4"/>
+      <circle cx="180" cy="180" r="62" fill="#38bdf8" opacity=".88"/>
+      <path d="M80 130C145 50 210 310 280 130M80 180C145 100 210 360 280 180M80 230C145 150 210 410 280 230" fill="none" stroke="#e5eef9" stroke-width="4"/>
+      <text x="180" y="380" text-anchor="middle" font-size="28" font-weight="700" fill="#e5eef9">Multimode (MMF)</text>
+      <text x="180" y="415" text-anchor="middle" font-size="19" fill="#38bdf8">50 or 62.5 µm core</text>
+      <text x="180" y="447" text-anchor="middle" font-size="17" fill="#9fb0c5">OM1–OM5 · short-reach 850 nm optics</text>
+    </g>
+    <g transform="translate(760 170)">
+      <circle cx="180" cy="180" r="155" fill="#163453" stroke="#a78bfa" stroke-width="4"/>
+      <circle cx="180" cy="180" r="15" fill="#a78bfa"/>
+      <path d="M75 180H285" fill="none" stroke="#e5eef9" stroke-width="5"/>
+      <text x="180" y="380" text-anchor="middle" font-size="28" font-weight="700" fill="#e5eef9">Single-mode (SMF)</text>
+      <text x="180" y="415" text-anchor="middle" font-size="19" fill="#a78bfa">about 9 µm core</text>
+      <text x="180" y="447" text-anchor="middle" font-size="17" fill="#9fb0c5">OS1/OS2 · 1310/1550 nm · long reach</text>
+    </g>
+  </g>
+</svg>

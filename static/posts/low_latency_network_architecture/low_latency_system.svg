@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 780" font-family="'Segoe UI',Helvetica,Arial,sans-serif" role="img" aria-label="Trading system component flow: an execution venue distributes market data down to buy-side and sell-side participants, who send orders back up to the venue's matching engine.">
+  <defs>
+    <marker id="ll-red" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#9e1b1b"/></marker>
+    <marker id="ll-blue" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#5b8fcb"/></marker>
+    <marker id="ll-orange" markerWidth="7" markerHeight="7" refX="3" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#e8720c"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="780" rx="10" fill="#ffffff"/>
+
+  <!-- order-flow (orange, upward) -->
+  <g stroke="#e8720c" fill="none" stroke-width="11" marker-end="url(#ll-orange)">
+    <path d="M478,690 L478,214"/>
+    <path d="M522,690 L522,214"/>
+  </g>
+  <path d="M452,700 L540,700" stroke="#e8720c" fill="none" stroke-width="11" marker-end="url(#ll-orange)"/>
+
+  <!-- market-data (blue, downward) -->
+  <g stroke="#5b8fcb" fill="none" stroke-width="2" marker-end="url(#ll-blue)">
+    <path d="M360,86 C190,130 190,380 236,424"/>
+    <path d="M640,86 C810,130 810,380 762,424"/>
+  </g>
+
+  <!-- Execution Venue -->
+  <rect x="300" y="20" width="400" height="192" rx="6" fill="#fcefcf" stroke="#e8a93c" stroke-width="2"/>
+  <path d="M300,26 a6,6 0 0 1 6,-6 h388 a6,6 0 0 1 6,6 v22 h-400 Z" fill="#f5c25b"/>
+  <text x="500" y="40" text-anchor="middle" font-size="17" font-weight="700" fill="#5a4300">Execution Venue</text>
+  <rect x="360" y="62" width="280" height="44" rx="5" fill="#bbd5f0" stroke="#5b8fcb"/>
+  <text x="500" y="89" text-anchor="middle" font-size="15" fill="#153">Market Data Feed</text>
+  <path d="M500,108 L500,136" stroke="#9e1b1b" stroke-width="3" marker-end="url(#ll-red)"/>
+  <rect x="360" y="142" width="280" height="56" rx="5" fill="#fdf2d6" stroke="#e8a93c"/>
+  <text x="500" y="175" text-anchor="middle" font-size="15" fill="#1a1a1a">Order Matching Engine</text>
+
+  <!-- Buy Side -->
+  <rect x="30" y="380" width="420" height="372" rx="6" fill="#ddefd6" stroke="#7fb47f" stroke-width="2"/>
+  <path d="M30,386 a6,6 0 0 1 6,-6 h408 a6,6 0 0 1 6,6 v22 h-420 Z" fill="#a9d3a0"/>
+  <text x="240" y="400" text-anchor="middle" font-size="17" font-weight="700" fill="#1c4a1c">Buy Side</text>
+  <rect x="60" y="426" width="360" height="58" rx="5" fill="#eef7ea" stroke="#7fb47f"/>
+  <text x="240" y="450" text-anchor="middle" font-size="14" fill="#1a1a1a">Order &amp; Execution Management</text>
+  <text x="240" y="470" text-anchor="middle" font-size="14" fill="#1a1a1a">System (EMS / OMS)</text>
+  <path d="M240,484 L240,512" stroke="#9e1b1b" stroke-width="3" marker-end="url(#ll-red)"/>
+  <rect x="60" y="518" width="360" height="50" rx="5" fill="#eef7ea" stroke="#7fb47f"/>
+  <text x="240" y="548" text-anchor="middle" font-size="14" fill="#1a1a1a">Algorithmic Trading Engine</text>
+  <path d="M240,568 L240,600" stroke="#9e1b1b" stroke-width="3" marker-end="url(#ll-red)"/>
+  <rect x="60" y="606" width="160" height="72" rx="5" fill="#f6dede" stroke="#d98a8a"/>
+  <text x="140" y="638" text-anchor="middle" font-size="13" fill="#1a1a1a">Risk Management</text>
+  <text x="140" y="656" text-anchor="middle" font-size="13" fill="#1a1a1a">System (RMS)</text>
+  <path d="M222,642 L276,642" stroke="#9e1b1b" stroke-width="3" marker-end="url(#ll-red)"/>
+  <rect x="280" y="606" width="140" height="72" rx="5" fill="#eef7ea" stroke="#7fb47f"/>
+  <text x="350" y="638" text-anchor="middle" font-size="13" fill="#1a1a1a">Smart Order</text>
+  <text x="350" y="656" text-anchor="middle" font-size="13" fill="#1a1a1a">Router (SOR)</text>
+
+  <!-- Sell Side -->
+  <rect x="550" y="380" width="420" height="372" rx="6" fill="#f6dede" stroke="#d98a8a" stroke-width="2"/>
+  <path d="M550,386 a6,6 0 0 1 6,-6 h408 a6,6 0 0 1 6,6 v22 h-420 Z" fill="#e9a9a9"/>
+  <text x="760" y="400" text-anchor="middle" font-size="17" font-weight="700" fill="#6a1f1f">Sell Side / Broker-Dealer</text>
+  <rect x="580" y="426" width="360" height="50" rx="5" fill="#bbd5f0" stroke="#5b8fcb"/>
+  <text x="760" y="456" text-anchor="middle" font-size="15" fill="#153">Market Data Feed</text>
+  <path d="M760,476 L760,512" stroke="#9e1b1b" stroke-width="3" marker-end="url(#ll-red)"/>
+  <rect x="580" y="518" width="360" height="50" rx="5" fill="#fbeaea" stroke="#d98a8a"/>
+  <text x="760" y="548" text-anchor="middle" font-size="14" fill="#1a1a1a">Algorithmic Trading Engine</text>
+  <path d="M760,568 L760,600" stroke="#9e1b1b" stroke-width="3" marker-end="url(#ll-red)"/>
+  <rect x="580" y="606" width="160" height="72" rx="5" fill="#fbeaea" stroke="#d98a8a"/>
+  <text x="660" y="638" text-anchor="middle" font-size="13" fill="#1a1a1a">Order Router</text>
+  <text x="660" y="656" text-anchor="middle" font-size="13" fill="#1a1a1a">(SOR)</text>
+  <path d="M760,628 l14,14 l-14,14 l-14,-14 Z" fill="#9e1b1b"/>
+  <rect x="800" y="606" width="140" height="72" rx="5" fill="#fbeaea" stroke="#d98a8a"/>
+  <text x="870" y="638" text-anchor="middle" font-size="13" fill="#1a1a1a">Risk Management</text>
+  <text x="870" y="656" text-anchor="middle" font-size="13" fill="#1a1a1a">System (RMS)</text>
+
+  <!-- legend -->
+  <g font-size="12" fill="#555">
+    <line x1="470" y1="352" x2="500" y2="352" stroke="#e8720c" stroke-width="6"/>
+    <text x="506" y="356">Order flow</text>
+    <line x1="600" y1="352" x2="630" y2="352" stroke="#5b8fcb" stroke-width="2" marker-end="url(#ll-blue)"/>
+    <text x="640" y="356">Market data</text>
+  </g>
+</svg>

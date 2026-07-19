@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 560" font-family="'Segoe UI',Helvetica,Arial,sans-serif" role="img" aria-label="Bar chart of order-acknowledgement latency by US venue in microseconds: BATS 463, BATY 460, EDGA 404, EDGX 468, BX 639, NSDQ 735, PSX 550, ARCA 1122, NYSE 1366, CHX 15330, IEX 1232.">
+  <rect x="0" y="0" width="1000" height="560" rx="10" fill="#ffffff"/>
+  <!-- gridlines + y labels -->
+  <g stroke="#e2e2e2" stroke-width="1">
+    <line x1="110" y1="30"  x2="970" y2="30"/>
+    <line x1="110" y1="81"  x2="970" y2="81"/>
+    <line x1="110" y1="132" x2="970" y2="132"/>
+    <line x1="110" y1="183" x2="970" y2="183"/>
+    <line x1="110" y1="235" x2="970" y2="235"/>
+    <line x1="110" y1="286" x2="970" y2="286"/>
+    <line x1="110" y1="337" x2="970" y2="337"/>
+    <line x1="110" y1="388" x2="970" y2="388"/>
+    <line x1="110" y1="439" x2="970" y2="439"/>
+    <line x1="110" y1="490" x2="970" y2="490"/>
+  </g>
+  <g font-size="13" fill="#555" text-anchor="end">
+    <text x="98" y="35">18,000</text>
+    <text x="98" y="86">16,000</text>
+    <text x="98" y="137">14,000</text>
+    <text x="98" y="188">12,000</text>
+    <text x="98" y="240">10,000</text>
+    <text x="98" y="291">8,000</text>
+    <text x="98" y="342">6,000</text>
+    <text x="98" y="393">4,000</text>
+    <text x="98" y="444">2,000</text>
+    <text x="98" y="495">-</text>
+  </g>
+  <line x1="110" y1="30" x2="110" y2="490" stroke="#888" stroke-width="1.5"/>
+  <!-- bars -->
+  <g fill="#1a2f5e">
+    <rect x="128" y="478.2" width="42" height="11.8"/>
+    <rect x="206" y="478.2" width="42" height="11.8"/>
+    <rect x="285" y="479.7" width="42" height="10.3"/>
+    <rect x="363" y="478.0" width="42" height="12.0"/>
+    <rect x="441" y="473.7" width="42" height="16.3"/>
+    <rect x="519" y="471.2" width="42" height="18.8"/>
+    <rect x="597" y="475.9" width="42" height="14.1"/>
+    <rect x="676" y="461.3" width="42" height="28.7"/>
+    <rect x="754" y="455.1" width="42" height="34.9"/>
+    <rect x="832" y="98.3"  width="42" height="391.7"/>
+  </g>
+  <rect x="910" y="458.5" width="42" height="31.5" fill="#d81f26"/>
+  <!-- value labels -->
+  <g font-size="13" fill="#333" text-anchor="middle">
+    <text x="149" y="470">463</text>
+    <text x="227" y="470">460</text>
+    <text x="306" y="472">404</text>
+    <text x="384" y="470">468</text>
+    <text x="462" y="466">639</text>
+    <text x="540" y="463">735</text>
+    <text x="618" y="468">550</text>
+    <text x="697" y="453">1,122</text>
+    <text x="775" y="447">1,366</text>
+    <text x="853" y="90">15,330</text>
+    <text x="931" y="450">1,232</text>
+  </g>
+  <!-- category labels -->
+  <g font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">
+    <text x="149" y="512">BATS</text>
+    <text x="227" y="512">BATY</text>
+    <text x="306" y="512">EDGA</text>
+    <text x="384" y="512">EDGX</text>
+    <text x="462" y="512">BX</text>
+    <text x="540" y="512">NSDQ</text>
+    <text x="618" y="512">PSX</text>
+    <text x="697" y="512">ARCA</text>
+    <text x="775" y="512">NYSE</text>
+    <text x="853" y="512">CHX</text>
+    <text x="931" y="512" fill="#d81f26">IEX</text>
+  </g>
+  <text x="540" y="544" text-anchor="middle" font-size="12" fill="#888">Order-acknowledgement latency by venue (microseconds)</text>
+</svg>

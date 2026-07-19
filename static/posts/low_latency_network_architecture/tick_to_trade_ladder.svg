@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 400" font-family="'Segoe UI',Helvetica,Arial,sans-serif" role="img" aria-label="Tick-to-trade latency ladder on a logarithmic scale. Standard kernel stack about 2.7 to 3.3 microseconds; tuned software with kernel bypass about 0.8 to 2 microseconds; FPGA or hybrid pipelines tens of nanoseconds; the STAC-T0 network-I/O floor 13.9 nanoseconds. Shorter bar means faster.">
+  <rect x="0" y="0" width="1000" height="400" rx="10" fill="#ffffff"/>
+  <text x="30" y="34" font-size="16" font-weight="700" fill="#333">Tick-to-trade latency ladder</text>
+  <text x="30" y="54" font-size="12.5" fill="#888">log scale — shorter bar is faster; where you run the pipeline sets your tier</text>
+
+  <!-- log gridlines: 10ns,100ns,1us,10us at x=290,479,668,940 -->
+  <g stroke="#e6e6e6" stroke-width="1">
+    <line x1="290" y1="72" x2="290" y2="330"/>
+    <line x1="479" y1="72" x2="479" y2="330"/>
+    <line x1="668" y1="72" x2="668" y2="330"/>
+    <line x1="940" y1="72" x2="940" y2="330"/>
+  </g>
+  <g font-size="12" fill="#999" text-anchor="middle">
+    <text x="290" y="350">10 ns</text>
+    <text x="479" y="350">100 ns</text>
+    <text x="668" y="350">1 µs</text>
+    <text x="940" y="350">10 µs</text>
+  </g>
+
+  <!-- bars: origin x=290 (10ns). x(v)=290 + (log10(v)-1)/3 * 650 -->
+  <!-- kernel 3300ns -> x=811 ; bypass 2000ns -> x=756 ; fpga 30ns -> x=393 ; stac 13.9ns -> x=321 -->
+  <g>
+    <rect x="290" y="86" width="521" height="34" rx="4" fill="#d9534f"/>
+    <text x="822" y="108" font-size="13" font-weight="600" fill="#c9302c">2.7–3.3 µs</text>
+    <rect x="290" y="146" width="466" height="34" rx="4" fill="#e8913c"/>
+    <text x="767" y="168" font-size="13" font-weight="600" fill="#c9721f">~0.8–2 µs</text>
+    <rect x="290" y="206" width="103" height="34" rx="4" fill="#2e9e8f"/>
+    <text x="404" y="228" font-size="13" font-weight="600" fill="#1f7d70">tens of ns</text>
+    <rect x="290" y="266" width="31" height="34" rx="4" fill="#3aa05a"/>
+    <text x="332" y="288" font-size="13" font-weight="600" fill="#278044">13.9 ns</text>
+  </g>
+
+  <!-- tier labels (left) -->
+  <g font-size="13" fill="#333" text-anchor="end">
+    <text x="278" y="102">Standard kernel stack</text>
+    <text x="278" y="162">Tuned SW + kernel bypass</text>
+    <text x="278" y="222">FPGA / hybrid pipeline</text>
+    <text x="278" y="282">STAC-T0 network-I/O floor</text>
+  </g>
+
+  <!-- fast/slow annotation -->
+  <text x="815" y="330" font-size="11.5" fill="#bbb" text-anchor="start">← slower</text>
+  <text x="300" y="330" font-size="11.5" fill="#bbb" text-anchor="start">faster</text>
+</svg>

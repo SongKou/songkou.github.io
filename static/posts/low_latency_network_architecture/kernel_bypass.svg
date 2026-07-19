@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 500" font-family="'Segoe UI',Helvetica,Arial,sans-serif" role="img" aria-label="Kernel bypass compared to the standard Linux stack. The standard path traverses application, sockets API, TCP/IP stack, driver and NIC. The bypass path sends the application through a user-space TCP/UDP stack straight to a bypass NIC, skipping the kernel.">
+  <defs>
+    <marker id="kb-arrow" markerWidth="10" markerHeight="10" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#3a78c2"/></marker>
+  </defs>
+  <rect x="0" y="0" width="920" height="500" rx="10" fill="#ffffff"/>
+
+  <!-- layer bands -->
+  <line x1="20" y1="188" x2="900" y2="188" stroke="#cfcfcf" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <line x1="20" y1="360" x2="900" y2="360" stroke="#cfcfcf" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <g font-size="14" fill="#777">
+    <text x="26" y="130">User Space</text>
+    <text x="26" y="278">Kernel Space</text>
+    <text x="26" y="418">Hardware</text>
+  </g>
+
+  <!-- divider between the two stacks -->
+  <line x1="470" y1="26" x2="470" y2="470" stroke="#bbb" stroke-width="2" stroke-dasharray="8 6"/>
+
+  <!-- headers -->
+  <text x="285" y="42" text-anchor="middle" font-size="16" font-weight="700" fill="#333">Standard Linux stack</text>
+  <text x="690" y="42" text-anchor="middle" font-size="16" font-weight="700" fill="#333">Kernel bypass</text>
+
+  <!-- left column -->
+  <g stroke="#b7b7b7" fill="#ededed">
+    <rect x="150" y="70"  width="270" height="44" rx="5"/>
+    <rect x="150" y="126" width="270" height="44" rx="5"/>
+    <rect x="150" y="224" width="270" height="44" rx="5"/>
+    <rect x="150" y="282" width="270" height="44" rx="5"/>
+    <rect x="150" y="392" width="270" height="44" rx="5"/>
+  </g>
+  <g font-size="14" fill="#333" text-anchor="middle">
+    <text x="285" y="98">Application</text>
+    <text x="285" y="154">Sockets API</text>
+    <text x="285" y="252">TCP / IP stack</text>
+    <text x="285" y="310">Driver</text>
+    <text x="285" y="420">NIC</text>
+  </g>
+
+  <!-- right column -->
+  <rect x="555" y="70" width="270" height="44" rx="5" fill="#f4c04e" stroke="#d9a52f"/>
+  <text x="690" y="98" text-anchor="middle" font-size="14" fill="#3a2f00">Application</text>
+  <rect x="555" y="126" width="270" height="52" rx="5" fill="#3a78c2" stroke="#2c5f9e"/>
+  <text x="690" y="148" text-anchor="middle" font-size="14" fill="#fff">User-space TCP / UDP stack</text>
+  <text x="690" y="166" text-anchor="middle" font-size="11.5" fill="#dbe8f7">Onload / TCPDirect / XLIO / ef_vi</text>
+  <path d="M690,180 L690,388" stroke="#3a78c2" stroke-width="2.5" fill="none" marker-end="url(#kb-arrow)"/>
+  <rect x="555" y="392" width="270" height="44" rx="5" fill="#3a78c2" stroke="#2c5f9e"/>
+  <text x="690" y="420" text-anchor="middle" font-size="14" fill="#fff">Kernel-bypass NIC</text>
+  <text x="838" y="288" font-size="12.5" fill="#3a78c2" font-style="italic">kernel</text>
+  <text x="838" y="304" font-size="12.5" fill="#3a78c2" font-style="italic">skipped</text>
+</svg>

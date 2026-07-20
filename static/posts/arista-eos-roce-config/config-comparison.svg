@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 560" font-family="'Segoe UI',Helvetica,Arial,sans-serif" role="img" aria-label="PFC configuration size compared: Cisco NX-OS needs four layers - class-map, policy-map type qos, policy-map type network-qos, then system qos plus interface, about fourteen lines. Arista EOS needs two interface lines: priority-flow-control mode on, and priority-flow-control priority 3 no-drop.">
+  <defs>
+    <marker id="cc-arrow" markerWidth="10" markerHeight="10" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#3a78c2"/></marker>
+  </defs>
+  <rect x="0" y="0" width="920" height="560" rx="10" fill="#ffffff"/>
+
+  <!-- divider -->
+  <line x1="460" y1="30" x2="460" y2="510" stroke="#bbb" stroke-width="2" stroke-dasharray="8 6"/>
+
+  <!-- headers -->
+  <text x="230" y="46" text-anchor="middle" font-size="17" font-weight="700" fill="#333">Cisco NX-OS</text>
+  <text x="230" y="68" text-anchor="middle" font-size="13" fill="#777">4 layers, ~14 lines</text>
+  <text x="690" y="46" text-anchor="middle" font-size="17" font-weight="700" fill="#333">Arista EOS</text>
+  <text x="690" y="68" text-anchor="middle" font-size="13" fill="#777">2 lines, all under the interface</text>
+
+  <!-- Cisco column -->
+  <g stroke="#b7b7b7" fill="#ededed">
+    <rect x="60" y="92"  width="340" height="76" rx="6"/>
+    <rect x="60" y="196" width="340" height="76" rx="6"/>
+    <rect x="60" y="300" width="340" height="76" rx="6"/>
+    <rect x="60" y="404" width="340" height="76" rx="6"/>
+  </g>
+  <g text-anchor="start">
+    <text x="84" y="124" font-size="14.5" font-weight="600" fill="#333">class-map type qos</text>
+    <text x="84" y="150" font-size="12" fill="#555" font-family="Consolas,Menlo,monospace">match cos 3</text>
+    <text x="84" y="228" font-size="14.5" font-weight="600" fill="#333">policy-map type qos</text>
+    <text x="84" y="254" font-size="12" fill="#555" font-family="Consolas,Menlo,monospace">set qos-group 3</text>
+    <text x="84" y="332" font-size="14.5" font-weight="600" fill="#333">policy-map type network-qos</text>
+    <text x="84" y="358" font-size="12" fill="#555" font-family="Consolas,Menlo,monospace">pause pfc-cos 3</text>
+    <text x="84" y="436" font-size="14.5" font-weight="600" fill="#333">system qos + interface</text>
+    <text x="84" y="462" font-size="12" fill="#555" font-family="Consolas,Menlo,monospace">priority-flow-control mode on</text>
+  </g>
+  <g stroke="#3a78c2" stroke-width="2" marker-end="url(#cc-arrow)">
+    <line x1="230" y1="168" x2="230" y2="188"/>
+    <line x1="230" y1="272" x2="230" y2="292"/>
+    <line x1="230" y1="376" x2="230" y2="396"/>
+  </g>
+
+  <!-- Arista column -->
+  <g stroke="#d9a52f" fill="#f4c04e">
+    <rect x="500" y="160" width="380" height="80" rx="6"/>
+    <rect x="500" y="312" width="380" height="80" rx="6"/>
+  </g>
+  <g text-anchor="start">
+    <text x="522" y="194" font-size="11.5" font-weight="700" fill="#4a3305" font-family="Consolas,Menlo,monospace">priority-flow-control mode on</text>
+    <text x="522" y="220" font-size="12.5" fill="#6b5210">enable port-level PFC</text>
+    <text x="522" y="342" font-size="11.5" font-weight="700" fill="#4a3305" font-family="Consolas,Menlo,monospace">priority-flow-control priority 3 no-drop</text>
+    <text x="522" y="370" font-size="12.5" fill="#6b5210">CoS 3 becomes the lossless queue</text>
+  </g>
+  <line x1="690" y1="240" x2="690" y2="304" stroke="#3a78c2" stroke-width="2" marker-end="url(#cc-arrow)"/>
+
+  <text x="460" y="540" text-anchor="middle" font-size="13" fill="#777">Same result on both: PFC enabled on the port, priority 3 lossless</text>
+</svg>

@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 620" font-family="'Segoe UI',Helvetica,Arial,sans-serif" role="img" aria-label="Demo topology: Spine-1 and Spine-2 at the top, Leaf-1 and Leaf-2 below them, and four GPU servers at the bottom. PFC is enabled consistently on every lossless hop. ECN is enabled on the RoCE data queue at every switch egress that can become congested, including leaf and spine egress ports.">
+  <defs>
+    <marker id="topo-arrow" markerWidth="10" markerHeight="10" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#3a78c2"/></marker>
+  </defs>
+  <rect x="0" y="0" width="920" height="620" rx="10" fill="#ffffff"/>
+
+  <!-- spine-leaf links (full mesh) -->
+  <g stroke="#c4c4c4" stroke-width="2">
+    <line x1="270" y1="106" x2="270" y2="230"/>
+    <line x1="270" y1="106" x2="650" y2="230"/>
+    <line x1="650" y1="106" x2="270" y2="230"/>
+    <line x1="650" y1="106" x2="650" y2="230"/>
+  </g>
+  <rect x="285" y="140" width="350" height="22" fill="#ffffff"/>
+  <text x="460" y="156" text-anchor="middle" font-size="13" fill="#777">spine &#8596; leaf: PFC + ECN at each switch egress</text>
+
+  <!-- spines -->
+  <g stroke="#b7b7b7" fill="#ededed">
+    <rect x="180" y="50" width="180" height="56" rx="6"/>
+    <rect x="560" y="50" width="180" height="56" rx="6"/>
+  </g>
+  <text x="270" y="75" text-anchor="middle" font-size="15" font-weight="700" fill="#333">Spine-1</text>
+  <text x="270" y="96" text-anchor="middle" font-size="12.5" fill="#555">PFC + ECN</text>
+  <text x="650" y="75" text-anchor="middle" font-size="15" font-weight="700" fill="#333">Spine-2</text>
+  <text x="650" y="96" text-anchor="middle" font-size="12.5" fill="#555">PFC + ECN</text>
+
+  <!-- leaf-server links -->
+  <g stroke="#cfcfcf" stroke-width="1.5">
+    <line x1="270" y1="294" x2="145" y2="430"/>
+    <line x1="270" y1="294" x2="355" y2="430"/>
+    <line x1="270" y1="294" x2="565" y2="430"/>
+    <line x1="270" y1="294" x2="775" y2="430"/>
+    <line x1="650" y1="294" x2="145" y2="430"/>
+    <line x1="650" y1="294" x2="355" y2="430"/>
+    <line x1="650" y1="294" x2="565" y2="430"/>
+    <line x1="650" y1="294" x2="775" y2="430"/>
+  </g>
+  <rect x="255" y="352" width="410" height="22" fill="#ffffff"/>
+  <text x="460" y="368" text-anchor="middle" font-size="13" font-weight="600" fill="#3a78c2">leaf &#8596; server: PFC + ECN; NIC returns CNP</text>
+
+  <!-- leaves -->
+  <g stroke="#3a78c2" fill="#dbe9f8">
+    <rect x="180" y="230" width="180" height="64" rx="6"/>
+    <rect x="560" y="230" width="180" height="64" rx="6"/>
+  </g>
+  <text x="270" y="256" text-anchor="middle" font-size="15" font-weight="700" fill="#1f4e82">Leaf-1</text>
+  <text x="270" y="278" text-anchor="middle" font-size="12.5" fill="#3a78c2">PFC + ECN</text>
+  <text x="650" y="256" text-anchor="middle" font-size="15" font-weight="700" fill="#1f4e82">Leaf-2</text>
+  <text x="650" y="278" text-anchor="middle" font-size="12.5" fill="#3a78c2">PFC + ECN</text>
+
+  <!-- GPU servers -->
+  <g stroke="#d9a52f" fill="#fdf3dd">
+    <rect x="60"  y="430" width="170" height="110" rx="6"/>
+    <rect x="270" y="430" width="170" height="110" rx="6"/>
+    <rect x="480" y="430" width="170" height="110" rx="6"/>
+    <rect x="690" y="430" width="170" height="110" rx="6"/>
+  </g>
+  <g text-anchor="middle">
+    <g font-size="13.5" font-weight="700" fill="#4a3305">
+      <text x="145" y="456">GPU server 1</text>
+      <text x="355" y="456">GPU server 2</text>
+      <text x="565" y="456">GPU server 3</text>
+      <text x="775" y="456">GPU server 4</text>
+    </g>
+    <g font-size="12" fill="#6b5210">
+      <text x="145" y="478">8&#215; GPU + 2&#215; CX-7</text>
+      <text x="145" y="498">Eth1/1 &#8594; Leaf-1</text>
+      <text x="145" y="518">Eth1/2 &#8594; Leaf-2</text>
+      <text x="355" y="478">8&#215; GPU + 2&#215; CX-7</text>
+      <text x="355" y="498">Eth1/1 &#8594; Leaf-1</text>
+      <text x="355" y="518">Eth1/2 &#8594; Leaf-2</text>
+      <text x="565" y="478">8&#215; GPU + 2&#215; CX-7</text>
+      <text x="565" y="498">Eth1/1 &#8594; Leaf-1</text>
+      <text x="565" y="518">Eth1/2 &#8594; Leaf-2</text>
+      <text x="775" y="478">8&#215; GPU + 2&#215; CX-7</text>
+      <text x="775" y="498">Eth1/1 &#8594; Leaf-1</text>
+      <text x="775" y="518">Eth1/2 &#8594; Leaf-2</text>
+    </g>
+  </g>
+
+  <text x="460" y="588" text-anchor="middle" font-size="13" fill="#777">RoCE path: GPU &#8594; Leaf &#8594; Spine &#8594; Leaf &#8594; GPU &#183; PFC is hop-by-hop &#8212; every interface on the path needs it</text>
+</svg>

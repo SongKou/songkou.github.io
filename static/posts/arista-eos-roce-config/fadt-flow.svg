@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 470" font-family="'Segoe UI',Helvetica,Arial,sans-serif" role="img" aria-label="PFC FADT workflow on supported platforms: reserve lossless headroom and assign a PFC profile to a priority group; calculate a dynamic threshold from shared-buffer availability; assert and deassert PFC using the dynamic threshold. General FADT is documented from EOS 4.22.0F and PFC FADT configuration from EOS 4.35.0F.">
+  <defs>
+    <marker id="fadt-arrow" markerWidth="10" markerHeight="10" refX="6" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#3a78c2"/></marker>
+  </defs>
+  <rect x="0" y="0" width="920" height="470" rx="10" fill="#ffffff"/>
+  <text x="890" y="28" text-anchor="end" font-size="12.5" fill="#999">PFC FADT: EOS 4.35.0F+ on supported platforms</text>
+
+  <!-- step boxes -->
+  <g stroke="#b7b7b7" fill="#f4f4f4">
+    <rect x="170" y="40"  width="580" height="86" rx="8"/>
+    <rect x="170" y="166" width="580" height="86" rx="8"/>
+    <rect x="170" y="292" width="580" height="86" rx="8"/>
+  </g>
+
+  <!-- step numbers -->
+  <circle cx="212" cy="83"  r="16" fill="#3a78c2"/>
+  <circle cx="212" cy="209" r="16" fill="#4a9e6b"/>
+  <circle cx="212" cy="335" r="16" fill="#d9a52f"/>
+  <g text-anchor="middle" font-size="15" font-weight="700" fill="#ffffff">
+    <text x="212" y="88">1</text>
+    <text x="212" y="214">2</text>
+    <text x="212" y="340">3</text>
+  </g>
+
+  <!-- step text -->
+  <g font-size="15" font-weight="600" fill="#333">
+    <text x="246" y="76">Reserve headroom and assign a PFC profile</text>
+    <text x="246" y="202">Calculate a threshold from shared-buffer availability</text>
+    <text x="246" y="328">Assert or deassert PFC using the dynamic threshold</text>
+  </g>
+  <g font-size="13" fill="#666">
+    <text x="246" y="100">bind an interface and PFC priority to the supported buffer policy</text>
+    <text x="246" y="226">available shared resources influence the instantaneous limit</text>
+    <text x="246" y="352">pause behavior adapts as buffer availability changes</text>
+  </g>
+
+  <!-- arrows -->
+  <g stroke="#3a78c2" stroke-width="2" marker-end="url(#fadt-arrow)">
+    <line x1="460" y1="126" x2="460" y2="158"/>
+    <line x1="460" y1="252" x2="460" y2="284"/>
+  </g>
+
+  <!-- effect banner -->
+  <rect x="170" y="408" width="580" height="40" rx="8" fill="#eef6ef" stroke="#bcd9c2"/>
+  <text x="460" y="433" text-anchor="middle" font-size="13.5" font-weight="600" fill="#2e6b45">Effect: more efficient shared-buffer use and fairer lossless behavior</text>
+</svg>

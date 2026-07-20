@@ -2047,3 +2047,111 @@ The four failures that cost the most time here, and the command that catches eac
 | Routed traffic hairpins across the MLAG peer-link | MLAG shared router MAC not enabled | `show interfaces vxlan 1 \| include Shared Router MAC` |
 
 `show vxlan config-sanity detail` is worth running after every change in this lab. It catches three of the four on its own.
+
+And the final state of the lab — `show vxlan config-sanity detail` on all three leaves with everything in this post applied, every check green, including the `Routing` row that failed back in section 5.3:
+
+```text
+
+Leaf1#show vxlan config-sanity detail
+Category                            Result 
+---------------------------------- --------
+Local VTEP Configuration Check        OK   
+  Loopback IP Address                 OK   
+  VLAN-VNI Map                        OK   
+  Flood List                          OK   
+  Routing                             OK   
+  VNI VRF ACL                         OK   
+  Decap VRF-VNI Map                   OK   
+  VRF-VNI Dynamic VLAN                OK   
+Remote VTEP Configuration Check       OK   
+  Remote VTEP                         OK   
+Platform Dependent Check              OK   
+  VXLAN Bridging                      OK   
+  VXLAN Routing                       OK   
+CVX Configuration Check               OK   
+  CVX Server                          OK   
+MLAG Configuration Check              OK   
+  Peer VTEP IP                        OK   
+  MLAG VTEP IP                        OK   
+  Peer VLAN-VNI                       OK   
+  Virtual VTEP IP                     OK   
+  MLAG Inactive State                 OK   
+
+Detail                                            
+--------------------------------------------------
+                                        
+Not in controller client mode                     
+Run 'show mlag config-sanity' to verify MLAG config
+
+Leaf1#
+
+Leaf2#show vxlan config-sanity detail
+Category                            Result 
+---------------------------------- --------
+Local VTEP Configuration Check        OK   
+  Loopback IP Address                 OK   
+  VLAN-VNI Map                        OK   
+  Flood List                          OK   
+  Routing                             OK   
+  VNI VRF ACL                         OK   
+  Decap VRF-VNI Map                   OK   
+  VRF-VNI Dynamic VLAN                OK   
+Remote VTEP Configuration Check       OK   
+  Remote VTEP                         OK   
+Platform Dependent Check              OK   
+  VXLAN Bridging                      OK   
+  VXLAN Routing                       OK   
+CVX Configuration Check               OK   
+  CVX Server                          OK   
+MLAG Configuration Check              OK   
+  Peer VTEP IP                        OK   
+  MLAG VTEP IP                        OK   
+  Peer VLAN-VNI                       OK   
+  Virtual VTEP IP                     OK   
+  MLAG Inactive State                 OK   
+
+Detail                                            
+--------------------------------------------------
+        
+Not in controller client mode                     
+Run 'show mlag config-sanity' to verify MLAG config
+                      
+Check this command from the peer                  
+                                                  
+Leaf2#                                         
+
+
+Leaf3#show vxlan config-sanity detail
+Category                            Result 
+---------------------------------- --------
+Local VTEP Configuration Check        OK   
+  Loopback IP Address                 OK   
+  VLAN-VNI Map                        OK   
+  Flood List                          OK   
+  Routing                             OK   
+  VNI VRF ACL                         OK   
+  Decap VRF-VNI Map                   OK   
+  VRF-VNI Dynamic VLAN                OK   
+Remote VTEP Configuration Check       OK   
+  Remote VTEP                         OK   
+Platform Dependent Check              OK   
+  VXLAN Bridging                      OK   
+  VXLAN Routing                       OK   
+CVX Configuration Check               OK   
+  CVX Server                          OK   
+MLAG Configuration Check              OK   
+  Peer VTEP IP                        OK   
+  MLAG VTEP IP                        OK   
+  Peer VLAN-VNI                       OK   
+  Virtual VTEP IP                     OK   
+  MLAG Inactive State                 OK   
+
+Detail                                            
+--------------------------------------------------
+    
+Not in controller client mode                     
+Run 'show mlag config-sanity' to verify MLAG config
+MLAG peer is not connected                        
+                                                  
+Leaf3#
+```

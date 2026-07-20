@@ -166,15 +166,56 @@ ekou@ubuntu2:~$ ib_write_bw -d rxe0 10.10.80.91
 ---------------------------------------------------------------------------------------
 ```
 
-Reading the header before the numbers:
+That output has three parts: a header describing the test setup, two address lines describing the connection, and the result row.
 
-- **Connection type RC** — Reliable Connection, the default queue-pair type.
-- **Link type Ethernet / GID index 1** — this is RoCE; the GID is an IPv4-mapped address (`::ffff:10.10.80.91`), i.e. RoCEv2 over IPv4.
-- **Mtu 1024** — the rxe default path MTU, one reason throughput is modest.
-- **LID 0000** — LIDs only exist on InfiniBand fabrics; on RoCE they are always zero.
-- **Data ex. method: Ethernet** — the out-of-band parameter exchange ran over the normal TCP/IP network.
+### Reading the header
 
-Result: **58.74 MB/s average** (~0.47 Gb/s) for 64 KiB writes.
+| Field | Meaning |
+| --- | --- |
+| `Dual-port : OFF` | Testing one port only; `-O` runs both ports of a dual-port adapter |
+| `Device : rxe0` | The RDMA device under test — not the Ethernet interface name |
+| `Number of qps : 1` | A single queue pair. On fast links one QP is often the ceiling; `-q` adds more |
+| `Transport type : IB` | The InfiniBand *transport*, even though the link is Ethernet — see below |
+| `Connection type : RC` | Reliable Connection: ordered and acknowledged, the default queue-pair type |
+| `Using SRQ : OFF` | No shared receive queue |
+| `TX depth : 128` | Send-queue depth — how many work requests may be outstanding at once |
+| `CQ Moderation : 1` | Completions reported one at a time; the `-R` runs below show `100`, batching them to cut CPU overhead |
+| `Mtu : 1024[B]` | The rxe default path MTU, one reason throughput here is modest |
+| `Link type : Ethernet` | This is RoCE, not InfiniBand |
+| `GID index : 1` | Which GID table entry identifies this endpoint |
+| `rdma_cm QPs : OFF` | Connected directly rather than through RDMA-CM (`-R` switches this to `ON`) |
+| `Data ex. method : Ethernet` | The out-of-band parameter exchange ran over ordinary TCP/IP |
+
+**`Transport type : IB` on an Ethernet link is not a contradiction** — it is the whole idea of RoCE. The InfiniBand transport (queue pairs, RC semantics, the BTH header) rides inside UDP/IP over Ethernet, so perftest reports the transport and the link layer separately and they legitimately disagree. My [RoCE on Cumulus Linux](/posts/roce_cumulus_linux/) post draws that encapsulation stack.
+
+### Reading the address lines
+
+| Field | Meaning |
+| --- | --- |
+| `LID 0000` | Local Identifier, an InfiniBand fabric address — always zero on RoCE |
+| `QPN 0x0011` | Queue-Pair Number, the endpoint's identifier within the device |
+| `PSN 0x798a38` | Initial Packet Sequence Number, randomized per connection |
+| `RKey 0x000249` | Remote key — the token authorizing the peer to access the registered buffer |
+| `VAddr 0x00766af95ef000` | Virtual address of that buffer in the local process |
+| `GID: ...255:255:10:10:80:92` | The endpoint's global identifier |
+
+`RKey` and `VAddr` are what make an RDMA Write **one-sided**: the peer is handed a memory address plus a key and writes straight into that memory, with no involvement from the remote CPU. That is the mechanism behind the whole "bypass the CPU" claim.
+
+The GID is printed as 16 bytes in decimal. Read the tail — `...:255:255:10:10:80:92` is `::ffff:10.10.80.92`, an IPv4-mapped IPv6 address, which is what marks this as **RoCEv2 over IPv4**.
+
+### Reading the result row
+
+| Column | Meaning |
+| --- | --- |
+| `#bytes 65536` | Message size — 64 KiB, the default for the bandwidth tests |
+| `#iterations 5000` | How many messages were sent (`-n`) |
+| `BW peak 66.81` | Best instantaneous rate observed |
+| `BW average 58.74` | Sustained rate across the whole run — the number to quote |
+| `MsgRate 0.000940` | Millions of messages per second |
+
+The three numbers are internally consistent, and checking that is a good habit: `0.000940 Mpps` is 940 messages/s, and `940 x 65536 B = 61.6 MB/s = 58.75 MiB/s` — matching the reported 58.74. That also settles what perftest means by "MB/sec": it is **MiB/sec (2^20 bytes)**, not 10^6, which is why converting to line rate needs the factor from the `--report_gbits` note. So this run is **58.74 MiB/s ≈ 0.49 Gb/s** for 64 KiB writes.
+
+A wide gap between peak and average means an unstable run. Here 66.81 vs 58.74 is the VM scheduler intruding — on quiet hardware the two converge.
 
 ## Latency test
 
@@ -188,7 +229,25 @@ ekou@ubuntu2:~$ ib_send_lat -d rxe0 -s 64 10.10.80.91
 ---------------------------------------------------------------------------------------
 ```
 
-How to read the columns: `t_typical` (the median-ish value, **86 µs** here) is the honest headline number; `t_avg` is dragged up by outliers; and the gap between `t_typical` and `t_max`/`p99.9` (86 µs → **1.6 ms**!) is the *jitter* — in this lab it is enormous, which is exactly what VM scheduling does to latency.
+Nine columns, and they tell different stories:
+
+| Column | This run | Meaning |
+| --- | --- | --- |
+| `#bytes` | 64 | Message size (`-s`) — latency tests use small messages |
+| `#iterations` | 1000 | Number of round trips measured (`-n`) |
+| `t_min` | 55.59 µs | Best case — the floor when nothing interferes |
+| `t_max` | 1628.06 µs | Worst single sample observed |
+| `t_typical` | 86.19 µs | The most representative value — the honest headline number |
+| `t_avg` | 111.57 µs | Arithmetic mean, dragged upward by outliers |
+| `t_stdev` | 89.26 µs | Spread of the samples |
+| `99% percentile` | 428.05 µs | 99 of 100 round trips finished within this |
+| `99.9% percentile` | 1628.06 µs | Tail latency — what the unluckiest 1-in-1000 request saw |
+
+Quote **`t_typical`**, not `t_avg`: here the mean (111 µs) is nearly 30% higher than the typical value (86 µs) purely because of outliers. And a `t_stdev` almost as large as `t_avg` is itself the warning — on a stable path the standard deviation is a small fraction of the mean.
+
+The real story is in the tail. From 86 µs typical to **1.6 ms** at p99.9 is roughly 19× — and note `t_max` equals `99.9% percentile` exactly, meaning the single worst sample *is* the tail. That spread is jitter, and in this lab it is the VM scheduler pausing the guest mid-measurement. On tuned bare metal you would expect the percentiles to sit within a small multiple of `t_typical`.
+
+One measurement detail: latency tools time a full round trip and report **half** of it as the estimated one-way latency.
 
 ## More recipes: duration, iterations, and all sizes
 
@@ -378,6 +437,8 @@ These results are perfectly healthy **for this environment** — and would be al
 
 Soft-RoCE in a VM validates **functionality** — the stack, the tools, the client–server flow — not **performance**. Which brings us to real hardware.
 
+It also cannot validate a *lossless* configuration. PFC is a hardware pause mechanism between a real NIC and a real switch port, and ECN marking happens in switch buffers — `rxe` over a virtual NIC has neither. So the PFC pause and CNP counters that matter in a production RoCE fabric are simply absent or permanently zero here, and no perftest run in this lab can tell you whether PFC, ECN or DCQCN are configured correctly. That verification needs hardware; see [End-to-End RoCEv2 Configuration](/posts/rocev2-cisco-cumulus-connectx-end-to-end/) for the counters to watch and where to read them.
+
 ## On real servers: bare-metal with a ConnectX adapter
 
 On a physical server with an NVIDIA/Mellanox ConnectX NIC, the same commands apply almost unchanged — the differences are the device name, the GID selection, and the numbers you should expect.
@@ -467,6 +528,7 @@ The full `-h` output is long; these are the ones I actually reach for (perftest 
 | `-F` | ignore the CPU-frequency warning |
 | `--report_gbits` | Gb/s instead of MiB/s |
 | `-H` | (latency tests) print the full histogram |
+| `-W <counters>` | report the change in NIC/RDMA counters across the run, e.g. `-W counters/port_xmit_data,hw_counters/out_of_buffer` |
 | `--out_json` | machine-readable results |
 | `--run_infinitely` | burn-in mode |
 

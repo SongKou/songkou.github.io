@@ -6,7 +6,7 @@ categories = ['Network']
 tags = ['RoCE', 'Arista', 'PFC', 'ECN', 'Network']
 +++
 
-On Cisco NX-OS, enabling PFC for RoCE normally involves several MQC layers. On Arista EOS, basic PFC can be enabled directly on an interface with two commands:
+On Cisco NX-OS, enabling PFC for RoCE normally involves several MQC (Modular QoS CLI class-map -> policy-map -> system qos) layers. On Arista EOS, basic PFC can be enabled directly on an interface with two commands:
 
 ```text
 priority-flow-control on
@@ -55,13 +55,13 @@ Four points to keep straight:
 The reference policy uses one PFC-enabled no-drop queue for RoCE data. CNP uses a separate strict-priority queue but remains lossy:
 
 | Traffic | Example marking | TC / queue | Scheduling | ECN | PFC |
-|---|---:|---:|---|---|---|
-| RoCE data | DSCP 26 | 3 | WRR, approximately 95% | Yes | Yes |
-| CNP | DSCP 48 | 6 | Strict priority | No | No |
-| Network control | CS7 | 7 | Platform-reserved control queue | No | No |
-| Best effort | Remaining DSCP values | 1 or platform default | WRR, approximately 5% | No | No |
+|---|---|---:|---|---|---|
+| RoCE data | DSCP 26 (AF31) | 3 | WRR, approximately 95% | Yes | Yes |
+| CNP | DSCP 48 (CS6) | 6 | Strict priority | No | No |
+| Network control | DSCP 56 (CS7) | 7 | Platform-reserved control queue | No | No |
+| Best effort | DSCP 0-7 | 1 | WRR, approximately 5% | No | No |
 
-CNP must not sit behind congested RoCE data, but that does **not** require making CNP another PFC-enabled queue. Arista's published AI-fabric example likewise protects only the RoCE data queue with PFC and ECN. Its CNP marking differs from this NVIDIA-oriented DSCP 48 example, which is why host marking and switch mapping must be checked together.
+CNP must not sit behind congested RoCE data, but that does **not** require making CNP another PFC-enabled queue. Arista's published AI-fabric example likewise protects only the RoCE data queue with PFC and ECN. That guide's CNP marking differs from this NVIDIA-oriented DSCP 48 example, which is why host marking and switch mapping must be checked together.
 
 ## 1. Classification and platform-specific queue mapping
 
@@ -71,6 +71,16 @@ Map the host markings to the intended traffic classes:
 switch(config)# qos map dscp 26 to traffic-class 3
 switch(config)# qos map dscp 48 to traffic-class 6
 ```
+
+Both commands restate the documented default DSCP-to-traffic-class map rather than override it. EOS publishes the same default across its platform families, Arad, Jericho, Trident, Trident II and Tomahawk among them, and it already sends DSCP 24-31 to traffic class 3 and DSCP 48-55 to traffic class 6:
+
+| DSCP | 0-7 | 8-15 | 16-23 | 24-31 | 32-39 | 40-47 | 48-55 | 56-63 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Traffic class | 1 | 0 | 2 | 3 | 4 | 5 | 6 | 7 |
+
+Note the inversion at the low end: DSCP 0-7 map to traffic class 1 and DSCP 8-15 to traffic class 0, not the other way round. That is a systematic EOS convention rather than a typo, and it appears the same way in the default CoS-to-traffic-class map. It is also what places default-marked traffic at DSCP 0 into queue 1, which is why the best-effort row in the policy above targets queue 1 rather than queue 0.
+
+Configuring the two maps explicitly is still worth doing. It records the intent for anyone reading the running configuration, and it keeps the policy correct on a platform or release whose defaults differ from the table above.
 
 Then map those traffic classes to transmit queues. The map target is `tx-queue` on every platform:
 
@@ -114,7 +124,7 @@ Leaf-1(config-if-Et1)# qos trust dscp
 Leaf-1(config-if-Et1)# service-profile ROCE-LEAF
 ```
 
-`no switchport` makes the port routed, for which DSCP trust is normally the default. The explicit `qos trust dscp` documents the intent and protects the example from being copied to a switched port, whose default trust mode is CoS.
+`no switchport` makes the port routed, for which DSCP trust is normally the default. The explicit `qos trust dscp` documents the intent and keeps the configuration correct if it is copied to a switched port, whose default trust mode is CoS.
 
 Enable ECN counters under the interface queue, not inside the QoS profile:
 
@@ -190,7 +200,21 @@ Spine-1(config-if-Et1-txq-3)# random-detect ecn count
 
 If the leaf and spine use the same ASIC family, their queue hierarchy may be the same. They should still be kept as separate named profiles when thresholds or scheduler behavior differ.
 
+Verify the spine the same way as the leaf, and confirm that the spine's own thresholds took effect rather than the leaf's:
+
+```text
+Spine-1# show qos interfaces ethernet 1 ecn
+Tx-Queue  Threshold  ECN Min     ECN Max
+          Unit       Threshold   Threshold
+--------  ---------  ---------   ---------
+3         kbytes     512         768
+```
+
+The 512/768 values are what distinguish this output from the leaf's in section 2. A spine still reporting 256/512 means the leaf profile was applied by mistake.
+
 ## 4. Verify PFC, QoS, and trust mode
+
+Sections 2 and 3 checked each device as it was configured. This is the checkpoint once both are in place: confirm the assembled policy before moving on to DCBX and threshold tuning. The section 9 checklist repeats these commands for diagnosing a fabric that is already broken.
 
 ```text
 Leaf-1# show priority-flow-control
@@ -251,7 +275,7 @@ As a **general starting heuristic**, when the platform exposes a known effective
 - `maximum-threshold`: start at **75-85%** of that same budget.
 - Watch the PFC counter rate: if **TxPFC keeps climbing after ECN is active**, reduce the minimum threshold by approximately **20%** and retest.
 
-Treat these percentages as a tuning aid, not a platform default. The denominator is the buffer budget effectively available to the queue under the active ASIC/MMU profile - not the switch's total packet memory or an assumed fixed per-port buffer.
+Treat these percentages as a tuning aid, not a platform default. The denominator is the buffer budget effectively available to the queue under the active ASIC and MMU (memory management unit) profile, not the switch's total packet memory or an assumed fixed per-port buffer.
 
 Lower the ECN threshold if PFC fires before senders react. Increase it cautiously if ECN marking is excessive during harmless microbursts. Always keep enough headroom for in-flight traffic after a pause is generated.
 
@@ -259,7 +283,7 @@ Lower the ECN threshold if PFC fires before senders react. Increase it cautiousl
 
 **FADT** is not one feature with one universal introduction release:
 
-- General Fair Adaptive Dynamic Threshold support for shared VoQ resources is documented from EOS 4.22.0F.
+- General Fair Adaptive Dynamic Threshold support for shared VoQ (virtual output queue) resources is documented from EOS 4.22.0F.
 - PFC-specific FADT configuration, which assigns PFC profiles to interface/priority groups, is documented from EOS 4.35.0F on supported platforms.
 
 ![PFC FADT workflow: calculate dynamic thresholds from shared-buffer availability and apply them to supported PFC priority groups](/posts/arista-eos-roce-config/fadt-flow.svg)
@@ -270,7 +294,7 @@ EOS 4.34.2F is associated with some PFC visibility improvements, such as buffer 
 
 ## 8. PFC watchdog
 
-The watchdog monitors PFC-enabled egress queues that also have guaranteed bandwidth. The following values satisfy EOS's timing relationship because the polling interval is no greater than half the smaller of timeout and recovery time:
+The watchdog monitors PFC-enabled egress queues that also have guaranteed bandwidth. All three timers are in **seconds**: `timeout` and `recovery-time` accept 0.01 to 60, and `polling-interval` accepts 0.005 to 30. The values below satisfy EOS's timing relationship because the polling interval is no greater than half the smaller of timeout and recovery time:
 
 ```text
 Leaf-1(config)# priority-flow-control pause watchdog default timeout 0.20

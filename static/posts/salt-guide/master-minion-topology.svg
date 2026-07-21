@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="340" viewBox="0 0 760 340" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="760" height="340" fill="#ffffff"/>
+
+  <!-- Links master -> minions -->
+  <g stroke="#888780" stroke-width="1.6" fill="none">
+    <line x1="380" y1="128" x2="150" y2="228"/>
+    <line x1="380" y1="128" x2="380" y2="228"/>
+    <line x1="380" y1="128" x2="610" y2="228"/>
+  </g>
+
+  <!-- Bus label -->
+  <text x="398" y="185" font-size="11.5" fill="#5F5E5A">ZeroMQ · TCP 4505/4506 · AES</text>
+  <text x="398" y="202" font-size="10.5" fill="#888780">minions connect outbound</text>
+
+  <!-- Master node -->
+  <g>
+    <rect x="270" y="52" width="220" height="76" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.4"/>
+    <text x="380" y="84" font-size="17" font-weight="bold" fill="#3C3489" text-anchor="middle">Salt Master</text>
+    <text x="380" y="106" font-size="12" fill="#534AB7" text-anchor="middle">control server · states · keys</text>
+  </g>
+
+  <!-- Minion 1 -->
+  <g>
+    <rect x="60" y="228" width="180" height="64" rx="9" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.3"/>
+    <text x="150" y="255" font-size="14.5" font-weight="bold" fill="#085041" text-anchor="middle">Minion1</text>
+    <text x="150" y="275" font-size="11.5" fill="#0F6E56" text-anchor="middle">Linux</text>
+  </g>
+
+  <!-- Minion 2 -->
+  <g>
+    <rect x="290" y="228" width="180" height="64" rx="9" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.3"/>
+    <text x="380" y="255" font-size="14.5" font-weight="bold" fill="#085041" text-anchor="middle">Minion2</text>
+    <text x="380" y="275" font-size="11.5" fill="#0F6E56" text-anchor="middle">Linux</text>
+  </g>
+
+  <!-- Minion 3 -->
+  <g>
+    <rect x="520" y="228" width="180" height="64" rx="9" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.3"/>
+    <text x="610" y="255" font-size="14.5" font-weight="bold" fill="#0C447C" text-anchor="middle">Minion3</text>
+    <text x="610" y="275" font-size="11.5" fill="#185FA5" text-anchor="middle">Windows</text>
+  </g>
+
+  <!-- Flow annotations -->
+  <g font-size="11" fill="#5F5E5A">
+    <text x="180" y="160">commands / states</text>
+    <text x="548" y="160">results / grains</text>
+  </g>
+  <g stroke="#5F5E5A" stroke-width="1.2" fill="#5F5E5A">
+    <line x1="252" y1="150" x2="252" y2="168"/>
+    <path d="M 252 172 l -4 -7 l 8 0 z"/>
+    <line x1="536" y1="172" x2="536" y2="154"/>
+    <path d="M 536 150 l -4 7 l 8 0 z"/>
+  </g>
+</svg>

@@ -396,6 +396,7 @@ The commands that turn raw output into answers. Most of their value is in pipeli
   `grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' file | sort -u` — extract every unique IPv4 address from anything.
 - `awk` — column processor. `$1..$n` are whitespace-split fields, `$NF` the last one, `-F` changes the delimiter, and it can do arithmetic across lines.
   `ss -tn | awk '{print $5}'` — peer address column only.
+  `awk '{print $NF}'` — the **last** column of every line, no matter how many columns the line has (`ls -l | awk '{print $NF}'` → just the filenames; `$(NF-1)` is second-to-last). This is the move when column counts vary per line and `$5` would land somewhere different each time.
   `awk -F: '{print $1}' /etc/passwd` — usernames.
   `awk '{sum+=$2} END {print sum}' file` — total a column.
 - `sed` — stream editor; 90% of its use is substitution. `sed 's/old/new/g'` per line, `-i` edits the file in place (`-i.bak` keeps a backup — cheap insurance), `sed -n '20,40p'` prints a line range, `sed '/^#/d'` deletes matches.
@@ -415,3 +416,29 @@ The commands that turn raw output into answers. Most of their value is in pipeli
 - `find` — locate by predicate, then act: `find /var/log -name '*.log' -mtime -1` (modified in the last day), `-size +100M`, `-exec <cmd> {} \;` to run something on each hit.
 - `column -t` — align any whitespace output into readable columns; `watch -n 1 '<cmd>'` — rerun a command every second, full-screen: `watch -n 1 'ip -s link show eth0'` is a poor man's interface counter dashboard.
 - Pipeline glue worth remembering: `cmd1 && cmd2` (run 2 only on success), `cmd 2>&1 | grep ...` (include stderr in the pipe — without it, error messages sail past your grep), `$(cmd)` (substitute output), `!!` and `sudo !!` (repeat last command — the classic forgot-sudo recovery).
+
+### 5.9 Background jobs and processes
+
+Two scopes to keep straight: **jobs** belong to your current shell (`jobs`, `%1`, `fg`/`bg` only see what *this* terminal started), while **processes** are system-wide (`ps`, `pgrep`, `kill <pid>` see everything). A job that survives your logout stops being findable as a job and is only reachable as a process.
+
+**Run in the background:**
+
+- `./script.sh &` — start directly in the background of this shell. Still tied to the terminal: closing the session sends it SIGHUP and it usually dies.
+- `Ctrl+Z` then `bg` — the retrofit: suspend the foreground command you *wish* you had backgrounded, then resume it in the background. `fg` pulls it back.
+- `nohup ./script.sh > run.log 2>&1 &` — immune to logout (ignores SIGHUP), output captured to a file you chose instead of the default `nohup.out`. The standard way to launch something long over SSH and walk away.
+- `disown -h %1` — the after-the-fact `nohup`: detach an already-running job from the shell so logout won't kill it (its output still goes wherever it was already going).
+- For anything genuinely long-running and interactive, `tmux` (or `screen`) beats all of the above: the session survives disconnects and you can re-attach with `tmux attach` and *see* it, not just know it's alive.
+
+**List what's running in the background:**
+
+- `jobs -l` — this shell's jobs with job numbers and PIDs, plus Running/Stopped state. Empty output doesn't mean nothing is running — only that this shell started nothing.
+- `ps aux | grep <name>` — system-wide search; the grep line itself always matches, so either ignore it or use `ps aux | grep '[s]cript'` (the bracket trick makes the pattern not match itself).
+- `pgrep -af <pattern>` — cleaner: PIDs plus full command line, no self-match. `-f` matches against the whole command line, not just the process name.
+- `top` / `htop` — live view sorted by CPU/memory; `htop` lets you scroll, filter, and kill interactively (F9).
+
+**Stop them:**
+
+- `kill %1` — kill by job number (current shell's job 1).
+- `kill <pid>` — sends SIGTERM: a polite request to shut down cleanly. Give a process a few seconds to honor it.
+- `kill -9 <pid>` — SIGKILL: the process gets no chance to clean up (no flushing buffers, no removing lock files). Last resort *after* SIGTERM failed, not the default reflex.
+- `pkill -f '<pattern>'` — kill by command-line match. Powerful and dangerous in equal measure: `pkill -f python` kills every Python process on the box — run the same pattern through `pgrep -af` first and read the list before pulling the trigger.

@@ -1638,12 +1638,26 @@ When a minion's pillar looks wrong (or comes back empty, as in the 7.5 troublesh
 sudo salt-run config.get pillar_roots
 ```
 
-Default: `base: [/srv/pillar]`. Use the runner form here — `salt-call --local config.get pillar_roots` would read the **minion** config on that box instead, which is not what decides where your pillar files must live.
+Expected output on a default install:
+
+```text
+base:
+    - /srv/pillar
+```
+
+Use the runner form here — `salt-call --local config.get pillar_roots` would read the **minion** config on that box instead, which is not what decides where your pillar files must live.
 
 **2. Which pillar SLS files the pillar top file assigns to a given minion:**
 
 ```bash
 sudo salt-run pillar.show_top minion=skou_test
+```
+
+Expected output with the 7.5 pillar top file in place:
+
+```text
+base:
+    - mysql
 ```
 
 This is usually the one-shot answer: empty output means the pillar top file isn't matching (missing file, wrong target, tab in the YAML); `- mysql` means the mapping is fine and any problem is further down.
@@ -1654,11 +1668,32 @@ This is usually the one-shot answer: empty output means the pillar top file isn'
 sudo salt-run pillar.show_pillar skou_test
 ```
 
+Expected output — the rendered result of the 7.5 `mysql.sls`:
+
+```text
+mysql.unix_socket:
+    /var/run/mysqld/mysqld.sock
+appdb:
+    ----------
+    name:
+        ekou_test_db
+    table:
+        ekou_test_table
+    user:
+        appuser
+    password:
+        MySecret123
+```
+
+Note that the secret is printed in clear text — this command shows exactly what the matched minion would receive, which is the point, but it also means treat master shell history and scrollback as sensitive.
+
 **4. What the minion actually holds** — its cached copy, updated by `saltutil.refresh_pillar`:
 
 ```bash
 sudo salt skou_test pillar.items
 ```
+
+Healthy, it returns the same data as step 3 under the minion's ID. Broken, it returns the bare `----------` shown in the real capture in the 7.5 troubleshooting note — the master rendered zero pillar for this minion, and steps 1–3 above tell you which link in the chain dropped it. If step 3 shows the data but the minion still returns nothing, re-run `saltutil.refresh_pillar` and check again.
 
 The state and pillar systems mirror each other, but the commands differ:
 

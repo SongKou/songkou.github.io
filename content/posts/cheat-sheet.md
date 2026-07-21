@@ -315,3 +315,28 @@ sudo nmcli connection up eth0
 - `hostnamectl set-hostname <name>` — the permanent-hostname counterpart (systemd distros), for when the renumbering comes with a rename.
 - DNS check: `resolvectl status` on systemd-resolved distros (Ubuntu), `cat /etc/resolv.conf` elsewhere — confirms the nameservers from the config actually landed.
 - The only real proof of "permanent": `sudo reboot`, then `ip -br address` again. A config that survives a service restart can still lose to cloud-init or NetworkManager overwriting it at boot.
+
+### 5.6 Managing services (systemd)
+
+Ubuntu, Debian, RHEL/CentOS/Rocky/Alma all use systemd today, so one command set covers them. Keep the two state axes separate in your head: **active** (running right now?) and **enabled** (starts at boot?) — a service can be any combination of the two, and "it worked until the reboot" is exactly an *active-but-disabled* service.
+
+**Check one service:**
+
+- `systemctl status <svc>` — the full picture: active/inactive/failed, enabled/disabled, uptime, PID tree, and the last few log lines. The one command that answers "is it running and why not".
+- `systemctl is-active <svc>` / `is-enabled <svc>` / `is-failed <svc>` — single-word answers, ideal in scripts and quick checks.
+- `sudo journalctl -u <svc> -f` — follow the service's log live; `-n 100` for the last 100 lines, `--since "10 min ago"` to scope. Where you go when `status` shows failed and the last-lines snippet isn't enough.
+
+**Start / stop / restart:**
+
+- `sudo systemctl restart <svc>` — full stop-then-start; picks up config changes, drops connections. What we used on `salt-minion` throughout the Salt guide.
+- `sudo systemctl reload <svc>` — re-read config *without* dropping connections, for services that support it (nginx, sshd); `reload-or-restart` falls back automatically for ones that don't.
+- `sudo systemctl start <svc>` / `stop <svc>` — one-shot, no boot-time effect.
+- `sudo systemctl enable --now <svc>` — enable at boot *and* start immediately, in one command (`disable --now` is the mirror). Plain `enable`/`disable` only changes the boot behavior.
+- `sudo systemctl daemon-reload` — re-read unit files after you edit one; required before a restart honors unit-file changes, and the fix for "changed the unit file but nothing changed".
+
+**List services:**
+
+- `systemctl list-units --type=service` — all services *loaded right now* with their state; add `--state=running` for only the active ones, `--state=failed` (or the shortcut `systemctl --failed`) for the broken ones — the first command to run on a box that "came back weird" after a reboot.
+- `systemctl list-unit-files --type=service` — every service *installed*, with its boot-time setting (enabled/disabled/static/masked). This is the list that answers "what starts at boot", which `list-units` does not.
+
+**Non-systemd stragglers:** Alpine/OpenRC (the EVE-NG lab hosts) uses `rc-service <svc> status|start|restart`, `rc-status` to list, and `rc-update add <svc>` for boot enablement. The old `service <svc> status` wrapper still works on most distros and delegates to systemd — fine interactively, but scripts should use `systemctl` directly for its exit codes.

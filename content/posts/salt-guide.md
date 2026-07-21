@@ -1638,14 +1638,16 @@ When a minion's pillar looks wrong (or comes back empty, as in the 7.5 troublesh
 sudo salt-run config.get pillar_roots
 ```
 
-Expected output on a default install:
+Real output from this lab:
 
 ```text
+ekou@saltmaster:~$ sudo salt-run config.get pillar_roots
 base:
     - /srv/pillar
+    - /srv/spm/pillar
 ```
 
-Use the runner form here — `salt-call --local config.get pillar_roots` would read the **minion** config on that box instead, which is not what decides where your pillar files must live.
+`/srv/pillar` is the default; the second entry, `/srv/spm/pillar`, is added by SPM (the Salt Package Manager) and is normal on this build — pillar files in either directory are picked up. Use the runner form here — `salt-call --local config.get pillar_roots` would read the **minion** config on that box instead, which is not what decides where your pillar files must live.
 
 **2. Which pillar SLS files the pillar top file assigns to a given minion:**
 
@@ -1653,14 +1655,21 @@ Use the runner form here — `salt-call --local config.get pillar_roots` would r
 sudo salt-run pillar.show_top minion=skou_test
 ```
 
-Expected output with the 7.5 pillar top file in place:
+Real output with the 7.5 pillar top file in place:
 
 ```text
+ekou@saltmaster:~$ sudo salt-run pillar.show_top minion=skou_test
 base:
-    - mysql
+    ----------
+    skou_[a-z]+$:
+        |_
+          ----------
+          match:
+              pcre
+        - mysql
 ```
 
-This is usually the one-shot answer: empty output means the pillar top file isn't matching (missing file, wrong target, tab in the YAML); `- mysql` means the mapping is fine and any problem is further down.
+Read it structurally: under the `base` environment, the target `skou_[a-z]+$` matched this minion; the nested `match: pcre` entry is the matcher directive from the top file (rendered as data, which is what it really is), and `- mysql` is the SLS assigned. This is usually the one-shot answer: empty output means the pillar top file isn't matching (missing file, wrong target, tab in the YAML); the `- mysql` at the bottom means the mapping is fine and any problem is further down.
 
 **3. What that assignment renders into** — the full pillar computed master-side, no minion involved:
 
@@ -1668,24 +1677,25 @@ This is usually the one-shot answer: empty output means the pillar top file isn'
 sudo salt-run pillar.show_pillar skou_test
 ```
 
-Expected output — the rendered result of the 7.5 `mysql.sls`:
+Real output — the rendered result of this lab's `mysql.sls` (the live lab used its own credentials, `ekoumysql`/`Cisco12345`, in place of the 7.5 example's `appuser`/`MySecret123` — throwaway lab values, shown unredacted deliberately):
 
 ```text
-mysql.unix_socket:
-    /var/run/mysqld/mysqld.sock
+ekou@saltmaster:~$ sudo salt-run pillar.show_pillar skou_test
 appdb:
     ----------
     name:
         ekou_test_db
+    password:
+        Cisco12345
     table:
         ekou_test_table
     user:
-        appuser
-    password:
-        MySecret123
+        ekoumysql
+mysql.unix_socket:
+    /var/run/mysqld/mysqld.sock
 ```
 
-Note that the secret is printed in clear text — this command shows exactly what the matched minion would receive, which is the point, but it also means treat master shell history and scrollback as sensitive.
+Note that the secret is printed in **clear text** — this command shows exactly what the matched minion would receive, which is the point, but it also means treat master shell history and scrollback as sensitive. Compare with step 4 below, where the same data comes back masked.
 
 **4. What the minion actually holds** — its cached copy, updated by `saltutil.refresh_pillar`:
 
@@ -1693,7 +1703,29 @@ Note that the secret is printed in clear text — this command shows exactly wha
 sudo salt skou_test pillar.items
 ```
 
-Healthy, it returns the same data as step 3 under the minion's ID. Broken, it returns the bare `----------` shown in the real capture in the 7.5 troubleshooting note — the master rendered zero pillar for this minion, and steps 1–3 above tell you which link in the chain dropped it. If step 3 shows the data but the minion still returns nothing, re-run `saltutil.refresh_pillar` and check again.
+Real output, healthy:
+
+```text
+ekou@saltmaster:~$ sudo salt skou_test pillar.items
+skou_test:
+    ----------
+    appdb:
+        ----------
+        name:
+            **********
+        password:
+            **********
+        table:
+            **********
+        user:
+            **********
+    mysql.unix_socket:
+        **********
+```
+
+Two things to read here. First, the **keys** are what prove delivery: `appdb` with its four fields plus `mysql.unix_socket` present under the minion's ID means the minion holds the full pillar. Second, on this Salt 3008 build the **values come back masked** (`**********`) — every value, not just the password — so `pillar.items` answers "did the data arrive?", while actual values are verified master-side with `pillar.show_pillar` (step 3, where they print in clear).
+
+Broken, the same command returns the bare `----------` shown in the real capture in the 7.5 troubleshooting note — the master rendered zero pillar for this minion, and steps 1–3 above tell you which link in the chain dropped it. If step 3 shows the data but the minion still returns nothing, re-run `saltutil.refresh_pillar` and check again.
 
 The state and pillar systems mirror each other, but the commands differ:
 

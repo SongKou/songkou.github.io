@@ -442,3 +442,26 @@ Two scopes to keep straight: **jobs** belong to your current shell (`jobs`, `%1`
 - `kill <pid>` — sends SIGTERM: a polite request to shut down cleanly. Give a process a few seconds to honor it.
 - `kill -9 <pid>` — SIGKILL: the process gets no chance to clean up (no flushing buffers, no removing lock files). Last resort *after* SIGTERM failed, not the default reflex.
 - `pkill -f '<pattern>'` — kill by command-line match. Powerful and dangerous in equal measure: `pkill -f python` kills every Python process on the box — run the same pattern through `pgrep -af` first and read the list before pulling the trigger.
+
+### 5.10 Environment variables
+
+The scope ladder, shortest-lived to permanent: one command → current shell → every future shell. Knowing which rung you're on is the whole game — "it works in my terminal but not in cron/systemd/sudo" is always a scope problem.
+
+**Inspect:**
+
+- `env` or `printenv` — every variable the current shell would pass to child processes; `printenv HTTP_PROXY` or `echo "$HTTP_PROXY"` for one.
+- `env | grep -i proxy` — the usual first move when downloads mysteriously fail.
+
+**Set temporarily:**
+
+- `VAR=value command` — the one-shot form: the variable exists *only for that single command*, the shell never sees it. `HTTPS_PROXY=http://proxy:3128 curl https://...` — test a proxy without polluting anything.
+- `export VAR=value` — set for the **current shell and everything started from it**, until you close the terminal. Without `export` (`VAR=value` alone) the variable is shell-local: visible to `echo $VAR`, invisible to any command you run — the classic "I set it but the program doesn't see it".
+- `unset VAR` — remove it from the current shell entirely (stronger than `VAR=""`, which keeps an empty variable that still shows up in `env` and can still override a default).
+- PATH extension follows the same pattern: `export PATH="$PATH:/opt/tool/bin"` — always *append or prepend* to `$PATH`, never assign a bare new value, or every command on the box goes missing at once.
+
+**Make permanent (load on every login):**
+
+- Per user, the pragmatic default: add the `export` line to `~/.bashrc`, then load it into the *current* session with `source ~/.bashrc` (new terminals pick it up automatically; `source` is only for the shell you're already in).
+- The file split, in one breath: `~/.bashrc` runs for interactive shells (every terminal you open), `~/.profile` / `~/.bash_profile` for **login** shells (SSH sessions, console logins). Ubuntu's default `~/.profile` sources `~/.bashrc`, which is why `.bashrc` alone usually covers both there; on RHEL the same chaining goes through `~/.bash_profile`. When a variable shows up in your terminal but not over SSH (or vice versa), you've put it in the wrong file of this pair.
+- System-wide for all users: a script in `/etc/profile.d/` (e.g. `/etc/profile.d/proxy.sh` containing the `export` lines — the cleanest method, package-friendly), or a plain `KEY=value` line in `/etc/environment` (no `export`, no `$` expansion — it's parsed, not executed, so `PATH=$PATH:/x` does **not** work there).
+- Two consumers that ignore all of the above: **cron** (gets a near-empty environment — set variables at the top of the crontab or inside the script) and **systemd services** (use `Environment=` / `EnvironmentFile=` in the unit). And **sudo** strips most of the environment by design — `sudo -E` preserves it for one command, `env_keep` in sudoers makes that permanent for chosen variables. The proxy-set-but-sudo-apt-still-fails ticket is exactly this.

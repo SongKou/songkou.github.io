@@ -340,3 +340,33 @@ Ubuntu, Debian, RHEL/CentOS/Rocky/Alma all use systemd today, so one command set
 - `systemctl list-unit-files --type=service` — every service *installed*, with its boot-time setting (enabled/disabled/static/masked). This is the list that answers "what starts at boot", which `list-units` does not.
 
 **Non-systemd stragglers:** Alpine/OpenRC (the EVE-NG lab hosts) uses `rc-service <svc> status|start|restart`, `rc-status` to list, and `rc-update add <svc>` for boot enablement. The old `service <svc> status` wrapper still works on most distros and delegates to systemd — fine interactively, but scripts should use `systemctl` directly for its exit codes.
+
+### 5.7 Firewall rules (ufw, firewalld, nftables/iptables)
+
+Same split as network config: Ubuntu fronts the kernel firewall with **ufw**, the RHEL family with **firewalld**, and both are only front-ends — the kernel enforces nftables/iptables, which is where the ground truth lives. Golden rule before touching any of them over SSH: **make sure the rule allowing your own SSH session exists before enabling or reloading.**
+
+**Ubuntu — ufw:**
+
+- `sudo ufw status` — active state and rules. `Status: inactive` means **nothing is enforced**, even if rules have been added — they're staged until `sudo ufw enable`.
+- `sudo ufw status numbered` — the same list with an index per rule; the view you need for deleting. `status verbose` adds default policies and logging level.
+- `sudo ufw allow 4505:4506/tcp` — open a port range; ufw requires the `/tcp` (or `/udp`) suffix whenever a range uses the colon. Single ports and service names also work: `sudo ufw allow 22/tcp`, `sudo ufw allow OpenSSH`.
+- `sudo ufw allow from 10.10.80.0/24 to any port 4505:4506 proto tcp` — source-scoped rule; better practice than opening a port to the world (this is the Salt master example from the [SaltStack guide](/posts/salt-guide/)).
+- `sudo ufw delete 3` — delete by number from the `numbered` view (indexes shift after each delete — re-run `status numbered` between deletes). Deleting by rule text also works: `sudo ufw delete allow 22/tcp`.
+- Modify = delete + re-add; ufw has no in-place edit. When order matters (a deny that must beat a broad allow), place it explicitly: `sudo ufw insert 1 deny from <ip>` — rules match top-down.
+- `sudo ufw reload` — reapply after edits; `sudo ufw enable` / `disable` turn enforcement on/off (enable persists across reboots).
+
+**RHEL / CentOS / Rocky / Alma — firewalld:**
+
+- `sudo firewall-cmd --state` — running or not. `sudo firewall-cmd --list-all` — the active zone's full ruleset (services, ports, sources); add `--zone=<z>` for others.
+- The **runtime vs permanent** split is the firewalld trap: without `--permanent` a change applies instantly but dies at the next reload/reboot; with `--permanent` it survives but does **nothing until** `--reload`. So either run the command twice (with and without `--permanent`), or apply runtime-only and then persist what works: `sudo firewall-cmd --runtime-to-permanent`.
+- `sudo firewall-cmd --permanent --add-port=4505-4506/tcp` — open a port range (note firewalld uses `-` in ranges where ufw uses `:`). Services by name: `--add-service=https`.
+- Source-scoped: `sudo firewall-cmd --permanent --add-rich-rule='rule family=ipv4 source address=10.10.80.0/24 port port=4505-4506 protocol=tcp accept'`.
+- Remove is the mirror image: `--permanent --remove-port=4505-4506/tcp` / `--remove-service=...` / `--remove-rich-rule='...'`, then `--reload`.
+- `sudo firewall-cmd --reload` — reapply the permanent config **without breaking established connections**; this is the normal "restart". `sudo systemctl restart firewalld` is the heavier full restart — rarely needed, and it briefly interrupts.
+
+**The kernel layer — nftables / iptables (any distro):**
+
+- `sudo nft list ruleset` — everything actually loaded in the kernel, including rules ufw/firewalld/Docker/Salt injected behind your back. When the front-end says one thing and traffic does another, this is the arbiter.
+- `sudo iptables -L -n -v --line-numbers` — the legacy view with packet/byte counters (a rule whose counters never move isn't matching) and line numbers for deletion.
+- Raw edits: `sudo iptables -I INPUT 1 -p tcp --dport 22 -j ACCEPT` (insert at top), `-A` (append at bottom — order matters, first match wins), `-D INPUT <num>` (delete by number).
+- Persistence caveat: raw `iptables`/`nft` edits vanish at reboot unless saved — `iptables-save` + the `netfilter-persistent`/`iptables-services` package, or write `/etc/nftables.conf` and manage it via `sudo systemctl restart nftables`. If ufw or firewalld is in charge, make the change through *it* instead of racing it at the kernel layer.

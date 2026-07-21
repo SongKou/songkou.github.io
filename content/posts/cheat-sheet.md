@@ -465,3 +465,54 @@ The scope ladder, shortest-lived to permanent: one command → current shell →
 - The file split, in one breath: `~/.bashrc` runs for interactive shells (every terminal you open), `~/.profile` / `~/.bash_profile` for **login** shells (SSH sessions, console logins). Ubuntu's default `~/.profile` sources `~/.bashrc`, which is why `.bashrc` alone usually covers both there; on RHEL the same chaining goes through `~/.bash_profile`. When a variable shows up in your terminal but not over SSH (or vice versa), you've put it in the wrong file of this pair.
 - System-wide for all users: a script in `/etc/profile.d/` (e.g. `/etc/profile.d/proxy.sh` containing the `export` lines — the cleanest method, package-friendly), or a plain `KEY=value` line in `/etc/environment` (no `export`, no `$` expansion — it's parsed, not executed, so `PATH=$PATH:/x` does **not** work there).
 - Two consumers that ignore all of the above: **cron** (gets a near-empty environment — set variables at the top of the crontab or inside the script) and **systemd services** (use `Environment=` / `EnvironmentFile=` in the unit). And **sudo** strips most of the environment by design — `sudo -E` preserves it for one command, `env_keep` in sudoers makes that permanent for chosen variables. The proxy-set-but-sudo-apt-still-fails ticket is exactly this.
+
+### 5.11 System health and storage
+
+**CPU and load:**
+
+- `uptime` — the three load averages (1/5/15 min). They only mean something relative to core count (`nproc`): load 4 on a 4-core box is full, on a 16-core box it's idle. 15-min higher than 1-min = recovering; the reverse = getting worse.
+- `top` / `htop` — live per-process view. In `top`, read the `%Cpu` line's split: high `us` = application work, high `sy` = kernel/syscall churn, and high `wa` = the CPU is *waiting on disk* — that one sends you to the I/O commands below, not to a faster CPU.
+- `ps aux --sort=-%cpu | head` — snapshot of the top CPU consumers; script-friendly where `top` isn't.
+- `mpstat -P ALL 2` (sysstat package) — per-core utilization; catches the single pinned core that a box-wide average hides (one core at 100% + fifteen idle averages to "6% busy").
+
+**Memory:**
+
+- `free -h` — the column that matters is **`available`**, not `free`. Linux deliberately fills idle RAM with disk cache (`buff/cache`) and returns it on demand — low `free` with high `available` is a healthy system, not a leak. The "Linux ate my RAM" ticket, closed.
+- `ps aux --sort=-%mem | head` — top memory consumers.
+- `vmstat 2` — the `si`/`so` columns (swap in/out) are the real pressure gauge: sustained nonzero swapping means genuinely out of memory, whatever `free` seems to say.
+
+**Filesystems and space:**
+
+- `df -h` — usage and free per mounted filesystem; `-T` adds the filesystem type, and `df -h /var` answers for one path. **`df -i`** shows inode usage — a "disk full" error while `df -h` shows free space means you ran out of inodes (millions of tiny files), not bytes.
+- `du -sh <dir>` — total size of one folder. The space-hunting form: `sudo du -h --max-depth=1 /var 2>/dev/null | sort -hr | head` — biggest subdirectories first; repeat one level down into the winner until you find the culprit. (`ncdu` does this interactively if it's installed.)
+- The du-vs-df mismatch: `df` says full, `du` can't find the space → a process holds a **deleted file open** (classic: a rotated log someone `rm`'d while the daemon kept writing). `sudo lsof +L1` lists them; restarting the owning service releases the space.
+
+**Block devices and mounts:**
+
+- `lsblk` — the device tree: disks, partitions, sizes, and where each is mounted. `-f` adds filesystem type, label, and UUID. An empty `MOUNTPOINTS` column *is* the "not mounted" check.
+- `blkid` — UUIDs and filesystem types; the source of the `UUID=` you put in fstab.
+- `findmnt` — every mount as a tree; `findmnt /mnt/usb` or `findmnt /dev/sdb1` checks one target and exits nonzero if not mounted (script-friendly). `mount | grep sdb` is the traditional equivalent.
+- `sudo dmesg | tail -20` — right after plugging in a USB disk, this names the device (`sd 6:0:0:0: [sdb] ...`); confirm with `lsblk`.
+
+**Mount a USB / external disk (the full sequence):**
+
+```bash
+sudo dmesg | tail -20            # 1. find the new device name, e.g. sdb
+lsblk -f                         # 2. confirm partition + filesystem, e.g. /dev/sdb1 (ntfs/vfat/ext4)
+sudo mkdir -p /mnt/usb           # 3. create a mount point (any empty directory)
+sudo mount /dev/sdb1 /mnt/usb    # 4. mount - add -t ntfs-3g / vfat / exfat if auto-detect fails
+findmnt /mnt/usb                 # 5. verify; df -h /mnt/usb shows its capacity
+```
+
+- Mount the **partition** (`sdb1`), not the disk (`sdb`) — mounting the bare disk is the most common first-time error.
+- Permanent mounting goes in `/etc/fstab`, keyed by `UUID=` (device names like `sdb` change between boots; UUIDs don't). Test with `sudo mount -a` **before** rebooting — a broken fstab line can hang boot — and give removable disks the `nofail` option so their absence doesn't.
+
+**Unmount:**
+
+- `sudo umount /mnt/usb` — note the spelling: `umount`, no "n". Run `sync` first if you're about to pull the disk.
+- `target is busy` — something still uses it: `fuser -vm /mnt/usb` or `lsof +f -- /mnt/usb` names the process (often just a shell whose `cwd` is inside the mount — `cd` out of it). `umount -l` (lazy) detaches now and cleans up when the last user exits — last resort, not routine.
+
+**Disk I/O utilization:**
+
+- `iostat -x 2` (sysstat) — per-device `%util` (how busy) and `await` (average I/O latency in ms). High `%util` with rising `await` is a saturated disk — this is the confirmation for the high-`wa` CPU signal above.
+- `sudo iotop` — the per-process view: *who* is doing the I/O.

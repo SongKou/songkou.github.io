@@ -386,3 +386,32 @@ Same split as network config: Ubuntu fronts the kernel firewall with **ufw**, th
 - `sudo iptables -L -n -v --line-numbers` — the legacy view with packet/byte counters (a rule whose counters never move isn't matching) and line numbers for deletion.
 - Raw edits: `sudo iptables -I INPUT 1 -p tcp --dport 22 -j ACCEPT` (insert at top), `-A` (append at bottom — order matters, first match wins), `-D INPUT <num>` (delete by number).
 - Persistence caveat: raw `iptables`/`nft` edits vanish at reboot unless saved — `iptables-save` + the `netfilter-persistent`/`iptables-services` package, or write `/etc/nftables.conf` and manage it via `sudo systemctl restart nftables`. If ufw or firewalld is in charge, make the change through *it* instead of racing it at the kernel layer.
+
+### 5.8 Shell and text-processing staples
+
+The commands that turn raw output into answers. Most of their value is in pipelines, so each entry ends with a realistic one-liner from network-ops life.
+
+- `grep` — filter lines by pattern. The flags that matter: `-i` case-insensitive, `-v` invert (everything *except*), `-E` extended regex, `-r` recurse a directory, `-c` count matches, `-o` print only the matched part, `-A/-B/-C <n>` show lines after/before/around a match — the context flags are what make log reading bearable.
+  `grep -B 2 -A 5 'ERROR' /var/log/salt/minion` — each error with its lead-up and aftermath.
+  `grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' file | sort -u` — extract every unique IPv4 address from anything.
+- `awk` — column processor. `$1..$n` are whitespace-split fields, `$NF` the last one, `-F` changes the delimiter, and it can do arithmetic across lines.
+  `ss -tn | awk '{print $5}'` — peer address column only.
+  `awk -F: '{print $1}' /etc/passwd` — usernames.
+  `awk '{sum+=$2} END {print sum}' file` — total a column.
+- `sed` — stream editor; 90% of its use is substitution. `sed 's/old/new/g'` per line, `-i` edits the file in place (`-i.bak` keeps a backup — cheap insurance), `sed -n '20,40p'` prints a line range, `sed '/^#/d'` deletes matches.
+  `sed -n '/interface Vxlan1/,/!/p' running-config` — print just one config stanza, the switch-config trick worth memorizing.
+  `grep -v '^#' file | grep -v '^$'` — the config file without comments and blank lines (pure grep alternative: works everywhere).
+- `sort` — `-n` numeric (without it, 10 sorts before 9), `-r` reverse, `-u` unique, `-k <n>` sort by field n, `-t` field delimiter, `-h` human sizes (2K < 1G).
+  `sort -t . -k1,1n -k2,2n -k3,3n -k4,4n` — sort IPv4 addresses correctly octet by octet.
+- `uniq` — collapse *adjacent* duplicates, which is why it's almost always `sort | uniq`. `-c` prefixes counts — the heart of the most useful pipeline in operations:
+  `awk '{print $1}' access.log | sort | uniq -c | sort -rn | head` — top talkers in any log, top-N of anything.
+- `tee` — split a pipe: pass output through *and* write it to a file. `-a` appends. The essential trick: `echo 'cfg line' | sudo tee -a /etc/some.conf` — the shell redirect `sudo echo >> file` fails because the *redirect* runs as you, not root; `tee` runs under sudo, so it works (this is exactly how the Salt repo key was installed in the guide).
+  `some_long_test | tee run1.log` — watch live and keep the evidence.
+- `head` / `tail` — first/last `-n <n>` lines. `tail -f` follows a growing file; `tail -F` survives log rotation — prefer it for daemon logs.
+- `wc -l` — count lines; the instant "how many" after any filter: `grep -c` when it's one pattern, `| wc -l` when it's a pipeline.
+- `cut` — simple column extraction when awk is overkill: `cut -d: -f1 /etc/passwd`. Falls apart on variable whitespace — that's awk's territory.
+- `tr` — character translate/delete: `tr 'A-Z' 'a-z'` lowercases, `tr -d '\r'` strips Windows line endings (the fix for `bad interpreter: /bin/bash^M`), `tr -s ' '` squeezes repeated spaces so `cut` can cope.
+- `xargs` — turn stdin into arguments: `grep -rl 'old-vlan' /srv/salt | xargs sed -i 's/old-vlan/new-vlan/g'` — edit every file that matched. `-n 1` one-per-invocation, `-P 4` parallel.
+- `find` — locate by predicate, then act: `find /var/log -name '*.log' -mtime -1` (modified in the last day), `-size +100M`, `-exec <cmd> {} \;` to run something on each hit.
+- `column -t` — align any whitespace output into readable columns; `watch -n 1 '<cmd>'` — rerun a command every second, full-screen: `watch -n 1 'ip -s link show eth0'` is a poor man's interface counter dashboard.
+- Pipeline glue worth remembering: `cmd1 && cmd2` (run 2 only on success), `cmd 2>&1 | grep ...` (include stderr in the pipe — without it, error messages sail past your grep), `$(cmd)` (substitute output), `!!` and `sudo !!` (repeat last command — the classic forgot-sudo recovery).

@@ -39,7 +39,9 @@ Source: [SaltStack Guide](/posts/salt-guide/).
   - `-L 'web01,db01'` — explicit list.
   - `-I 'role:webserver'` — pillar match.
   - `-C 'E@web.* and G@os:Ubuntu'` — compound; `E@`/`G@`/`P@`/`I@` prefixes select the matcher per clause.
-- `sudo salt-run manage.up` / `manage.down` — which minions answer the bus and which don't; faster than pinging when the fleet is large.
+- `sudo salt-key -L` (inventory role) — the authoritative list of every node Salt manages: all minions under `Accepted Keys`, whether currently online or not. A powered-off minion still appears here.
+- `sudo salt-run manage.status` — that inventory split into `up` and `down` in one output: which accepted minions answer the bus and which don't. Scope it with the usual targeting: `manage.status tgt='skou*'`.
+- `sudo salt-run manage.up` / `manage.down` — only the responsive / only the unresponsive minions; faster than `test.ping` on a big fleet because they don't wait out the timeout for dead nodes.
 - `sudo salt-run jobs.active` — currently running jobs; where to look when a command seems hung.
 
 ### 1.4 States and the top file

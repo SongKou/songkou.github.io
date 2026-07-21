@@ -1775,8 +1775,12 @@ To move to a new major LTS, edit the pin file to the new series (e.g. `Pin: vers
 ## 13. Quick reference card
 
 ```
-salt-key -L / -a / -A / -d        # manage minion trust
-salt '<target>' test.ping         # connectivity
+salt-key -L / -a / -A / -d        # manage minion trust; -L alone = full inventory
+                                  # (every Accepted key = a managed node, online or not)
+salt-run manage.status            # that inventory split into up / down in one output
+salt-run manage.up                # only responsive minions
+salt-run manage.down              # only unresponsive minions
+salt '<target>' test.ping         # connectivity (message-bus ping, not ICMP)
 salt '<target>' cmd.run '<cmd>'   # ad-hoc shell
 salt '<target>' grains.items      # facts about a host
 salt '<target>' pkg.install <p>   # install a package
@@ -1784,7 +1788,6 @@ salt '<target>' state.apply <s>   # apply a state
 salt '<target>' state.apply test=True   # dry run
 salt '<target>' state.highstate   # apply everything from top.sls
 salt-call --local <fn>            # masterless / local run
-salt-run manage.up                # who's alive
 ```
 
 ---

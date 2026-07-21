@@ -6,7 +6,7 @@ categories = ['Network']
 tags = ['Cheat Sheet', 'SaltStack', 'Arista', 'VXLAN', 'EVPN', 'RDMA', 'Cumulus', 'Cisco Nexus', 'Network']
 +++
 
-Every verification and troubleshooting command from the lab posts on this blog, collected in one place and organized **by vendor** — because that's how you reach for a cheat sheet: you're on a box, and you need to know what to run. Each subsection links back to the post it came from and explains what each command shows and what a healthy result looks like — a command you can't interpret is just noise.
+Every verification and troubleshooting command from the lab posts on this blog — plus a few general-purpose Linux staples — collected in one place and organized **by vendor**, because that's how you reach for a cheat sheet: you're on a box, and you need to know what to run. Each subsection links back to the post it came from where one exists, and explains what each command shows and what a healthy result looks like — a command you can't interpret is just noise.
 
 ## 1. SaltStack
 
@@ -226,3 +226,25 @@ Source: host sections of the [VXLAN EVPN Cumulus Lab](/posts/vxlan-evpn-cumulus-
 - `ip neigh show <gw>` — the gateway's resolved MAC; against an anycast gateway it must be the fabric-wide virtual MAC, identical on every leaf.
 - `ping -M do -s 1472 -c 3 <ip>` — path-MTU probe with DF set: 1472 + 28 = a 1500-byte packet that must survive VXLAN's ~50-byte overhead on a 9216-MTU fabric.
 - `iperf3 -s` / `iperf3 -c <ip> -P 4 -t 30` — sustained multi-stream throughput across the overlay; parallel streams also exercise ECMP hashing.
+
+### 5.3 DNS lookups (dig)
+
+Reading any `dig` output, three lines matter beyond the answer itself: the **ANSWER SECTION** (records, with the second column being the TTL — seconds the record may stay cached; watch it count down across repeated queries to confirm you're hitting a cache), the **SERVER** line at the bottom (which resolver *actually* answered — the fastest way to catch a query going to a different resolver than you assumed), and **status** in the header (`NOERROR` vs `NXDOMAIN` = name doesn't exist vs `SERVFAIL` = resolution broke upstream).
+
+- `dig <name>` — query through the system resolver. Multiple A records in the answer (google.com returns six) is normal load distribution, not an error.
+- `dig @8.8.8.8 <name>` — query a *specific* DNS server, bypassing the local resolver. Comparing this against the plain query is the standard test for a stale cache, split-horizon DNS, or a hijacking middlebox: same name, different answers, and the SERVER lines tell you who said what.
+- `dig <name> ANY` — ask for all record types at once (A, AAAA, NS, MX...). Useful overview, but many public resolvers now answer ANY with a minimal or refused response (RFC 8482) — query the specific type (`dig <name> AAAA`, `dig <name> NS`) when ANY comes back thin.
+- `dig <name> +noall +answer` — suppress everything except the answer section; the script- and screenshot-friendly form. `dig <name> +short` goes further and prints only the values.
+- `dig <name> +trace` — resolve iteratively from the root servers down, printing each delegation step. This shows where in the chain resolution breaks — root, TLD, or the domain's own nameservers — instead of just telling you it failed.
+- `dig -x <ip>` — reverse (PTR) lookup: who does this IP claim to be? The query is really for `<reversed-ip>.in-addr.arpa`, which is why the answer can differ from — or not exist despite — the forward record.
+- A `CNAME` in the answer (e.g. `www.facebook.com → star-mini.c10r.facebook.com`) means the name is an alias; resolution continues at the target, and the final A/AAAA records belong to the target, not the alias.
+
+### 5.4 Listening ports and sockets
+
+Who is listening on what, answered from four angles — socket table, process table, single port, and from the outside:
+
+- `sudo ss -tulpn` — the modern one-liner: `-t` TCP, `-u` UDP, `-l` listening, `-p` owning process, `-n` numeric (no DNS/service-name lookups). Add `-w` for raw sockets. Two reading notes: the **Local Address** column tells you the reachability scope — `127.0.0.1:port` is loopback-only (invisible from outside no matter what the firewall says), `0.0.0.0`/`*` is all IPv4 interfaces, `[::]` all IPv6; and don't pipe this through `grep LISTEN` when `-u` is included — UDP is connectionless, its sockets show `UNCONN`, so the grep silently deletes every UDP line.
+- `sudo netstat -tulpn` — the legacy equivalent (net-tools package); same flags, same output shape, on boxes without `ss`. On **macOS**, netstat takes different flags: `netstat -anp tcp` / `netstat -anp udp` (there `-p` selects the protocol, not the process).
+- `sudo lsof -i -P -n | grep LISTEN` — the process-first view: every process with network sockets. `-P`/`-n` keep ports and addresses numeric.
+- `sudo lsof -i:22` — everything touching one specific port, both the listener and current connections; the quickest "what exactly is on this port?" answer.
+- `sudo nmap -sTU -O <ip>` — the outside view from another host: scan TCP (`-sT`) and UDP (`-sU`) and fingerprint the OS (`-O`). This is the ground truth for what's *reachable* — a service can listen locally yet be filtered by a firewall in between, and only an external scan shows that difference. Scan only hosts you're authorized to test.

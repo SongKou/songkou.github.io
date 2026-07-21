@@ -251,7 +251,23 @@ Who is listening on what, answered from four angles — socket table, process ta
 
 ### 5.5 Changing an IP address permanently (per distro)
 
-First, the distinction that causes most "it broke after reboot" tickets: `ip address add 10.10.80.91/24 dev ens33` and `ip route add default via 10.10.80.1` change the **running** state only — perfect for testing, gone at reboot. Permanent means editing the distro's network configuration and letting its network stack apply it. Which file and which restart command depend on the distro *and generation*:
+First, the distinction that causes most "it broke after reboot" tickets: `ip address add 10.10.80.91/24 dev ens33` and `ip route add default via 10.10.80.1` change the **running** state only — perfect for testing, gone at reboot. Permanent means editing the distro's network configuration and letting its network stack apply it. Which file and which restart command depend on the distro *and generation*.
+
+**List all interfaces (any distro):**
+
+- `ip -br link` — every interface, one line each: name, admin/oper state, MAC. The fastest inventory.
+- `ip -br address` — the same list with IP addresses; the two `-br` commands together answer "what interfaces exist and what do they carry".
+- `ip link show <if>` / `ip -s link show <if>` — full detail for one interface; `-s` adds RX/TX counters and error/drop columns (climbing errors = physical-layer problem).
+- Reading the state flags: `UP` = admin-enabled with link; `DOWN` = administratively disabled; `UP` combined with `NO-CARRIER` = enabled but no link — cable, peer port, or (in EVE-NG) the connector. Admin state and carrier are independent, exactly like a switch port's `shutdown` vs line-protocol.
+
+**Shut / unshut an interface (the `shutdown` / `no shutdown` equivalent):**
+
+- `sudo ip link set <if> down` / `sudo ip link set <if> up` — runtime admin down/up, any distro. This is what the failover tests in the lab posts use (`ip link set eth0 down` to break one bond member). Runtime only: state reverts to the config at reboot — and note that `down` on an ifupdown/netplan interface does not remove its addresses from the config, just stops the interface.
+- ifupdown distros (Debian/Alpine): `sudo ifdown <if>` / `sudo ifup <if>` — these also deconfigure/reconfigure the addresses from `/etc/network/interfaces`, so they double as a per-interface config reapply.
+- NetworkManager distros (RHEL 8/9): `sudo nmcli device disconnect <if>` / `connect <if>` — keeps NM's view consistent; a plain `ip link set down` can be silently re-upped by NM, which is why "the interface won't stay down" happens on those boxes.
+- Permanent down: ifupdown — remove the `auto <if>` line; netplan — set the interface `optional: true` and remove its addresses, or `activation-mode: off` on newer releases; NetworkManager — `nmcli connection modify <profile> connection.autoconnect no`.
+
+The permanent-IP configuration itself:
 
 **Ubuntu 18.04+ — netplan.** Config lives in `/etc/netplan/*.yaml` (names vary: `00-installer-config.yaml`, `50-cloud-init.yaml`):
 

@@ -13,7 +13,16 @@ priority-flow-control on
 priority-flow-control priority 3 no-drop
 ```
 
-![PFC configuration size compared: Cisco NX-OS needs several MQC layers, while basic Arista EOS PFC needs two interface commands](/posts/arista-eos-roce-config/config-comparison.svg)
+> **Note:** these commands cannot be executed in an EVE-NG lab. PFC is a hardware feature — the pause frames are generated and honored by the switching ASIC — and the virtual vEOS-lab image has no such hardware, so EOS rejects the configuration outright. Real output from a vEOS-lab node:
+>
+> ```text
+> Leaf1(config-if-Et1)#priority-flow-control on
+> % The hardware does not support priority flow control, or forwarding agent is still initializing.
+> Leaf1(config-if-Et1)#priority-flow-control priority 3 no-drop
+> % The hardware does not support priority flow control, or forwarding agent is still initializing
+> ```
+>
+> Everything in this guide therefore needs physical Arista switches to practice on; the same class of limitation applies to ECN marking, buffer thresholds, and the PFC watchdog. This mirrors the vEOS-lab VXLAN multicast limitation documented in the [Arista VXLAN EVPN lab post](/posts/arista-vxlan-bum-her-vs-multicast/): control-plane features virtualize, data-plane features often do not.
 
 Those two commands are only the PFC portion of a complete RoCEv2 design. A deployable configuration must also define classification, queue scheduling, ECN, watchdog behavior, buffer thresholds, and the policy on every possible congestion point.
 

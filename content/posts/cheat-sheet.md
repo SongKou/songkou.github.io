@@ -160,6 +160,28 @@ Source: [VXLAN EVPN Cumulus Lab](/posts/vxlan-evpn-cumulus-5.4-lab-guide/), plus
 - `nv config show > backup.txt` — full config export; do it before any change.
 - `stty cols 200` before wide `nv show` outputs — NVUE truncates columns with "…" on narrow consoles (an EVE-NG HTML5 console artifact, not an error).
 
+The full set → diff → apply → save cycle in one real capture — adding a management IP to `eth0` (which lives in the `mgmt` VRF):
+
+```text
+cumulus@leaf1:mgmt:~$ sudo nv set interface eth0 ip address 192.168.0.21/24
+cumulus@leaf1:mgmt:~$ sudo nv set interface eth0 ip gateway 192.168.0.1
+cumulus@leaf1:mgmt:~$ sudo nv config diff
+- set:
+    interface:
+      eth0:
+        ip:
+          address:
+            192.168.0.21/24: {}
+          gateway:
+            192.168.0.1: {}
+cumulus@leaf1:mgmt:~$ sudo nv config apply
+applied [rev_id: 8]
+cumulus@leaf1:mgmt:~$ sudo nv config save
+saved [rev_id: applied]
+```
+
+How to read it: `nv set` only **stages** — nothing changes until apply. `nv config diff` shows the staged changes as a set-tree (exactly what will be added). `apply` activates them and stamps a revision ID (`rev_id: 8` — NVUE keeps a revision history, which is what `nv config history` and rollbacks work from), and `save` copies the applied revision to startup so it survives a reboot. Apply without save = running-config only, the classic "it reverted after reload".
+
 ### 4.2 MLAG
 
 - `nv show mlag` — the paired view of applied vs operational values. Key reads: `peer-alive True`; `anycast-ip` appearing only in the *operational* column (clagd activates the shared VTEP address only after the VXLAN consistency check passes — the moment it also lands on `lo` and enters BGP via `redistribute connected`); `backup-active True` for the underlay keepalive.
@@ -187,6 +209,119 @@ Source: [VXLAN EVPN Cumulus Lab](/posts/vxlan-evpn-cumulus-5.4-lab-guide/), plus
 - `sudo vtysh -c 'show ip pim neighbor'` / `'show ip pim rp-info'` — adjacencies and RP mapping.
 - `sudo vtysh -c 'show ip msdp peer'` / `'show ip msdp sa'` — the Anycast-RP mesh state and active sources (Cumulus requires a full MSDP mesh between RPs).
 - `sudo vtysh -c 'show ip mroute'` — verify both `(*,G)` and `(S,G)`, their RPF incoming interface, and the outgoing lists; then capture on a fabric link and confirm outer destination = the configured group, UDP 4789, expected VNI.
+
+### 4.6 Enable the NVUE REST API (port 8765)
+
+NVUE's third interface after the CLI and config files: the same object tree over HTTPS, served by nginx on port 8765. On Cumulus 5.4 the nginx site config ships present but **not enabled** — enabling it is a two-file operation:
+
+```bash
+# 1. Enable the shipped nginx site (this symlink is the on/off switch):
+sudo ln -sf /etc/nginx/sites-available/nvue.conf /etc/nginx/sites-enabled/nvue.conf
+
+# 2. (Optional, lab convenience) listen on all addresses instead of localhost only:
+sudo sed -i \
+  's/listen localhost:8765 ssl;/listen [::]:8765 ipv6only=off ssl;/g' \
+  /etc/nginx/sites-available/nvue.conf
+
+# 3. Validate, enable, restart, confirm the listener:
+sudo nginx -t
+sudo systemctl enable --now nginx
+sudo systemctl restart nginx
+sudo ss -lntp | grep 8765
+
+# 4. Test with any Linux user's credentials:
+curl -k --user 'cumulus:P@ssw0rd123' https://127.0.0.1:8765/nvue_v1/system
+```
+
+Step 2 widens exposure from localhost to every address on the box (`ipv6only=off` makes the `[::]` socket accept IPv4 too — that's why `ss` later shows `*:8765`). Fine in a lab; in production leave it on localhost or scope it to the management network, because those are real system credentials in every request.
+
+**If 8765 is not listening**, walk the chain: `sudo systemctl status nginx --no-pager -l` → `sudo journalctl -u nginx -n 100` → `sudo nginx -T | grep -B5 -A10 8765` (is the nvue site actually loaded?) → `ls -l /etc/nginx/sites-enabled/` (is the symlink there at all?) → `dpkg -l | grep nginx` (is nginx even installed — if not, `sudo apt install nginx`, and behind a management VRF: `sudo ip vrf exec mgmt apt update && sudo ip vrf exec mgmt apt install nginx`).
+
+The real session from this lab — kept with its initial failure, because the diagnosis is the useful part:
+
+```text
+cumulus@leaf1:mgmt:~$ curl --insecure --user 'cumulus:P@ssw0rd123' https://127.0.0.1:8765/nvue_v1/system
+curl: (7) Failed to connect to 127.0.0.1 port 8765: Connection refused
+cumulus@leaf1:mgmt:~$ ls -l /etc/nginx/sites-available/nvue.conf
+-rw-r--r-- 1 root root 816 Feb  4  2023 /etc/nginx/sites-available/nvue.conf
+cumulus@leaf1:mgmt:~$ ls -l /etc/nginx/sites-enabled/
+total 0
+lrwxrwxrwx 1 root root 34 Feb  8  2023 default -> /etc/nginx/sites-available/default
+```
+
+Connection refused, and there is the root cause in one `ls`: `sites-available` has the NVUE config, but `sites-enabled` only contains `default` — the site was never enabled. Fix, adjust the listener, and verify each step:
+
+```text
+cumulus@leaf1:mgmt:~$ sudo ln -s /etc/nginx/sites-available/nvue.conf /etc/nginx/sites-enabled/nvue.conf
+cumulus@leaf1:mgmt:~$ sudo grep -n listen /etc/nginx/sites-available/nvue.conf
+8:  listen localhost:8765 ssl;
+cumulus@leaf1:mgmt:~$ sudo sed -i 's/listen localhost:8765 ssl;/listen [::]:8765 ipv6only=off ssl;/g' /etc/nginx/sites-available/nvue.conf
+cumulus@leaf1:mgmt:~$ sudo grep -n listen /etc/nginx/sites-available/nvue.conf
+8:  listen [::]:8765 ipv6only=off ssl;
+cumulus@leaf1:mgmt:~$ sudo nginx -t
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+cumulus@leaf1:mgmt:~$ sudo systemctl restart nginx
+cumulus@leaf1:mgmt:~$ sudo ss -lntp | grep 8765
+LISTEN  0  511  *:8765  *:*  users:(("nginx",pid=19152,fd=9),("nginx",pid=19151,fd=9),("nginx",pid=19150,fd=9))
+cumulus@leaf1:mgmt:~$ curl -k --user 'cumulus:P@ssw0rd123' https://127.0.0.1:8765/nvue_v1/system
+{
+  "build": "Cumulus Linux 5.4.0",
+  "hostname": "leaf1",
+  "timezone": "Etc/UTC",
+  "uptime": 8451
+}
+```
+
+Useful endpoints once it's up — `/nvue_v1/system` for identity, `/nvue_v1/interface` for the entire interface tree as JSON (the API equivalent of `nv show interface`, one object per interface with addresses, MAC, MTU, state, and counters). An excerpt of the real response, trimmed to three representative interfaces of the ~25 returned:
+
+```text
+cumulus@leaf1:mgmt:~$ curl -k --user 'cumulus:P@ssw0rd123' https://127.0.0.1:8765/nvue_v1/interface
+{
+  ...
+  "eth0": {
+    "ifindex": 2,
+    "ip": {
+      "address": {
+        "10.10.80.21/24": {},
+        "192.168.0.21/24": {},
+        "fddd:4442:115d:4c86:5200:ff:fe01:0/64": {}
+      }
+    },
+    "link": {
+      "duplex": "full", "mac": "50:00:00:01:00:00", "mtu": 1500,
+      "speed": "1G", "state": { "up": {} },
+      "stats": { "in-bytes": 580150, "in-pkts": 8012, "out-bytes": 100515, ... }
+    },
+    "type": "eth"
+  },
+  ...
+  "vlan100-v0": {
+    "ip": { "address": { "192.168.100.1/24": {} } },
+    "link": { "mac": "00:00:5e:00:01:01", "mtu": 9216, "state": { "up": {} }, ... },
+    "type": "svi"
+  },
+  ...
+  "vxlan48": {
+    "bridge": { "domain": { "br_default": { "learning": "off" } } },
+    "link": { "mtu": 9216, "state": { "up": {} }, ... },
+    "type": "vxlan"
+  },
+  ...
+}
+```
+
+Worth noticing in there: `eth0` carries the `192.168.0.21/24` added in the 4.1 capture; `vlan100-v0` is the VRR anycast-gateway sub-interface with the fabric MAC `00:00:5e:00:01:01`; and `vxlan48` is the single VXLAN device with MAC learning off, exactly as EVPN configured it. And the closing proof that the `[::]` listener change worked — the same query answered remotely on the management address:
+
+```text
+cumulus@leaf1:mgmt:~$ curl -k --user 'cumulus:P@ssw0rd123' https://192.168.0.21:8765/nvue_v1/system
+{
+  "build": "Cumulus Linux 5.4.0",
+  "hostname": "leaf1",
+  "timezone": "Etc/UTC",
+  "uptime": 8525
+}
+```
 
 ## 5. Linux hosts
 

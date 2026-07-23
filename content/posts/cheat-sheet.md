@@ -651,3 +651,31 @@ findmnt /mnt/usb                 # 5. verify; df -h /mnt/usb shows its capacity
 
 - `iostat -x 2` (sysstat) — per-device `%util` (how busy) and `await` (average I/O latency in ms). High `%util` with rising `await` is a saturated disk — this is the confirmation for the high-`wa` CPU signal above.
 - `sudo iotop` — the per-process view: *who* is doing the I/O.
+
+### 5.12 Disable console messages (kernel log spam on the terminal)
+
+The kernel prints its log messages straight onto the console — on a serial console or lab VM (interface flaps, USB events, firewall logging) they type right over whatever you're doing. The messages still land in `dmesg` and the journal; these commands only stop them from being *painted on your screen*.
+
+**Immediately, for this boot:**
+
+```bash
+sudo dmesg -D                    # disable console printing entirely; -E re-enables
+sudo dmesg -n 3                  # or keep only serious ones: console loglevel = 3 (err and worse)
+```
+
+- The loglevel scale runs 0 (emerg) to 7 (debug); the console shows everything *more severe than* the level you set. `-n 1` is the near-silent extreme (emerg only), `-n 3` is the sane default for labs. Many distros ship with 7 — that's why you see everything.
+- `sysctl -w kernel.printk="3 4 1 3"` is the same knob spelled differently — the **first** number is the console loglevel (the other three: default message level, minimum, and boot-time default). `cat /proc/sys/kernel/printk` shows the current four.
+
+**Permanent (survives reboot):**
+
+```bash
+echo 'kernel.printk = 3 4 1 3' | sudo tee /etc/sysctl.d/20-quiet-console.conf
+sudo sysctl --system             # apply now; the file applies on every boot
+```
+
+- For messages printed *before* sysctl runs (early boot), add `quiet loglevel=3` to `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, then `sudo update-grub` (Debian/Ubuntu) or `sudo grub2-mkconfig -o /boot/grub2/grub.cfg` (RHEL).
+
+**Not the kernel? Two other console writers:**
+
+- `mesg n` — blocks `write`/`wall` messages from other users on your tty (`mesg y` re-enables).
+- systemd can be configured to forward the journal to the console: if the spam includes service logs, check `ForwardToConsole=` in `/etc/systemd/journald.conf` and set it to `no` (then `sudo systemctl restart systemd-journald`).

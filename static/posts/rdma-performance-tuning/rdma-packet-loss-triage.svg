@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="980" viewBox="0 0 1280 980" font-family="Inter,Segoe UI,Arial,sans-serif">
+  <rect width="1280" height="980" fill="#07111f"/>
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="9" refY="4" orient="auto"><path d="M0,0 L0,8 L10,4 z" fill="#49627e"/></marker>
+    <filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/></filter>
+  </defs>
+
+  <text x="64" y="64" font-size="34" font-weight="750" fill="#e5eef9">RDMA Packet-Loss Triage</text>
+  <text x="64" y="98" font-size="18" font-weight="450" fill="#9fb0c5">Ordered by how often each cause turns out to be the culprit &#8212; start at the top</text>
+
+  <!-- common → rare guide -->
+  <text x="240" y="196" text-anchor="end" font-size="14" font-weight="600" fill="#9fb0c5">common</text>
+  <line x1="220" y1="216" x2="220" y2="726" stroke="#49627e" stroke-width="2" stroke-dasharray="2 8" stroke-linecap="round"/>
+  <text x="240" y="762" text-anchor="end" font-size="14" font-weight="600" fill="#9fb0c5">rare</text>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="140" width="680" height="96" rx="12" fill="#152944" stroke="#38bdf8" stroke-width="2"/>
+    <circle cx="344" cy="188" r="17" fill="#38bdf8"/>
+    <text x="344" y="193" text-anchor="middle" font-size="14" font-weight="750" fill="#07111f">1</text>
+    <text x="376" y="182" font-size="20" font-weight="650" fill="#e5eef9">Cables &amp; optics</text>
+    <text x="376" y="210" font-size="14" font-weight="450" fill="#9fb0c5">temperature &#183; cable spec &#183; CRC</text>
+    <text x="944" y="194" text-anchor="end" font-size="15" font-weight="650" fill="#38bdf8">~20% &#183; 3 min</text>
+  </g>
+  <line x1="640" y1="240" x2="640" y2="270" stroke="#49627e" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="282" width="680" height="96" rx="12" fill="#152944" stroke="#34d399" stroke-width="2"/>
+    <circle cx="344" cy="330" r="17" fill="#34d399"/>
+    <text x="344" y="335" text-anchor="middle" font-size="14" font-weight="750" fill="#07111f">2</text>
+    <text x="376" y="324" font-size="20" font-weight="650" fill="#e5eef9">MTU aligned end to end</text>
+    <text x="376" y="352" font-size="14" font-weight="450" fill="#9fb0c5">ping -M do -s 8972 &#183; segment by segment</text>
+    <text x="944" y="336" text-anchor="end" font-size="15" font-weight="650" fill="#34d399">~30% &#183; 5 min</text>
+  </g>
+  <line x1="640" y1="382" x2="640" y2="412" stroke="#49627e" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="424" width="680" height="96" rx="12" fill="#152944" stroke="#a78bfa" stroke-width="2"/>
+    <circle cx="344" cy="472" r="17" fill="#a78bfa"/>
+    <text x="344" y="477" text-anchor="middle" font-size="14" font-weight="750" fill="#07111f">3</text>
+    <text x="376" y="466" font-size="20" font-weight="650" fill="#e5eef9">PFC configuration consistency</text>
+    <text x="376" y="494" font-size="14" font-weight="450" fill="#9fb0c5">rx and tx enabled &#8212; on both sides</text>
+    <text x="944" y="478" text-anchor="end" font-size="15" font-weight="650" fill="#a78bfa">~20% &#183; 5 min</text>
+  </g>
+  <line x1="640" y1="524" x2="640" y2="554" stroke="#49627e" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="566" width="680" height="96" rx="12" fill="#152944" stroke="#fbbf24" stroke-width="2"/>
+    <circle cx="344" cy="614" r="17" fill="#fbbf24"/>
+    <text x="344" y="619" text-anchor="middle" font-size="14" font-weight="750" fill="#07111f">4</text>
+    <text x="376" y="608" font-size="20" font-weight="650" fill="#e5eef9">PFC storm hunt</text>
+    <text x="376" y="636" font-size="14" font-weight="450" fill="#9fb0c5">incast &#183; TCP on the same port &#183; ECN too high</text>
+    <text x="944" y="620" text-anchor="end" font-size="15" font-weight="650" fill="#fbbf24">~20% &#183; 10 min</text>
+  </g>
+  <line x1="640" y1="666" x2="640" y2="696" stroke="#49627e" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="300" y="708" width="680" height="96" rx="12" fill="#152944" stroke="#f87171" stroke-width="2"/>
+    <circle cx="344" cy="756" r="17" fill="#f87171"/>
+    <text x="344" y="761" text-anchor="middle" font-size="14" font-weight="750" fill="#07111f">5</text>
+    <text x="376" y="750" font-size="20" font-weight="650" fill="#e5eef9">ethtool counter deep-read</text>
+    <text x="376" y="778" font-size="14" font-weight="450" fill="#9fb0c5">rx_steer_missed &#183; pause counters</text>
+    <text x="944" y="762" text-anchor="end" font-size="15" font-weight="650" fill="#f87171">~10% &#183; 15 min</text>
+  </g>
+  <line x1="640" y1="808" x2="640" y2="832" stroke="#49627e" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow)"/>
+
+  <rect x="430" y="840" width="420" height="54" rx="27" fill="#0f2b22" stroke="#34d399" stroke-width="2.5"/>
+  <text x="640" y="874" text-anchor="middle" font-size="19" font-weight="650" fill="#34d399">First three steps solve ~70% of cases</text>
+
+  <text x="1216" y="950" text-anchor="end" font-size="15" font-weight="500" fill="#9fb0c5">RDMA Performance Tuning</text>
+</svg>

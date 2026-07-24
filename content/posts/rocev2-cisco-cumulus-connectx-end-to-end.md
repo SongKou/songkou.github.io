@@ -69,6 +69,56 @@ The intended congestion-control sequence is:
 
 ECN and DCQCN provide end-to-end rate control. PFC is the hop-by-hop safety net. A healthy fabric can show ECN marks during congestion while PFC pause counters remain low.
 
+### 1.4 DCBX: negotiating the contract instead of typing it twice
+
+DCBX (Data Center Bridging Exchange) is the protocol directly connected Ethernet devices use to exchange and negotiate Data Center Bridging (DCB) settings. It runs as an extension of LLDP between neighbors:
+
+```text
+Server NIC  <-- LLDP/DCBX -->  Ethernet switch
+```
+
+DCBX can advertise and coordinate:
+
+- **PFC** — which Ethernet priorities receive lossless, per-priority pause behavior.
+- **ETS** (Enhanced Transmission Selection) — how bandwidth is allocated among traffic classes.
+- **Application Priority** — which priority an application should use, for example RoCEv2 traffic.
+- **Configuration willingness** — whether a device accepts its neighbor's advertised configuration (the "willing" bit).
+
+In this document's traffic contract, the arrangement DCBX would advertise is:
+
+```text
+RoCE traffic -> DSCP 24 -> priority 3 -> PFC enabled
+```
+
+DCBX lets the switch tell a compatible NIC that RoCE should ride on priority 3 and that PFC is active for that priority.
+
+> **DSCP 24 or DSCP 26?** Vendor documentation frequently shows this example with DSCP 26 (NVIDIA's docs in particular). Both values land in the same place: under the conventional `priority = DSCP >> 3` mapping, the whole DSCP 24–31 block classifies to priority 3. This guide uses DSCP 24 end to end (see section 1.1); if your environment standardizes on 26, that is equally valid — just change every hop consistently, as with any other value in the contract.
+
+**Why it matters.** If the NIC and the switch disagree about priority or PFC settings, the intended lossless traffic may enter the wrong queue, experience packet loss, trigger pause on an unintended priority, or contribute to congestion spreading and deadlock. DCBX keeps the two sides consistent — but it does not carry application traffic and does not itself make Ethernet lossless. It only exchanges DCB configuration.
+
+**Main variants:**
+
+- **IEEE DCBX** — standardized through IEEE 802.1Qaz; what modern equipment uses.
+- **CEE DCBX** — the older pre-standard (Converged Enhanced Ethernet) variant.
+- **Vendor-specific implementations** — may add proprietary behavior or commands.
+
+Both neighbors must run compatible DCBX versions and modes, or negotiation silently fails and each side keeps its local settings.
+
+**DCBX versus LLDP:**
+
+| | LLDP | DCBX |
+|---|---|---|
+| Role | Discovers neighboring devices | Exchanges DCB settings |
+| Advertises | Identity, port, capabilities | PFC, ETS, application priorities |
+| Scope | General-purpose | Data-center / lossless-network focused |
+
+DCBX is therefore best understood as **DCB configuration negotiation carried inside LLDP messages**.
+
+Two practical notes for this guide:
+
+- The templates below configure both ends **explicitly** and use `priority-flow-control mode on` on the switch (section 2.5) rather than `auto`, which would depend on DCBX negotiation. Static configuration on both ends is deterministic; if you rely on DCBX instead, verify what was actually negotiated, not just what was configured. On ConnectX hosts configured manually (section 4.3), make sure a running `lldpad` or firmware DCBX in willing mode is not silently overriding your settings.
+- In a virtual lab (SONiC-VS, vEOS-lab and similar), you can inspect LLDP/DCBX configuration and control-plane state, but a virtual switch has no ASIC — it cannot validate real buffering, PFC pause behavior, or RoCE performance.
+
 ## 2. Cisco Nexus 9000 NX-OS template
 
 The following configuration uses the eight-queue system classes from the source design. It is representative of Nexus 9300/9500 platforms on NX-OS 9.3 or later that support these MQC objects; it is not a universal paste-and-run template. Before applying it, inspect the active queue model and the system-defined class names:

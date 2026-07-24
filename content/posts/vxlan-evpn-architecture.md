@@ -220,6 +220,27 @@ This is a structural example, not a universal template. Whether sessions use dir
 
 BGP unnumbered typically uses IPv6 link-local next hops on point-to-point fabric links while advertising IPv4 NLRI. This removes most per-link IPv4 addressing and lets automation derive neighbors from cabling. The current standards reference is [RFC 8950](https://www.rfc-editor.org/rfc/rfc8950.html), which obsoletes RFC 5549. Platform support, interface discovery, extended-next-hop capability negotiation, and troubleshooting tooling must all be validated before adoption.
 
+Three mechanisms combine to make the address-free fabric link work:
+
+1. **IPv6 link-local addresses come for free.** Every interface with IPv6 enabled derives an `fe80::` address from its MAC automatically — that is the address BGP actually peers over, and it needs no planning or IPAM entry.
+2. **Neighbor discovery replaces neighbor configuration.** The neighbor statement names an *interface*, not a peer IP (FRR: `neighbor swp1 remote-as external`). The router learns the peer's link-local address and MAC from its IPv6 router advertisements and opens the session to `fe80::…%<interface>`; `remote-as external` accepts any AS but its own, so every fabric port on every switch can carry an identical configuration line.
+3. **IPv4 routes ride the IPv6 session.** RFC 8950 extended next-hop encoding lets IPv4 prefixes — the VTEP loopbacks — carry an IPv6 next hop. The route is installed against the interface with an onlink next hop resolved to the peer's MAC.
+
+The scope limit: unnumbered is a *fabric-link* pattern, not a fabric-wide one. VTEP loopbacks, host-facing SVIs, and anything reachable beyond one link still need real addresses — which is fine, because loopbacks are all a VXLAN underlay actually has to route.
+
+Platform support is broad enough today that unnumbered no longer restricts vendor choice, though maturity differs:
+
+| Platform | Support | Notes |
+|---|---|---|
+| Cumulus Linux | Native (FRR) | The reference implementation |
+| SONiC | Native (same FRR) | Identical syntax; plan config ownership (config_db vs split mode vs unified FRR management) so `config reload` does not overwrite it |
+| Arista EOS | Yes | Interface eBGP sessions; requires `ipv6 enable` on fabric links and RFC 8950 next-hop encoding in the IPv4 address family |
+| Cisco NX-OS | Yes, recent | RFC 5549 next hops since 9.2(2); full interface peering with link-local auto-discovery only in the 10.x train — the reason classic Nexus designs show numbered /31s or `ip unnumbered loopback0` instead |
+
+Mixed-vendor unnumbered fabrics interoperate, since discovery (ND/RA) and the extended next-hop capability (negotiated in the BGP OPEN) are standards. The characteristic mixed-setup failure is one side missing `ipv6 enable` or not negotiating extended next-hop: the session either never establishes or comes up and installs no IPv4 routes.
+
+For a working end-to-end example with real `show bgp summary` output — neighbors displayed as `hostname(interface)` because there is no peer address — see [section 3.1 of the Cumulus VXLAN EVPN lab guide](/posts/vxlan-evpn-cumulus-5.4-lab-guide/#31-bgp-unnumbered-how-it-works-and-who-supports-it).
+
 #### Practical selection guidance
 
 For an enterprise fabric where operational familiarity, vendor reference designs, and minimal overlay policy matter most, an IGP underlay with iBGP EVPN is often the lower-friction choice. It is particularly attractive when one team already operates OSPF or IS-IS well and the fabric fits comfortably within the vendor's validated scale.

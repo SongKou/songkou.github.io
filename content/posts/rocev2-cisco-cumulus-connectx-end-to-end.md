@@ -16,6 +16,8 @@ This guide turns that contract into two switch implementations and one host impl
 
 The examples use **DSCP 24 for RoCE data**, **DSCP 48 for CNP**, and **PFC priority 3**. Those values are a design choice, not a protocol requirement. If your environment uses DSCP 26, a different PFC priority, or a vendor profile, change the entire path consistently.
 
+If the terminology in this guide is unfamiliar (DSCP vs ToS vs CS vs PCP/CoS, WRED semantics, decoded PFC and CNP frames), the companion post [RoCE QoS Concepts and Packet Examples](/posts/roce-qos-concepts-and-packet-examples/) covers the concepts this guide builds on.
+
 > **Change-control warning:** QoS and buffer-policy changes can be disruptive. Save the running configuration, confirm the exact ASIC and queue model, and test on a maintenance or lab fabric before production rollout. Cisco system class names and supported commands vary by Nexus model, line card, queue mode, and NX-OS release. Cumulus RoCE profiles are also ASIC-specific.
 
 ## 1. Architecture and traffic contract
@@ -56,6 +58,21 @@ DSCP (Differentiated Services Code Point) is the upper six bits of the IP header
 | 48 | CS6 (Class Selector 6) | `110000` | CNP congestion notification — must be delivered at the highest priority |
 
 The mnemonic: **DSCP 24 is the RoCE data channel, DSCP 48 is the congestion-signal channel; everything else takes the default path.**
+
+The values are not arbitrary. Under the conventional trust-DSCP mapping, the switch derives the internal priority from the upper three bits of the DSCP — `priority = DSCP >> 3` — which slices the 64 values into eight blocks of eight, each anchored by a Class Selector (CS) codepoint. This is exactly the default mapping section 3.4 relies on ("DSCP 24–31 → switch priority 3, DSCP 48–55 → switch priority 6"), and it is why DSCP 24 (this guide) and DSCP 26 (common in NVIDIA documentation) land in the same queue:
+
+| DSCP range | Class Selector | CS binary | Priority (DSCP >> 3) | Typical use / role in this design |
+| --- | --- | --- | --- | --- |
+| 0–7 | CS0 (0) | `000xxx` | 0 | Best effort — everything unmarked |
+| 8–15 | CS1 (8) | `001xxx` | 1 | Scavenger / bulk background traffic |
+| 16–23 | CS2 (16) | `010xxx` | 2 | OAM / low-priority transactional |
+| 24–31 | CS3 (24) | `011xxx` | 3 | **RoCEv2 data** — DSCP 24 here, DSCP 26 in NVIDIA docs; PFC and ECN apply |
+| 32–39 | CS4 (32) | `100xxx` | 4 | Interactive video / real-time streams |
+| 40–47 | CS5 (40) | `101xxx` | 5 | Voice — EF (46) falls in this block |
+| 48–55 | CS6 (48) | `110xxx` | 6 | Network control — **CNP** (DSCP 48) in this design |
+| 56–63 | CS7 (56) | `111xxx` | 7 | Reserved for network control |
+
+Two caveats keep this table honest. First, `DSCP >> 3` is the *default* convention, not a law — every platform in this guide can override it (NX-OS with explicit `match dscp` class-maps in section 2.1, Cumulus with a custom mapping in section 3.4), and the Cisco template indeed puts CNP in queue 7 rather than 6. Second, the AF classes and EF also live inside these blocks (AF31 = 26 is in the CS3 block, EF = 46 in the CS5 block), so a fabric that carries voice or AF-marked traffic must check for collisions before borrowing a block for RoCE.
 
 ### 1.3 Why ECN should act before PFC
 
@@ -119,6 +136,80 @@ Two practical notes for this guide:
 - The templates below configure both ends **explicitly** and use `priority-flow-control mode on` on the switch (section 2.5) rather than `auto`, which would depend on DCBX negotiation. Static configuration on both ends is deterministic; if you rely on DCBX instead, verify what was actually negotiated, not just what was configured. On ConnectX hosts configured manually (section 4.3), make sure a running `lldpad` or firmware DCBX in willing mode is not silently overriding your settings.
 - In a virtual lab (SONiC-VS, vEOS-lab and similar), you can inspect LLDP/DCBX configuration and control-plane state, but a virtual switch has no ASIC — it cannot validate real buffering, PFC pause behavior, or RoCE performance.
 
+### 1.5 End-to-end example: one RoCE packet through the QoS pipeline
+
+Everything in sections 1.1–1.4 compresses into one packet walk. Suppose the network selects DSCP 24 for RoCE:
+
+```text
+Application generates RoCEv2
+              ↓
+NIC marks IP packet DSCP 24
+              ↓
+Switch trusts DSCP
+              ↓
+DSCP 24 → internal TC 3
+              ↓
+        ┌─────┴─────┐
+        ↓           ↓
+Ingress PG 3     Egress Queue 3
+        ↓           ↓
+PFC priority 3   ETS/WRED/ECN
+```
+
+Note the fork: the internal traffic class feeds **two independent mappings**. On the ingress side it selects a priority group (PG) — the lossless buffer that PFC watches and defends. On the egress side it selects the output queue — where ETS (Enhanced Transmission Selection divides bandwidth among traffic classes while allowing unused bandwidth to be shared.) scheduling and WRED/ECN marking act. A misconfiguration can break one leg while the other looks healthy, which is why verification has to check both.
+
+The complete policy, in one table:
+
+| Function | Value |
+| --- | --- |
+| RoCE DSCP | 24 |
+| DSCP name | CS3 |
+| Internal TC | 3 |
+| PCP/PFC priority | 3 |
+| Ingress priority group | 3 |
+| Egress queue | 3 |
+| PFC | Enabled on priority 3 |
+| ECN | Enabled using RoCE-specific thresholds |
+
+Keeping TC, PG, queue, and PFC priority all at the same number is a convention, not a requirement — but breaking the symmetry without a reason is how the "wrong leg" bugs above are born.
+
+#### Cumulus Linux: the pipeline comes from one command
+
+On Cumulus this entire chain is generated by the default RoCE profile — `nv set qos roce mode lossless` (section 3.1). The generated state matches the table above: trust is `pcp,dscp`, DSCP 24–31 map to switch priority 3, PFC and ECN are enabled on traffic class 3, and the lossless buffer is carved automatically. Section 3.2 shows the full generated profile via `nv show qos roce`; you only touch the individual mappings when departing from the default contract (section 3.4).
+
+#### SONiC: the same pipeline as CONFIG_DB tables
+
+SONiC exposes each stage of the pipeline as an explicit CONFIG_DB table, which makes the packet walk unusually literal:
+
+```text
+Ingress packet
+      ↓
+Trust DSCP or PCP
+      ↓
+DSCP_TO_TC_MAP / DOT1P_TO_TC_MAP
+      ↓
+Internal traffic class
+      ├──→ TC_TO_PRIORITY_GROUP_MAP → ingress buffer/PG
+      └──→ TC_TO_QUEUE_MAP          → egress queue
+                                             ↓
+                               scheduler + WRED/ECN
+```
+
+Useful live-configuration checks:
+
+```bash
+sudo sonic-cfggen -d --print-data | jq '.DSCP_TO_TC_MAP'
+sudo sonic-cfggen -d --print-data | jq '.DOT1P_TO_TC_MAP'
+sudo sonic-cfggen -d --print-data | jq '.TC_TO_QUEUE_MAP'
+sudo sonic-cfggen -d --print-data | jq '.TC_TO_PRIORITY_GROUP_MAP'
+sudo sonic-cfggen -d --print-data | jq '.MAP_PFC_PRIORITY_TO_QUEUE'
+sudo sonic-cfggen -d --print-data | jq '.PORT_QOS_MAP'
+sudo sonic-cfggen -d --print-data | jq '.WRED_PROFILE'
+sudo sonic-cfggen -d --print-data | jq '.SCHEDULER'
+```
+
+The table names map one-to-one onto the diagram: `DSCP_TO_TC_MAP`/`DOT1P_TO_TC_MAP` are the trust step, `TC_TO_PRIORITY_GROUP_MAP` and `TC_TO_QUEUE_MAP` are the two legs of the fork, `PORT_QOS_MAP` binds the maps (and `pfc_enable`) to ports, and `WRED_PROFILE`/`SCHEDULER` are the egress stage. On SONiC-VS these tables are fully inspectable even though, per the caveat in 1.4, the virtual data plane cannot demonstrate real PFC or buffering behavior.
+
 ## 2. Cisco Nexus 9000 NX-OS template
 
 The following configuration uses the eight-queue system classes from the source design. It is representative of Nexus 9300/9500 platforms on NX-OS 9.3 or later that support these MQC objects; it is not a universal paste-and-run template. Before applying it, inspect the active queue model and the system-defined class names:
@@ -135,9 +226,11 @@ Cisco documents the dependencies and platform limitations in the current [Nexus 
 ### 2.1 Classify RoCE data and CNP
 
 ```text
+! Recognize RoCE data by its on-wire marking: DSCP 24 (CS3)
 class-map type qos match-all ROCE-DATA
   match dscp 24
 
+! Recognize CNP congestion feedback: DSCP 48 (CS6)
 class-map type qos match-all ROCE-CNP
   match dscp 48
 ```
@@ -147,11 +240,17 @@ This is L3 classification. If the ingress policy must trust an 802.1Q PCP value 
 ### 2.2 Map ingress traffic to local QoS groups
 
 ```text
+! Ingress policy: translate the on-wire DSCP into internal QoS groups.
+! The qos-group number selects which system queue the packet uses inside
+! the switch - this is the "internal TC" step of the pipeline in 1.5.
 policy-map type qos ROCE-INGRESS
+  ! RoCE data -> QoS group 3 (will be lossless: PFC + ECN)
   class ROCE-DATA
     set qos-group 3
+  ! CNP -> QoS group 7 (will be strict priority)
   class ROCE-CNP
     set qos-group 7
+  ! Everything else -> QoS group 0 (best effort)
   class class-default
     set qos-group 0
 ```
@@ -162,16 +261,24 @@ QoS group 3 becomes the lossless data class. QoS group 7 becomes the strict CNP 
 
 ```text
 policy-map type queuing ROCE-EGRESS
+  ! Queue 7 (CNP): strict priority - always serviced first, so congestion
+  ! feedback is never stuck behind a burst of data
   class type queuing c-out-8q-q7
     priority level 1
 
+  ! Queue 3 (RoCE data): guaranteed 60% of the bandwidth left after the
+  ! strict queue, with WRED in ECN mode - between the two thresholds the
+  ! switch MARKS packets instead of dropping them
   class type queuing c-out-8q-q3
     bandwidth remaining percent 60
     random-detect minimum-threshold 150 kbytes maximum-threshold 3000 kbytes drop-probability 7 weight 0 ecn
 
+  ! Default queue: whatever bandwidth remains
   class type queuing c-out-8q-q-default
     bandwidth remaining percent 40
 ```
+
+Reading the `random-detect` line term by term: marking starts once the queue passes the **minimum threshold** (150 KB), the marking probability climbs until the **maximum threshold** (3000 KB), `drop-probability 7` is the probability ceiling reached at that maximum, `weight 0` means the decision uses the instantaneous queue depth with no averaging, and the trailing `ecn` keyword is what turns the whole mechanism from "random early drop" into "random early mark" — remove it and WRED silently discards RoCE packets instead of marking them.
 
 The `150 kbytes` and `3000 kbytes` values are example starting points from the source's 100G design. They are not portable buffer percentages. Port speed, cable length, ASIC architecture, active-port count, shared-buffer policy, RTT, and traffic shape all influence a safe threshold.
 
@@ -187,10 +294,14 @@ Use these operational rules when tuning:
 
 ```text
 policy-map type network-qos ROCE-NETWORK-QOS
+  ! Network-QoS class nq3 = internal class 3 (the RoCE data class):
+  ! jumbo MTU, and 'pause pfc-cos 3' makes it a no-drop class - the
+  ! switch reserves lossless buffer and sends/honors PFC for CoS 3
   class type network-qos c-8q-nq3
     mtu 9216
     pause pfc-cos 3
 
+  ! Default class: same jumbo MTU, but stays drop-eligible (no pause)
   class type network-qos c-8q-nq-default
     mtu 9216
 ```
@@ -200,13 +311,18 @@ The important invariant is `qos-group 3` -> no-drop class -> `pfc-cos 3`. If tho
 ### 2.5 Apply system and interface policies
 
 ```text
+! Switch-wide: the no-drop classes and the egress scheduler apply to the
+! whole box, not per interface
 system qos
   service-policy type network-qos ROCE-NETWORK-QOS
   service-policy type queuing output ROCE-EGRESS
 
+! Per port: classify incoming traffic and enable PFC on the link
 interface Ethernet1/1
   service-policy type qos input ROCE-INGRESS
+  ! 'mode on' forces PFC regardless of DCBX negotiation (see section 1.4)
   priority-flow-control mode on
+  ! Watchdog: detect a stuck-pause condition (PFC storm/deadlock) and recover
   priority-flow-control watch-dog-interval on
 ```
 
@@ -224,13 +340,15 @@ The source's complete template, assembled from the pieces above — intended for
 ! Applies to all spines and leaves
 ! =====================================
 
-! 1. Classification
+! 1. Classification - recognize the two RoCE markings on ingress
+!    DSCP 24 (CS3) = RoCE data, DSCP 48 (CS6) = CNP congestion feedback
 class-map type qos match-all ROCE-DATA
   match dscp 24
 class-map type qos match-all ROCE-CNP
   match dscp 48
 
-! 2. Ingress QoS-group mapping
+! 2. Ingress QoS-group mapping - DSCP to internal class:
+!    data -> group 3 (lossless), CNP -> group 7 (strict), rest -> group 0
 policy-map type qos ROCE-INGRESS
   class ROCE-DATA
     set qos-group 3
@@ -240,6 +358,10 @@ policy-map type qos ROCE-INGRESS
     set qos-group 0
 
 ! 3. Egress queuing + ECN
+!    q7 (CNP): strict priority, always serviced first
+!    q3 (RoCE data): 60% of remaining bandwidth; WRED marks (ecn keyword)
+!       instead of dropping between the 150 KB / 3000 KB thresholds
+!    default queue: the remaining 40%
 policy-map type queuing ROCE-EGRESS
   class type queuing c-out-8q-q7
     priority level 1
@@ -253,7 +375,9 @@ policy-map type queuing ROCE-EGRESS
   class type queuing c-out-8q-q-default
     bandwidth remaining percent 40
 
-! 4. PFC network QoS
+! 4. PFC network QoS - make internal class 3 a no-drop class:
+!    reserve lossless buffer and send/honor PFC pause for CoS 3;
+!    jumbo MTU on both classes
 policy-map type network-qos ROCE-NETWORK-QOS
   class type network-qos c-8q-nq3
     mtu 9216
@@ -261,12 +385,15 @@ policy-map type network-qos ROCE-NETWORK-QOS
   class type network-qos c-8q-nq-default
     mtu 9216
 
-! 5. System-level apply
+! 5. System-level apply - no-drop classes and egress scheduler are
+!    switch-wide settings
 system qos
   service-policy type network-qos ROCE-NETWORK-QOS
   service-policy type queuing output ROCE-EGRESS
 
-! 6. Interface-level apply
+! 6. Interface-level apply - classification + PFC on every RoCE-facing
+!    port; 'mode on' forces PFC without relying on DCBX, watchdog
+!    detects and breaks stuck-pause (PFC storm) conditions
 interface Ethernet1/1-48
   service-policy type qos input ROCE-INGRESS
   priority-flow-control mode on

@@ -91,6 +91,8 @@ Note the inversion at the low end: DSCP 0-7 map to traffic class 1 and DSCP 8-15
 
 Configuring the two maps explicitly is still worth doing. It records the intent for anyone reading the running configuration, and it keeps the policy correct on a platform or release whose defaults differ from the table above.
 
+> **DSCP 26 here versus DSCP 24 elsewhere on this blog.** This post follows NVIDIA's Arista-facing examples, which mark RoCE data DSCP 26 (AF31); the [RoCEv2 end-to-end guide](/posts/rocev2-cisco-cumulus-connectx-end-to-end/) and the Cumulus material standardize on DSCP 24 (CS3). In a mixed Arista + Cumulus fabric the difference is more forgiving than it looks: both platforms' *default* maps classify the whole DSCP 24–31 block into traffic class / switch priority 3 (the table above; Cumulus's RoCE profile does the same), so 24 and 26 land in the same lossless queue either way. The forgiveness ends where exact-match classification begins — an NX-OS class-map matching `dscp 24` will silently miss DSCP 26, the ConnectX host stamps exactly one value that every capture filter (`ip.dsfield.dscp == 24`) and counter then keys on, and any custom mapping that lists specific values instead of the block reintroduces the mismatch. So if this fabric runs alongside the configurations from the other guides, **pick one value and change every hop consistently** — using 24 here is simply `qos map dscp 24 to traffic-class 3`, still inside the default block.
+
 Then map those traffic classes to transmit queues. The map target is `tx-queue` on every platform:
 
 ```text
@@ -121,6 +123,38 @@ Leaf-1(config-qos-profile-ROCE-LEAF-uc-txq-3)# uc-tx-queue 6
 Leaf-1(config-qos-profile-ROCE-LEAF-uc-txq-6)# priority strict
 ```
 
+Command by command:
+
+- **`priority-flow-control on` + `priority 3 no-drop`** — enables PFC processing on ports carrying this profile and declares priority 3 (the RoCE data class) lossless. Only priority 3: every other priority stays ordinary drop-eligible traffic.
+- **`uc-tx-queue <n>`** — enters the scheduler configuration for one unicast transmit queue (the Broadcom-style hierarchy; the spine's Jericho-style equivalent is `tx-queue`).
+- **`no priority`** — takes the queue *out* of strict-priority mode and makes it a weighted round-robin (WRR) participant. Only WRR queues use the `bandwidth percent` weights.
+- **`bandwidth percent 95` / `bandwidth percent 5`** — a scheduling *weight*, and the phrasing matters: it is **not** 95% of the interface rate, and it is **not** a cap. Strict-priority queues (queue 6 here, plus the platform control queue) are always served first; whatever bandwidth remains is then divided among the backlogged WRR queues in proportion to their weights — 95:5 between queue 3 and queue 1 when both have traffic. The scheduler is work-conserving, so when queue 1 is idle and nothing strict is transmitting, queue 3 can use effectively the entire interface. The semantics are the same as NX-OS `bandwidth remaining percent`, dissected with worked numbers in [the QoS concepts post](/posts/roce-qos-concepts-and-packet-examples/#5-bandwidth-remaining-percent).
+- **`random-detect ecn minimum-threshold 256 kbytes maximum-threshold 512 kbytes ...`** — the two values are **queue-occupancy action points, not a buffer allocation**. The port still draws packet memory from the ASIC's shared buffer pool; these thresholds only define *when marking happens* as queue 3's depth grows. Buffer allocation, PFC XOFF, and tail-drop limits are all separate mechanisms — and the design intent is that these ECN thresholds sit *below* the PFC trigger point, so senders get slowed before pause frames become necessary (section 6 tunes exactly this relationship).
+- **`max-mark-probability 100`** — the *ceiling* of the marking-probability ramp: the percentage of eligible packets that get marked once queue depth reaches the maximum threshold. `100` means marking becomes deterministic at 512 KB — every eligible packet is marked. This is a real design choice, not boilerplate: the Cisco reference design in the [end-to-end guide](/posts/rocev2-cisco-cumulus-connectx-end-to-end/) uses `drop-probability 7`, a gentle 7% ceiling suited to its wide 150 KB–3000 KB band, while this Arista profile pairs a *narrow* band (256–512 KB) with a 100% ceiling — softer start, harder finish.
+- **`weight 0`** — the exponential-weighting constant for the queue-depth measurement. `0` means the marking decision uses the **instantaneous** queue depth; larger values average the depth over time, which smooths out bursts but reacts late. Instantaneous is the standard choice for RoCE: a microburst must be marked *while it is happening*, not after a moving average catches up.
+- **`uc-tx-queue 6` + `priority strict`** — the CNP queue: strict priority means it is served ahead of all WRR queues whenever it holds a packet, so congestion feedback is never stuck behind the very data that caused the congestion.
+
+**So when exactly does the CE mark (ECN bits `11`) get written?** Not only beyond 512 KB — that's the common misreading. The marking probability ramps *linearly between the two thresholds*:
+
+```text
+CE-mark probability for arriving ECT packets
+
+100% ┤                          ┌─────────────────
+     │                        ／ ← max-mark-probability 100
+     │                      ／
+     │                    ／
+     │                  ／
+  0% ┼────────────────／
+     └───────────── 256 KB ── 512 KB ──────────→  queue-3 depth
+       no marking      probabilistic      every ECT
+                       marking ramp       packet marked
+```
+
+- **Below 256 KB**: no action — RoCE packets pass with their ECT(0) marking (`10`) untouched.
+- **Between 256 KB and 512 KB**: each arriving packet is marked with a probability that climbs from ~0% toward 100% as the queue deepens. The *first* CE marks therefore appear shortly after the queue crosses 256 KB — sparsely at first, which is the point: a few early CNPs slow senders gently before the queue gets serious.
+- **At and beyond 512 KB**: every arriving packet is marked CE — a continuous stream of CNPs back to the senders.
+- Two boundary conditions: only **ECT-capable packets** (`01`/`10`) can be marked — a packet sent as Not-ECT (`00`) can never become `11` and gets dropped instead once drop limits engage; and marking never replaces dropping entirely — if senders ignore the CNPs and the shared buffer truly fills, tail drop remains the final backstop. The codepoints themselves are dissected in [the concepts post's ECN section](/posts/roce-qos-concepts-and-packet-examples/#ecn-values).
+
 The ECN values are starting values from an Arista reference design, not universal constants. Validate them against the port speed, cable delay, oversubscription, ASIC cell size, shared-buffer policy, and NIC reaction time.
 
 Apply the profile on an explicitly routed, DSCP-trusted interface:
@@ -143,7 +177,9 @@ Leaf-1(config-if-Et1)# uc-tx-queue 3
 Leaf-1(config-if-Et1-uc-txq-3)# random-detect ecn count
 ```
 
-Some platforms also require `hardware counter feature ecn out`. Check platform support and verify that the counter command was accepted before relying on ECN statistics.
+Despite the near-identical name, this is a different job from the profile's `random-detect ecn minimum-threshold ...`. The profile command *does* the marking — it is the policy that rewrites ECT to CE when the queue crosses its thresholds. `random-detect ecn count` only *counts* it: it tells the ASIC to allocate a hardware counter that increments every time this queue on this interface CE-marks a packet. Without it, the switch happily marks packets but records nothing — `show qos interfaces ethernet 1 counters` shows no ECN column, and you have **no switch-side evidence that ECN is firing**. That makes an unverifiable ECN policy a diagnostic dead end: the "switch ECN counters rise but no CE packets reach the endpoint" comparison (use case 2 in the [RDMA tuning post's capture guide](/posts/rdma-performance-tuning/)) needs this counter to exist. Counting is opt-in because ASIC counter resources are finite and shared: EOS does not burn one per queue per port by default, so you enable it exactly where you intend to watch.
+
+Some platforms also require `hardware counter feature ecn out` — a global knob that reserves counter resources for egress ECN counting — before the per-queue command takes effect. Check platform support and verify that the counter command was accepted before relying on ECN statistics.
 
 ### Verify the leaf configuration
 
@@ -194,6 +230,12 @@ Spine-1(config-qos-profile-ROCE-SPINE-txq-3)# random-detect ecn minimum-threshol
 Spine-1(config-qos-profile-ROCE-SPINE-txq-3)# tx-queue 6
 Spine-1(config-qos-profile-ROCE-SPINE-txq-6)# priority strict
 ```
+
+The commands mirror the leaf profile in section 2 — same PFC scope, same WRR-weight semantics for `bandwidth percent 95` (a share of what remains after the strict queues, not a cap), same strict CNP queue. Three differences are deliberate:
+
+- **`tx-queue` instead of `uc-tx-queue`** — the Jericho-style queue hierarchy exposes a single queue set rather than separate unicast queues; it is the same scheduler role under a different name.
+- **Higher ECN thresholds (512/768 KB versus the leaf's 256/512 KB)** — still queue-occupancy action points, not buffer carving. A spine port aggregates many leaf-to-leaf flows and rides longer paths, so its queue legitimately runs deeper before marking should start; thresholds that fire too early on an aggregation port mark healthy multiplexing as congestion.
+- **No explicit `weight 0`** — this platform's syntax takes the instantaneous-depth default rather than requiring it spelled out; verify with the `show qos interfaces ... ecn` output below rather than assuming.
 
 Apply it to every leaf-facing spine interface and enable the corresponding per-interface ECN counter:
 
@@ -289,6 +331,20 @@ Treat these percentages as a tuning aid, not a platform default. The denominator
 Lower the ECN threshold if PFC fires before senders react. Increase it cautiously if ECN marking is excessive during harmless microbursts. Always keep enough headroom for in-flight traffic after a pause is generated.
 
 ## 7. FADT release boundaries
+
+**FADT — Fair Adaptive Dynamic Threshold** — is Arista's answer to a problem every shared-buffer switch has: where do you set a queue's action thresholds (PFC XOFF, drop points) when the buffer is one shared pool rather than fixed per-port slices?
+
+A **static** threshold — a fixed byte value like the ECN thresholds in sections 2 and 3 — has to be provisioned for the worst case. Set it high and a handful of congested ports can drain the shared pool, leaving nothing for the rest; set it low and a single burst gets paused or dropped while most of the buffer sits idle. Static values are predictable but always wrong in one direction.
+
+A **dynamic** threshold instead computes each queue's limit continuously from what is *left* in the shared pool, conceptually:
+
+```text
+threshold ≈ alpha × free shared buffer
+```
+
+When the switch is quiet, the free pool is large, so a single bursting queue gets a generous threshold and absorbs the burst without pausing. As more queues congest, the free pool shrinks, and *every* queue's threshold shrinks with it — the pool divides itself among the active consumers instead of first-come-first-served exhaustion. That self-scaling division is the "fair" and "adaptive" in the name.
+
+Applied to PFC — the case this post cares about — FADT means the **XOFF point is not a fixed byte count** but moves with buffer pressure: pause fires later (more burst absorption) when buffer is plentiful, and earlier (protecting the lossless guarantee for everyone) when many lossless queues are competing. The PFC-specific FADT feature assigns these dynamic-threshold profiles to interface/priority groups. Note the contrast with everything configured earlier in this post: the ECN thresholds in sections 2, 3, and 6 are static byte values you chose; the PFC trigger on a FADT-enabled platform is a computed, moving target — which is one more reason section 6's advice measures ECN's health against *observed PFC counter behavior* rather than against an assumed fixed XOFF number.
 
 **FADT** is not one feature with one universal introduction release:
 

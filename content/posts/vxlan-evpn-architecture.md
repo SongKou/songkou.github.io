@@ -267,6 +267,32 @@ The two primary mechanisms are **ingress replication (IR)** and **multicast unde
 
 With IR, every VTEP advertising membership in an L2 VNI becomes a candidate remote destination. The ingress VTEP builds a head-end replication list from received Type 3 routes and sends one unicast VXLAN copy to each eligible remote VTEP.
 
+> **Note — what the Type 3 route actually looks like.** This is a real capture from the [Cumulus VXLAN EVPN lab guide](/posts/vxlan-evpn-cumulus-5.4-lab-guide/): leaf1's EVPN table holding leaf3's Type 3 (Inclusive Multicast Ethernet Tag) route for VNI 10121, learned over two paths:
+>
+> ```text
+> *  [3]:[0]:[32]:[10.255.0.13] RD 10.255.0.13:2
+>                     10.255.0.13 (leaf2)
+>                                                            0 65102 65000 65103 i
+>                     RT:65103:10121 ET:8
+> *> [3]:[0]:[32]:[10.255.0.13] RD 10.255.0.13:2
+>                     10.255.0.13 (spine)
+>                                                            0 65000 65103 i
+>                     RT:65103:10121 ET:8
+> ```
+>
+> The `*>` path via the spine (`65000 65103`) is selected as best because its AS path is shorter; the path via leaf2 (`65102 65000 65103`) is a valid alternate through the MLAG peerlink EVPN adjacency. Decoding the NLRI:
+>
+> ```text
+> [3]:[0]:[32]:[10.255.0.13]
+>  │   │   │        │
+>  │   │   │        └── Originating router/VTEP IP
+>  │   │   └─────────── IP address length: 32 bits
+>  │   └─────────────── Ethernet Tag: 0
+>  └─────────────────── EVPN Route Type 3
+> ```
+>
+> The route tells the receiving switch that **VTEP 10.255.0.13 participates in the L2 VNI identified by `RT:65103:10121`** — so when the local VTEP receives BUM traffic for that VNI, it knows 10.255.0.13 is one of the remote VTEPs that needs a copy. Type 3 = VTEP/VNI membership and BUM delivery; the flood list is exactly the set of these routes, and a withdrawn route removes its VTEP from the list. `ET:8` is the Encapsulation Extended Community mentioned above — encapsulation type 8 = VXLAN — telling the receiving EVPN speaker which tunnel encapsulation this route uses.
+
 For a VNI active on 50 VTEPs, a BUM frame arriving on one VTEP can produce up to 49 outgoing VXLAN copies. Replication consumes ingress-leaf bandwidth and hardware replication resources, but the spines maintain only ordinary unicast forwarding state.
 
 IR advantages are:
@@ -706,6 +732,29 @@ An access-link or attached-device failure should produce this sequence:
 5. Individual Type 2 routes converge as necessary without being the only fast-failure signal.
 
 Validate failure behavior independently for local-to-remote known unicast, remote-to-local known unicast, BUM traffic, and routed traffic through the anycast gateway.
+
+### 8.7 MLAG versus EVPN-MH: why a fabric may show no type-1 or type-4 routes
+
+A common observation in real EVPN tables: types 2, 3, and 5 are everywhere, while types 1 and 4 are completely absent — even though FRR and NX-OS print the NLRI format legend for all five types at the top of every capture. The legend describes what the parser *can* display, not what the fabric contains.
+
+Type-1 and type-4 routes exist only when an interface is configured with a **nonzero ESI** — that is, when multihoming is implemented the EVPN-native way described in 8.1–8.6. A fabric that multihomes hosts with **MLAG** (or vPC) instead solves both multihoming problems *outside* EVPN, before the fabric ever sees them:
+
+- The duplicate-BUM/DF-election problem is handled by the MLAG bond itself: each frame hashes to one member, and the pair behaves as a single logical switch toward the host — no DF election needed, so no type-4 route.
+- The aliasing and mass-withdrawal problems disappear because both members originate every EVPN route with the **shared anycast VTEP address** as next hop. To every remote VTEP the pair *is* one VTEP; there is no "two attachment points" state for type-1 routes to describe, and the ESI field in every type-2 route is zero.
+
+The trade-off, in both directions:
+
+| | MLAG / vPC | EVPN-MH (ESI-based) |
+|---|---|---|
+| Route types on the wire | 2, 3, 5 only | 1, 2, 3, 4, 5 |
+| Peer coordination | Dedicated peerlink, shared system MAC, proprietary sync (clagd/vPC) | Control plane only — no peerlink |
+| Multihoming scope | Exactly two switches | Two or more VTEPs per segment |
+| Vendor interop on the pair | Same vendor (proprietary) | Standards-based (RFC 7432) |
+| Failure signaling | Anycast next hop stays valid; underlay reroutes | Type-1 mass withdraw, DF re-election |
+
+One nuance if validating an EVPN-MH fabric: even there, **type-4 routes are visible only on the switches sharing the segment** — they carry the ES-Import route target, so an uninvolved leaf imports none, by design. Absence of type-4 on a random leaf proves nothing; check a segment member.
+
+For a worked example of the MLAG side — a real EVPN table where every route shows the shared anycast next hop and no type-1/type-4 entries exist — see [section 13.4 of the Cumulus VXLAN EVPN lab guide](/posts/vxlan-evpn-cumulus-5.4-lab-guide/#134-generate-host-learning).
 
 ## 9. Endpoint learning, mobility, and ARP suppression
 

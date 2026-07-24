@@ -1226,6 +1226,38 @@ How to read this table:
 - The type-3 routes `[3]:[0]:[32]:[10.255.0.10]` (one per VNI) implement the head-end replication configured in section 7.5: every VTEP announces "I participate in this VNI; send me a copy of BUM traffic", and each VTEP's flood list is exactly the set of these routes.
 - Leaf3's routes each appear with **two paths**: the best (`*>`) learned directly from the spine with AS path `65000 65103`, and a valid alternate (`*`) learned from leaf2 over `peerlink.4094` with the longer path `65102 65000 65103`. The peerlink EVPN session from section 7.6 is quietly providing a redundant control-plane path that would take over if the spine session failed.
 
+**Decoding the type-2 NLRI** — taking Linux1's MAC+IP route from the capture above:
+
+```text
+[2]:[0]:[48]:[00:50:00:00:08:00]:[32]:[192.168.100.10]
+ │   │   │           │            │          │
+ │   │   │           │            │          └── Host IP address
+ │   │   │           │            └───────────── IP length: 32 bits (128 in the fe80:: variant)
+ │   │   │           └────────────────────────── Host MAC address (Linux1)
+ │   │   └────────────────────────────────────── MAC length: 48 bits
+ │   └────────────────────────────────────────── Ethernet Tag: 0 (VLAN-based service)
+ └────────────────────────────────────────────── EVPN Route Type 2: MAC/IP advertisement
+```
+
+The route tells a remote switch: **MAC `00:50:00:00:08:00` — and, in this variant, IP `192.168.100.10` — lives behind the VTEP in the next hop (`10.255.0.10`)**. What a receiver does with it depends on which route target it imports: a MAC-VRF importing `RT:65101:10100` installs the MAC in its VNI 10100 bridge table; a `TENANT1` instance importing `RT:65101:50000` installs the `/32` host route via L3 VNI 50000, using the advertised `Rmac` as the inner destination MAC. The MAC-only and IPv6 link-local variants carry just the L2 RT — bridging needs no L3 import. Type 2 = *where a host is attached*.
+
+**Decoding the type-3 NLRI** — the flood-list route:
+
+```text
+[3]:[0]:[32]:[10.255.0.10]
+ │   │   │        │
+ │   │   │        └── Originating router/VTEP IP
+ │   │   └─────────── IP address length: 32 bits
+ │   └─────────────── Ethernet Tag: 0
+ └─────────────────── EVPN Route Type 3: Inclusive Multicast Ethernet Tag (IMET)
+```
+
+The route tells a remote switch: **VTEP `10.255.0.10` participates in the L2 VNI identified by the attached RT** (`RT:65101:10100`), so BUM traffic for that VNI must include this VTEP as one of its head-end-replication copies. Each VTEP's flood list is exactly the set of these routes, and a withdrawal removes that VTEP from the list. Type 3 = *VTEP/VNI membership and BUM delivery*.
+
+On the extended communities that appear on both types: `ET:8` is the encapsulation extended community — encapsulation type 8 = VXLAN — telling the receiver which tunnel type this route uses (not to be confused with the Ethernet Tag *field*, the `[0]` inside the NLRI). `MM:0, sticky MAC` is the MAC Mobility community: sequence number 0 with the static (sticky) flag set, exempting the MAC from mobility processing as described in the bullet above.
+
+**Why there are no type-1 or type-4 routes.** The header legend lists all five NLRI formats, but that describes what FRR *can* display, not what this fabric contains. Types 1 (Ethernet Auto-Discovery) and 4 (Ethernet Segment) exist only for **ESI-based EVPN multihoming**: type 4 lets switches attached to the same Ethernet Segment find each other and elect a designated forwarder (so a multihomed host receives BUM traffic exactly once), and type 1 enables aliasing and mass withdrawal (one route withdrawal invalidating every MAC behind a failed segment). This lab multihomes Linux1 with **MLAG**, which solves both problems before EVPN ever sees them: the bond hashes each frame to one member (no DF election needed), and both members originate every route with the shared anycast VTEP `10.255.0.10` as next hop, so to the rest of the fabric the pair *is* a single VTEP — there is no Ethernet Segment to describe, and the ESI field in every type-2 route is zero. Configuring the bond with an ESI instead (`nv set interface bond1 evpn multihoming segment local-id …`) would switch the design to EVPN-MH: type-1/type-4 routes would appear and the clagd/anycast-VTEP machinery would go away. The design trade-offs between the two models are covered in [section 8.7 of the VXLAN EVPN architecture post](/posts/vxlan-evpn-architecture/#87-mlag-versus-evpn-mh-why-a-fabric-may-show-no-type-1-or-type-4-routes).
+
 Leaf2's table is the mirror image — its own routes sit under RDs `10.255.0.12:3` and `10.255.0.12:4` with the same shared next hop `10.255.0.10`, the sticky-MAC entry is now leaf1's bridge MAC `50:00:00:01:00:08`, and the alternate paths for leaf3's routes arrive from leaf1 instead:
 
 ```text
@@ -1808,6 +1840,21 @@ What the type-5 routes reveal:
 - **The next hops are the individual loopbacks, not the anycast VTEP.** Compare with the type-2 routes in 13.4, which the MLAG pair originated with the shared `10.255.0.10`: the type-5 routes carry `10.255.0.11` (leaf1) and `10.255.0.12` (leaf2), each with the switch's own bridge MAC as `Rmac` (`50:00:00:01:00:08` / `50:00:00:05:00:08` — the same MACs that appeared as type-2 routes in 13.4, one of them sticky-flagged; distinct from the `…:07` MLAG system IDs in 13.1). Host reachability stays anchored to the anycast VTEP, while subnet reachability is advertised per switch; a remote VTEP therefore learns `192.168.100.0/24` from both MLAG members independently and keeps working if either one fails.
 - **Only the L3 route target.** Type-5 routes carry `RT:…:50000` alone — no L2 VNI RT, because there is nothing to bridge; they are imported only by remote `TENANT1` instances and routed over L3 VNI 50000.
 - **Path selection flips compared to 13.4.** On leaf1, leaf2's prefixes arrive twice: directly over the peerlink with AS path `65102` (one hop) and via the spine with `65000 65102` (two hops) — and this time the **peerlink path wins** (`*>`) because it is shorter. For leaf3's prefix the spine path still wins (`65000 65103` beats `65102 65000 65103`). Leaf3, with its single BGP session, shows exactly 5 prefixes and 5 paths — four learned from the spine plus its own self-originated `192.168.121.0/24` (weight 32768).
+
+**Decoding the type-5 NLRI** — taking leaf1's VLAN 100 subnet route from the capture above:
+
+```text
+[5]:[0]:[24]:[192.168.100.0]
+ │   │   │         │
+ │   │   │         └── IP prefix (network address)
+ │   │   └─────────── Prefix length: 24 bits
+ │   └─────────────── Ethernet Tag: 0
+ └─────────────────── EVPN Route Type 5: IP prefix route
+```
+
+The route tells a remote switch: **subnet `192.168.100.0/24` is reachable by routing to the VTEP in the next hop** (`10.255.0.11` — the individual loopback, per the bullet above). There is no MAC and no L2 VNI RT in this route because there is nothing to bridge: a receiver imports it only into the VRF matching `RT:65101:50000`, installs it as an ordinary route in `TENANT1`, and forwards matching traffic over L3 VNI 50000 with the advertised `Rmac` (`50:00:00:01:00:08`) as the inner destination MAC. Type 5 = *where a subnet is reachable*, independent of any individual host — which is exactly why it covers the silent-host problem that per-host type-2 routes cannot.
+
+Side by side, the three route types divide the work: **type 2** answers "where is this host" (bridging plus optional host routing), **type 3** answers "who needs BUM copies for this VNI" (flood-list membership), and **type 5** answers "where is this subnet" (pure routing). The first two operate per MAC-VRF with L2 RTs; type 5 operates per IP-VRF with the L3 RT alone.
 
 ### 13.7 Verify MTU before load testing
 

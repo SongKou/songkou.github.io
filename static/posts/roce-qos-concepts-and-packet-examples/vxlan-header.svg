@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="480" viewBox="0 0 1280 480" font-family="Inter,Segoe UI,Arial,sans-serif">
+  <rect width="1280" height="480" fill="#07111f"/>
+  <defs><filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/></filter></defs>
+
+  <text x="64" y="60" font-size="30" font-weight="750" fill="#e5eef9">VXLAN header</text>
+  <text x="64" y="92" font-size="16" font-weight="450" fill="#9fb0c5">Always 8 bytes: Flags (1B) &#183; Reserved (3B) &#183; VNI (3B) &#183; Reserved (1B)</text>
+
+  <g font-size="12" fill="#9fb0c5" text-anchor="middle">
+    <text x="82" y="140">0</text><text x="370" y="140">8</text><text x="658" y="140">16</text><text x="946" y="140">24</text><text x="1198" y="140">31</text>
+  </g>
+
+  <g filter="url(#shadow)" font-size="16" font-weight="650">
+    <!-- row 1: flag bits -->
+    <rect x="64" y="150" width="36" height="64" fill="#0d1b2e" stroke="#49627e" stroke-width="2"/>
+    <text x="82" y="188" text-anchor="middle" font-size="12" fill="#9fb0c5">R</text>
+    <rect x="100" y="150" width="36" height="64" fill="#0d1b2e" stroke="#49627e" stroke-width="2"/>
+    <text x="118" y="188" text-anchor="middle" font-size="12" fill="#9fb0c5">R</text>
+    <rect x="136" y="150" width="36" height="64" fill="#0d1b2e" stroke="#49627e" stroke-width="2"/>
+    <text x="154" y="188" text-anchor="middle" font-size="12" fill="#9fb0c5">R</text>
+    <rect x="172" y="150" width="36" height="64" fill="#0d1b2e" stroke="#49627e" stroke-width="2"/>
+    <text x="190" y="188" text-anchor="middle" font-size="12" fill="#9fb0c5">R</text>
+    <rect x="208" y="150" width="36" height="64" fill="#2b230f" stroke="#fbbf24" stroke-width="2.5"/>
+    <text x="226" y="188" text-anchor="middle" font-size="14" fill="#fbbf24">I</text>
+    <rect x="244" y="150" width="36" height="64" fill="#0d1b2e" stroke="#49627e" stroke-width="2"/>
+    <text x="262" y="188" text-anchor="middle" font-size="12" fill="#9fb0c5">R</text>
+    <rect x="280" y="150" width="36" height="64" fill="#0d1b2e" stroke="#49627e" stroke-width="2"/>
+    <text x="298" y="188" text-anchor="middle" font-size="12" fill="#9fb0c5">R</text>
+    <rect x="316" y="150" width="36" height="64" fill="#0d1b2e" stroke="#49627e" stroke-width="2"/>
+    <text x="334" y="188" text-anchor="middle" font-size="12" fill="#9fb0c5">R</text>
+
+    <rect x="352" y="150" width="864" height="64" fill="#0d1b2e" stroke="#49627e" stroke-width="2" stroke-dasharray="8 6"/>
+    <text x="784" y="178" text-anchor="middle" fill="#9fb0c5">Reserved</text>
+    <text x="784" y="200" text-anchor="middle" font-size="12" font-weight="450" fill="#9fb0c5">24 bits &#183; sent as zero, ignored on receipt</text>
+
+    <!-- row 2 -->
+    <rect x="64" y="214" width="864" height="64" fill="#0f2b22" stroke="#34d399" stroke-width="2.5"/>
+    <text x="496" y="242" text-anchor="middle" fill="#34d399">VNI &#8212; VXLAN Network Identifier</text>
+    <text x="496" y="264" text-anchor="middle" font-size="12" font-weight="450" fill="#9fb0c5">24 bits &#183; 16,777,216 values &#183; usable 1&#8211;16,777,215</text>
+    <rect x="928" y="214" width="288" height="64" fill="#0d1b2e" stroke="#49627e" stroke-width="2" stroke-dasharray="8 6"/>
+    <text x="1072" y="242" text-anchor="middle" fill="#9fb0c5">Reserved</text>
+    <text x="1072" y="264" text-anchor="middle" font-size="12" font-weight="450" fill="#9fb0c5">8 bits</text>
+  </g>
+
+  <rect x="64" y="316" width="14" height="14" fill="#2b230f" stroke="#fbbf24" stroke-width="2"/>
+  <text x="88" y="328" font-size="14" fill="#9fb0c5">I bit ("VNI Valid") &#8212; set on every normal VXLAN packet, so Flags = 0x08</text>
+  <rect x="64" y="344" width="14" height="14" fill="#0f2b22" stroke="#34d399" stroke-width="2"/>
+  <text x="88" y="356" font-size="14" fill="#9fb0c5">VNI &#8212; the overlay segment ID; the VXLAN counterpart of a VLAN ID, with a 24-bit space</text>
+
+  <rect x="64" y="386" width="640" height="48" rx="10" fill="#152944" stroke="#49627e" stroke-width="2"/>
+  <text x="84" y="416" font-size="15" font-family="Consolas,monospace" fill="#e5eef9">VNI 1020 on the wire:  08 00 00 00 00 03 FC 00</text>
+
+  <text x="1216" y="448" text-anchor="end" font-size="14" font-weight="500" fill="#9fb0c5">RoCE QoS Concepts</text>
+</svg>

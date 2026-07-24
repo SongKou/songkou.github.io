@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="440" viewBox="0 0 1280 440" font-family="Inter,Segoe UI,Arial,sans-serif">
+  <rect width="1280" height="440" fill="#07111f"/>
+  <defs><filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/></filter></defs>
+
+  <text x="64" y="60" font-size="30" font-weight="750" fill="#e5eef9">UDP header</text>
+  <text x="64" y="92" font-size="16" font-weight="450" fill="#9fb0c5">Always 8 bytes, four fields &#8212; addressing and nothing else</text>
+
+  <g font-size="12" fill="#9fb0c5" text-anchor="middle">
+    <text x="82" y="140">0</text><text x="658" y="140">16</text><text x="1198" y="140">31</text>
+  </g>
+
+  <g filter="url(#shadow)" font-size="16" font-weight="650">
+    <rect x="64" y="150" width="576" height="64" fill="#0f2b22" stroke="#34d399" stroke-width="2.5"/>
+    <text x="352" y="178" text-anchor="middle" fill="#34d399">Source Port</text>
+    <text x="352" y="200" text-anchor="middle" font-size="12" font-weight="450" fill="#9fb0c5">16 bits &#183; varied per QP/flow for ECMP entropy</text>
+    <rect x="640" y="150" width="576" height="64" fill="#0f2b22" stroke="#34d399" stroke-width="2.5"/>
+    <text x="928" y="178" text-anchor="middle" fill="#34d399">Destination Port</text>
+    <text x="928" y="200" text-anchor="middle" font-size="12" font-weight="450" fill="#9fb0c5">16 bits &#183; 4791 = RoCEv2</text>
+
+    <rect x="64" y="214" width="576" height="64" fill="#152944" stroke="#49627e" stroke-width="2"/>
+    <text x="352" y="242" text-anchor="middle" fill="#e5eef9">Length</text>
+    <text x="352" y="264" text-anchor="middle" font-size="12" font-weight="450" fill="#9fb0c5">16 bits &#183; header + payload</text>
+    <rect x="640" y="214" width="576" height="64" fill="#152944" stroke="#49627e" stroke-width="2"/>
+    <text x="928" y="242" text-anchor="middle" fill="#e5eef9">Checksum</text>
+    <text x="928" y="264" text-anchor="middle" font-size="12" font-weight="450" fill="#9fb0c5">16 bits &#183; header + data</text>
+  </g>
+
+  <text x="64" y="330" font-size="15" fill="#9fb0c5">No handshake, no retransmission, no ordering, no congestion control &#8212; for RoCEv2 all of that</text>
+  <text x="64" y="356" font-size="15" fill="#9fb0c5">lives above UDP, in the RNIC: BTH sequence numbers, ACKs, and retransmission for RC QPs.</text>
+
+  <text x="1216" y="408" text-anchor="end" font-size="14" font-weight="500" fill="#9fb0c5">RoCE QoS Concepts</text>
+</svg>

@@ -102,6 +102,37 @@ The underlay uses eBGP unnumbered, so no IPv4 addresses are required on the spin
 
 The L3 VNI provides symmetric inter-subnet routing: the ingress and egress VTEPs both perform a routing lookup in `TENANT1`. See [Cumulus Linux 5.4 inter-subnet routing](https://docs.nvidia.com/networking-ethernet-software/cumulus-linux-54/Network-Virtualization/Ethernet-Virtual-Private-Network-EVPN/Inter-subnet-Routing/).
 
+### 3.1 BGP unnumbered: how it works and who supports it
+
+Three mechanisms combine to make the address-free fabric links work:
+
+1. **IPv6 link-local addresses come for free.** Every interface with IPv6 enabled derives an `fe80::` address from its MAC automatically — that is the address BGP actually peers over, and it needs no planning.
+2. **Neighbor discovery replaces neighbor configuration.** `nv set vrf default router bgp neighbor swp1 remote-as external` names an *interface*, not a peer IP. FRR learns the peer's link-local address and MAC from its IPv6 router advertisements and opens the session to `fe80::…%swp1`; `remote-as external` accepts any AS except its own, so every fabric port on every switch carries the identical line.
+3. **IPv4 routes ride the IPv6 session.** RFC 5549/8950 extended next-hop encoding lets IPv4 prefixes (the loopbacks) carry an IPv6 next hop; FRR installs them against the interface with an onlink next hop (`169.254.0.1`) resolved to the peer's MAC.
+
+The payoff shows up throughout this guide: `show bgp summary` lists neighbors as `leaf1(swp1)` — hostname plus interface, because there is no neighbor address — and the MLAG `peer-ip` is simply `linklocal` (verified in section 13), so the peerlink needed no address either. In an N-leaf × M-spine fabric this eliminates the entire /31 addressing plan and every mistyped-peer-IP failure mode with it. Host-facing SVIs and VTEP loopbacks still need real addresses — unnumbered is a fabric-link pattern, not a fabric-wide one.
+
+**Platform support** — this is no longer a Cumulus-only trick; the standards involved (ND/RA discovery plus the RFC 8950 extended next-hop capability, negotiated in the BGP OPEN) are implemented broadly:
+
+| Platform | Support | Notes |
+|---|---|---|
+| Cumulus Linux | Native (FRR) | The reference implementation; used throughout this lab |
+| SONiC | Native (same FRR) | Same `neighbor <intf> interface remote-as external` syntax; decide config ownership (config_db vs split mode vs unified FRR management) so `config reload` does not overwrite it |
+| Arista EOS | Yes | Interface eBGP sessions (`neighbor interface Et1 peer-group …`); requires `ipv6 enable` on fabric links and RFC 8950 next-hop encoding in the IPv4 address family |
+| Cisco NX-OS | Yes, recent | RFC 5549 next hops since 9.2(2); full interface peering with link-local auto-discovery arrived in the 10.x train — which is why classic Nexus VXLAN designs show numbered /31s or `ip unnumbered loopback0` instead |
+
+Mixed-vendor unnumbered fabrics work — for example a Cumulus leaf peering with a SONiC spine — since all sides speak the same standards. The characteristic failure in mixed setups is one side missing `ipv6 enable` or not negotiating the extended next-hop capability: the session either never leaves `Active` (the bare-interface `AS 0` symptom described in section 13) or establishes but installs no IPv4 routes.
+
+References:
+
+- [RFC 8950: Advertising IPv4 NLRI with an IPv6 Next Hop](https://datatracker.ietf.org/doc/html/rfc8950) (obsoletes RFC 5549)
+- [Cumulus Linux 5.4: Basic BGP configuration (BGP unnumbered)](https://docs.nvidia.com/networking-ethernet-software/cumulus-linux-54/Layer-3/Border-Gateway-Protocol-BGP/Basic-BGP-Configuration/)
+- [Edgecore SONiC: BGP Unnumbered](https://support.edge-core.com/hc/en-us/articles/900002377366--Edgecore-SONiC-BGP-Unnumbered)
+- [SONiC: Unified FRR management interface design](https://github.com/sonic-net/SONiC/blob/master/doc/mgmt/SONiC_Design_Doc_Unified_FRR_Mgmt_Interface.md)
+- [Arista Community: BGP IPv6 link-local peer discovery](https://arista.my.site.com/AristaCommunity/s/article/bgp-ipv6-link-local-peers-discovery)
+- [ipSpace: Interface EBGP sessions on Arista EOS](https://blog.ipspace.net/2024/03/arista-interface-ebgp/)
+- [Cisco Nexus 9000 NX-OS 10.6(x): BGP configuration (interface peering via IPv6 link-local)](https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/106x/configuration/unicast-routing-configuration/cisco-nexus-9000-series-nx-os-unicast-routing-configuration-guide/configuring-bgp.html)
+
 ## 4. Understanding the three anycast settings
 
 There are three related but different concepts in this configuration.

@@ -273,6 +273,30 @@ For coherent transport, 400ZR targets interoperable single-span DCI, while ZR+ a
 
 OSFP is physically larger and has more thermal headroom. The photographed `OSFP-800G-DR8P` uses an MPO-16 APC front for eight transmit and eight receive single-mode lanes.
 
+#### The OSFP-800G-DR8P purchasing pair, in detail
+
+![OSFP 800G DR8P module beside its mating single-mode MPO-16 APC patch cable with green connector](/posts/sfp-qsfp-fiber-400g-800g-optics/osfp-800g-dr8p-with-mpo16-apc-cable.jpg)
+
+The key purchasing combination is the **`OSFP-800G-DR8P` transceiver + a female/unpinned MPO-16/APC OS2 cable** — the pair in the photo: the module's receptacle is pinned (male), so the cable must be unpinned (female), and the green connector housing is the APC giveaway (section 5 covers both rules). Cisco specifies 800G over eight 100G optical lanes at 1310 nm, up to 500 m — see the [official data sheet](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/osfp-800g-transceiver-modules-ds.html).
+
+At a glance: **800 Gb/s aggregate** over 8 optical lanes · **500 m maximum reach** on OS2/G.652 single-mode · **MPO-16/APC** optical interface.
+
+| Specification | Value |
+| --- | --- |
+| Ethernet / host interface | 800GE / 800GAUI-8 |
+| Optical architecture | 800GBASE-DR8 · 8 parallel Tx/Rx pairs |
+| Nominal wavelength | 1310 nm |
+| Maximum insertion loss | 3 dB |
+| Typical / maximum power | 14.2 W / 16–17 W |
+| Module dimensions | 13 × 22.58 × 116 mm maximum, including pull tab |
+| Operating temperature | 0–70 °C |
+| Required patch cable | OS2 single-mode, MPO-16/APC, female/unpinned |
+| Breakout options | 1×800G · 2×400G · 4×200G · 8×100G |
+
+**Ordering check:** MPO-16/APC, female/unpinned, OS2 single-mode. Confirm polarity and platform breakout support with the switch vendor before ordering — breakout is a system property, not a module property (section 11).
+
+The wider OSFP family for comparison:
+
 | Example model | Fiber and connector | Reach | Organization and breakout |
 | --- | --- | ---: | --- |
 | `OSFP-800G-VR8` | MMF, dual MPO-12 APC | 30 m OM3 / 50 m OM4/5 | Eight parallel lanes; 2×400G, 4×200G, or 8×100G |

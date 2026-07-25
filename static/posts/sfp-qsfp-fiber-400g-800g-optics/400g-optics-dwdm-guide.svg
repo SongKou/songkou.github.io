@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1080" viewBox="0 0 1600 1080" role="img" aria-labelledby="title desc">
+  <title id="title">400 Gigabit Ethernet optics and direct DWDM compatibility</title>
+  <desc id="desc">Comparison of 400G DR4, FR4, LR4, ZR, and ZR+ optics with their connector, reach, wavelength organization, breakout behavior, and whether they connect directly to a DWDM line system.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7fafc; }
+      .title { font: 700 42px Arial, sans-serif; fill: #102a43; }
+      .subtitle { font: 400 21px Arial, sans-serif; fill: #486581; }
+      .head { font: 700 20px Arial, sans-serif; fill: #ffffff; }
+      .name { font: 700 23px Arial, sans-serif; fill: #102a43; }
+      .cell { font: 400 18px Arial, sans-serif; fill: #243b53; }
+      .small { font: 400 16px Arial, sans-serif; fill: #486581; }
+      .bold { font: 700 18px Arial, sans-serif; fill: #243b53; }
+      .yes { font: 700 18px Arial, sans-serif; fill: #067647; }
+      .no { font: 700 18px Arial, sans-serif; fill: #b42318; }
+      .grid { stroke: #bcccdc; stroke-width: 2; }
+      .fiber { stroke-width: 8; stroke-linecap: round; }
+    </style>
+    <linearGradient id="metal" x1="0" x2="1">
+      <stop offset="0" stop-color="#d9e2ec"/>
+      <stop offset="0.55" stop-color="#f0f4f8"/>
+      <stop offset="1" stop-color="#9fb3c8"/>
+    </linearGradient>
+  </defs>
+  <rect class="bg" width="1600" height="1050"/>
+  <text class="title" x="70" y="70">400G optics: DR/FR/LR are client optics; ZR/ZR+ are DWDM line optics</text>
+  <text class="subtitle" x="70" y="108">All may fit a 400G switch port, but only a tunable ITU-grid coherent signal belongs on a compatible DWDM mux/ROADM line.</text>
+
+  <!-- Header row -->
+  <rect x="55" y="150" width="1490" height="62" rx="12" fill="#1f4d78"/>
+  <text class="head" x="92" y="189">Optic</text>
+  <text class="head" x="315" y="189">Front connector</text>
+  <text class="head" x="565" y="189">Optical organization</text>
+  <text class="head" x="895" y="189">Typical reach</text>
+  <text class="head" x="1105" y="189">Optical breakout?</text>
+  <text class="head" x="1300" y="189">Direct to DWDM line?</text>
+
+  <!-- DR4 row -->
+  <rect x="55" y="222" width="1490" height="132" rx="12" fill="#ffffff" class="grid"/>
+  <text class="name" x="88" y="270">400G DR4</text>
+  <text class="small" x="88" y="300">Direct detect</text>
+  <rect x="315" y="245" width="120" height="52" rx="8" fill="url(#metal)" stroke="#627d98"/>
+  <rect x="315" y="254" width="44" height="34" rx="4" fill="#16202a"/>
+  <rect x="326" y="263" width="22" height="16" rx="3" fill="#05080a"/>
+  <text class="cell" x="315" y="326">MPO-12/APC</text>
+  <line class="fiber" x1="565" y1="252" x2="660" y2="252" stroke="#f59e0b"/>
+  <line class="fiber" x1="565" y1="272" x2="660" y2="272" stroke="#f59e0b"/>
+  <line class="fiber" x1="565" y1="292" x2="660" y2="292" stroke="#f59e0b"/>
+  <line class="fiber" x1="565" y1="312" x2="660" y2="312" stroke="#f59e0b"/>
+  <text class="cell" x="685" y="270">4 parallel 100G Tx</text>
+  <text class="cell" x="685" y="300">+ 4 parallel 100G Rx</text>
+  <text class="bold" x="895" y="282">500 m</text>
+  <text class="small" x="895" y="310">OS2 SMF</text>
+  <text class="yes" x="1105" y="282">Yes</text>
+  <text class="small" x="1105" y="310">4 × 100G DR1</text>
+  <circle cx="1322" cy="281" r="15" fill="#b42318"/><path d="M1314 273l16 16m0-16l-16 16" stroke="#fff" stroke-width="4"/>
+  <text class="no" x="1348" y="288">No</text>
+
+  <!-- FR4 row -->
+  <rect x="55" y="364" width="1490" height="132" rx="12" fill="#eef6ff" class="grid"/>
+  <text class="name" x="88" y="412">400G FR4</text>
+  <text class="small" x="88" y="442">Direct detect</text>
+  <rect x="315" y="387" width="120" height="52" rx="8" fill="url(#metal)" stroke="#627d98"/>
+  <rect x="315" y="393" width="48" height="40" rx="5" fill="#dbeafe" stroke="#2563eb"/>
+  <circle cx="331" cy="413" r="8" fill="#fff" stroke="#2563eb"/>
+  <circle cx="349" cy="413" r="8" fill="#fff" stroke="#2563eb"/>
+  <text class="cell" x="315" y="468">Duplex LC/UPC</text>
+  <line x1="565" y1="397" x2="625" y2="397" stroke="#ef4444" stroke-width="5"/>
+  <line x1="565" y1="413" x2="625" y2="413" stroke="#f59e0b" stroke-width="5"/>
+  <line x1="565" y1="429" x2="625" y2="429" stroke="#10b981" stroke-width="5"/>
+  <line x1="565" y1="445" x2="625" y2="445" stroke="#2563eb" stroke-width="5"/>
+  <polygon points="625,383 668,421 625,459" fill="#d9e2ec" stroke="#627d98"/>
+  <line class="fiber" x1="668" y1="421" x2="750" y2="421" stroke="#f2c94c"/>
+  <text class="small" x="565" y="478">4 O-band CWDM wavelengths / fiber</text>
+  <text class="bold" x="895" y="424">2 km</text>
+  <text class="small" x="895" y="452">OS2 SMF</text>
+  <text class="no" x="1105" y="424">No</text>
+  <text class="small" x="1105" y="452">One 400G interface</text>
+  <circle cx="1322" cy="423" r="15" fill="#b42318"/><path d="M1314 415l16 16m0-16l-16 16" stroke="#fff" stroke-width="4"/>
+  <text class="no" x="1348" y="430">No</text>
+
+  <!-- LR4 row -->
+  <rect x="55" y="506" width="1490" height="132" rx="12" fill="#ffffff" class="grid"/>
+  <text class="name" x="88" y="554">400G LR4</text>
+  <text class="small" x="88" y="584">Direct detect</text>
+  <rect x="315" y="529" width="120" height="52" rx="8" fill="url(#metal)" stroke="#627d98"/>
+  <rect x="315" y="535" width="48" height="40" rx="5" fill="#dbeafe" stroke="#2563eb"/>
+  <circle cx="331" cy="555" r="8" fill="#fff" stroke="#2563eb"/>
+  <circle cx="349" cy="555" r="8" fill="#fff" stroke="#2563eb"/>
+  <text class="cell" x="315" y="610">Duplex LC/UPC</text>
+  <line x1="565" y1="539" x2="625" y2="539" stroke="#7c3aed" stroke-width="5"/>
+  <line x1="565" y1="555" x2="625" y2="555" stroke="#2563eb" stroke-width="5"/>
+  <line x1="565" y1="571" x2="625" y2="571" stroke="#0891b2" stroke-width="5"/>
+  <line x1="565" y1="587" x2="625" y2="587" stroke="#059669" stroke-width="5"/>
+  <polygon points="625,525 668,563 625,601" fill="#d9e2ec" stroke="#627d98"/>
+  <line class="fiber" x1="668" y1="563" x2="750" y2="563" stroke="#f2c94c"/>
+  <text class="small" x="565" y="620">4 O-band LAN-WDM wavelengths / fiber</text>
+  <text class="bold" x="895" y="566">6–10 km*</text>
+  <text class="small" x="895" y="594">OS2 SMF</text>
+  <text class="no" x="1105" y="566">No</text>
+  <text class="small" x="1105" y="594">One 400G interface</text>
+  <circle cx="1322" cy="565" r="15" fill="#b42318"/><path d="M1314 557l16 16m0-16l-16 16" stroke="#fff" stroke-width="4"/>
+  <text class="no" x="1348" y="572">No</text>
+
+  <!-- ZR row -->
+  <rect x="55" y="648" width="1490" height="132" rx="12" fill="#ecfdf3" class="grid"/>
+  <text class="name" x="88" y="696">400ZR</text>
+  <text class="small" x="88" y="726">Coherent</text>
+  <rect x="315" y="671" width="120" height="52" rx="8" fill="url(#metal)" stroke="#627d98"/>
+  <rect x="315" y="677" width="48" height="40" rx="5" fill="#dbeafe" stroke="#2563eb"/>
+  <circle cx="331" cy="697" r="8" fill="#fff" stroke="#2563eb"/>
+  <circle cx="349" cy="697" r="8" fill="#fff" stroke="#2563eb"/>
+  <text class="cell" x="315" y="752">Duplex LC/UPC</text>
+  <path d="M565 713 C610 665,655 761,700 713 S790 665,835 713" fill="none" stroke="#a855f7" stroke-width="7"/>
+  <text class="cell" x="565" y="690">1 tunable C-band carrier</text>
+  <text class="small" x="565" y="752">Amplitude + phase + polarization</text>
+  <text class="bold" x="895" y="708">80–120 km</text>
+  <text class="small" x="895" y="736">Amplified DCI class</text>
+  <text class="no" x="1105" y="708">No</text>
+  <text class="small" x="1105" y="736">Single coherent line</text>
+  <circle cx="1322" cy="707" r="15" fill="#067647"/><path d="M1314 707l6 6 12-14" fill="none" stroke="#fff" stroke-width="4"/>
+  <text class="yes" x="1348" y="714">Yes</text>
+
+  <!-- ZR+ row -->
+  <rect x="55" y="790" width="1490" height="132" rx="12" fill="#e6f6ff" class="grid"/>
+  <text class="name" x="88" y="838">400ZR+</text>
+  <text class="small" x="88" y="868">Coherent / multirate</text>
+  <rect x="315" y="813" width="120" height="52" rx="8" fill="url(#metal)" stroke="#627d98"/>
+  <rect x="315" y="819" width="48" height="40" rx="5" fill="#dbeafe" stroke="#2563eb"/>
+  <circle cx="331" cy="839" r="8" fill="#fff" stroke="#2563eb"/>
+  <circle cx="349" cy="839" r="8" fill="#fff" stroke="#2563eb"/>
+  <text class="cell" x="315" y="894">Duplex LC/UPC</text>
+  <path d="M565 855 C610 807,655 903,700 855 S790 807,835 855" fill="none" stroke="#2563eb" stroke-width="7"/>
+  <text class="cell" x="565" y="832">Tunable C-band carrier</text>
+  <text class="small" x="565" y="894">QPSK / 8QAM / 16QAM + oFEC</text>
+  <text class="bold" x="895" y="850">Regional / long haul</text>
+  <text class="small" x="895" y="878">Line-system dependent</text>
+  <text class="no" x="1105" y="850">No</text>
+  <text class="small" x="1105" y="878">Single coherent line</text>
+  <circle cx="1322" cy="849" r="15" fill="#067647"/><path d="M1314 849l6 6 12-14" fill="none" stroke="#fff" stroke-width="4"/>
+  <text class="yes" x="1348" y="856">Yes</text>
+
+  <!-- DWDM path -->
+  <rect x="55" y="952" width="1490" height="68" rx="14" fill="#102a43"/>
+  <text class="head" x="92" y="993">Direct IP-over-DWDM path:</text>
+  <text class="head" x="365" y="993">Router ZR/ZR+ LC port</text>
+  <text class="head" x="650" y="993">→ passive mux / ROADM / open line system</text>
+  <text class="head" x="1135" y="993">→ amplified fiber</text>
+  <text class="small" x="55" y="1055">* IEEE 400GBASE-LR4-6 specifies 6 km; vendor LR4 implementations may extend to 10 km. Always use the actual module data sheet and optical budget.</text>
+</svg>

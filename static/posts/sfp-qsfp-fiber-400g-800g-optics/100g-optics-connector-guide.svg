@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">100 Gigabit Ethernet optic and connector comparison</title>
+  <desc id="desc">Comparison of SR4, PSM4, CWDM4, and LR4 QSFP28 optics, showing fiber type, connector, reach, optical organization, and DWDM line compatibility.</desc>
+  <defs>
+    <style>
+      .bg { fill: #f7fafc; }
+      .title { font: 700 42px Arial, sans-serif; fill: #102a43; }
+      .subtitle { font: 400 22px Arial, sans-serif; fill: #486581; }
+      .card { fill: #ffffff; stroke: #bcccdc; stroke-width: 2; rx: 18; }
+      .cardTitle { font: 700 30px Arial, sans-serif; fill: #102a43; }
+      .badge { font: 700 16px Arial, sans-serif; fill: #ffffff; letter-spacing: 1px; }
+      .label { font: 700 18px Arial, sans-serif; fill: #334e68; }
+      .value { font: 400 18px Arial, sans-serif; fill: #243b53; }
+      .small { font: 400 16px Arial, sans-serif; fill: #486581; }
+      .no { fill: #b42318; }
+      .yes { fill: #067647; }
+      .fiber { stroke-width: 8; stroke-linecap: round; }
+      .thin { stroke-width: 4; stroke-linecap: round; }
+      .footer { font: 700 20px Arial, sans-serif; fill: #102a43; }
+    </style>
+    <linearGradient id="metal" x1="0" x2="1">
+      <stop offset="0" stop-color="#d9e2ec"/>
+      <stop offset="0.5" stop-color="#f0f4f8"/>
+      <stop offset="1" stop-color="#9fb3c8"/>
+    </linearGradient>
+  </defs>
+
+  <rect class="bg" width="1600" height="900"/>
+  <text class="title" x="70" y="72">100G QSFP28 optics: the connector reveals the optical layout</text>
+  <text class="subtitle" x="70" y="110">The same QSFP28 body can carry parallel MMF, parallel SMF, or four wavelengths over duplex SMF.</text>
+
+  <!-- SR4 -->
+  <g transform="translate(55 155)">
+    <rect class="card" width="355" height="630"/>
+    <rect x="24" y="24" width="82" height="32" rx="16" fill="#007c91"/>
+    <text class="badge" x="42" y="46">MMF</text>
+    <text class="cardTitle" x="24" y="98">100GBASE-SR4</text>
+    <rect x="65" y="132" width="225" height="74" rx="10" fill="url(#metal)" stroke="#627d98" stroke-width="2"/>
+    <rect x="65" y="148" width="58" height="42" rx="5" fill="#1f2933"/>
+    <rect x="78" y="160" width="32" height="18" rx="3" fill="#101820"/>
+    <rect x="288" y="148" width="34" height="42" rx="8" fill="#00a6c7"/>
+    <text class="small" x="87" y="228" text-anchor="middle">MPO-12</text>
+    <line class="fiber" x1="72" y1="265" x2="138" y2="265" stroke="#27b3c2"/>
+    <line class="fiber" x1="72" y1="285" x2="138" y2="285" stroke="#27b3c2"/>
+    <line class="fiber" x1="72" y1="305" x2="138" y2="305" stroke="#27b3c2"/>
+    <line class="fiber" x1="72" y1="325" x2="138" y2="325" stroke="#27b3c2"/>
+    <line class="fiber" x1="217" y1="265" x2="283" y2="265" stroke="#8b5cf6"/>
+    <line class="fiber" x1="217" y1="285" x2="283" y2="285" stroke="#8b5cf6"/>
+    <line class="fiber" x1="217" y1="305" x2="283" y2="305" stroke="#8b5cf6"/>
+    <line class="fiber" x1="217" y1="325" x2="283" y2="325" stroke="#8b5cf6"/>
+    <text class="small" x="177" y="354" text-anchor="middle">4 Tx + 4 Rx fibers</text>
+    <text class="label" x="24" y="402">Fiber</text><text class="value" x="135" y="402">OM3 / OM4</text>
+    <text class="label" x="24" y="442">Reach</text><text class="value" x="135" y="442">70 m / 100 m</text>
+    <text class="label" x="24" y="482">Method</text><text class="value" x="135" y="482">4 parallel lanes</text>
+    <text class="label" x="24" y="522">Breakout</text><text class="value" x="135" y="522">4 × 25G possible</text>
+    <rect x="24" y="552" width="307" height="52" rx="10" fill="#fff1f0" stroke="#fda29b"/>
+    <circle class="no" cx="52" cy="578" r="13"/><path d="M45 571l14 14m0-14l-14 14" stroke="#fff" stroke-width="4"/>
+    <text class="value" x="76" y="585">Not a DWDM line optic</text>
+  </g>
+
+  <!-- PSM4 -->
+  <g transform="translate(435 155)">
+    <rect class="card" width="355" height="630"/>
+    <rect x="24" y="24" width="82" height="32" rx="16" fill="#d97706"/>
+    <text class="badge" x="42" y="46">SMF</text>
+    <text class="cardTitle" x="24" y="98">100G PSM4</text>
+    <rect x="65" y="132" width="225" height="74" rx="10" fill="url(#metal)" stroke="#627d98" stroke-width="2"/>
+    <rect x="65" y="148" width="58" height="42" rx="5" fill="#1f2933"/>
+    <rect x="78" y="160" width="32" height="18" rx="3" fill="#101820"/>
+    <rect x="288" y="148" width="34" height="42" rx="8" fill="#f59e0b"/>
+    <text class="small" x="87" y="228" text-anchor="middle">MPO-12</text>
+    <line class="fiber" x1="72" y1="265" x2="138" y2="265" stroke="#f59e0b"/>
+    <line class="fiber" x1="72" y1="285" x2="138" y2="285" stroke="#f59e0b"/>
+    <line class="fiber" x1="72" y1="305" x2="138" y2="305" stroke="#f59e0b"/>
+    <line class="fiber" x1="72" y1="325" x2="138" y2="325" stroke="#f59e0b"/>
+    <line class="fiber" x1="217" y1="265" x2="283" y2="265" stroke="#f59e0b"/>
+    <line class="fiber" x1="217" y1="285" x2="283" y2="285" stroke="#f59e0b"/>
+    <line class="fiber" x1="217" y1="305" x2="283" y2="305" stroke="#f59e0b"/>
+    <line class="fiber" x1="217" y1="325" x2="283" y2="325" stroke="#f59e0b"/>
+    <text class="small" x="177" y="354" text-anchor="middle">4 Tx + 4 Rx fibers</text>
+    <text class="label" x="24" y="402">Fiber</text><text class="value" x="135" y="402">OS2 single-mode</text>
+    <text class="label" x="24" y="442">Reach</text><text class="value" x="135" y="442">Up to 500 m</text>
+    <text class="label" x="24" y="482">Method</text><text class="value" x="135" y="482">4 parallel lanes</text>
+    <text class="label" x="24" y="522">Breakout</text><text class="value" x="135" y="522">4 × 25G possible</text>
+    <rect x="24" y="552" width="307" height="52" rx="10" fill="#fff1f0" stroke="#fda29b"/>
+    <circle class="no" cx="52" cy="578" r="13"/><path d="M45 571l14 14m0-14l-14 14" stroke="#fff" stroke-width="4"/>
+    <text class="value" x="76" y="585">Not a DWDM line optic</text>
+  </g>
+
+  <!-- CWDM4 -->
+  <g transform="translate(815 155)">
+    <rect class="card" width="355" height="630"/>
+    <rect x="24" y="24" width="82" height="32" rx="16" fill="#d97706"/>
+    <text class="badge" x="42" y="46">SMF</text>
+    <text class="cardTitle" x="24" y="98">100G CWDM4</text>
+    <rect x="65" y="132" width="225" height="74" rx="10" fill="url(#metal)" stroke="#627d98" stroke-width="2"/>
+    <rect x="65" y="144" width="58" height="50" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <circle cx="84" cy="169" r="9" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+    <circle cx="106" cy="169" r="9" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+    <rect x="288" y="148" width="34" height="42" rx="8" fill="#22c55e"/>
+    <text class="small" x="94" y="228" text-anchor="middle">Duplex LC</text>
+    <line class="thin" x1="65" y1="278" x2="130" y2="278" stroke="#ef4444"/>
+    <line class="thin" x1="65" y1="290" x2="130" y2="290" stroke="#f59e0b"/>
+    <line class="thin" x1="65" y1="302" x2="130" y2="302" stroke="#10b981"/>
+    <line class="thin" x1="65" y1="314" x2="130" y2="314" stroke="#2563eb"/>
+    <polygon points="130,263 172,296 130,329" fill="#d9e2ec" stroke="#627d98"/>
+    <line class="fiber" x1="172" y1="296" x2="285" y2="296" stroke="#f2c94c"/>
+    <text class="small" x="177" y="354" text-anchor="middle">4 CWDM wavelengths → 1 fiber</text>
+    <text class="label" x="24" y="402">Fiber</text><text class="value" x="135" y="402">OS2 single-mode</text>
+    <text class="label" x="24" y="442">Reach</text><text class="value" x="135" y="442">Up to 2 km</text>
+    <text class="label" x="24" y="482">Method</text><text class="value" x="135" y="482">O-band CWDM</text>
+    <text class="label" x="24" y="522">Breakout</text><text class="value" x="135" y="522">No passive breakout</text>
+    <rect x="24" y="552" width="307" height="52" rx="10" fill="#fff1f0" stroke="#fda29b"/>
+    <circle class="no" cx="52" cy="578" r="13"/><path d="M45 571l14 14m0-14l-14 14" stroke="#fff" stroke-width="4"/>
+    <text class="value" x="76" y="585">Not a C-band DWDM optic</text>
+  </g>
+
+  <!-- LR4 -->
+  <g transform="translate(1195 155)">
+    <rect class="card" width="355" height="630"/>
+    <rect x="24" y="24" width="82" height="32" rx="16" fill="#d97706"/>
+    <text class="badge" x="42" y="46">SMF</text>
+    <text class="cardTitle" x="24" y="98">100GBASE-LR4</text>
+    <rect x="65" y="132" width="225" height="74" rx="10" fill="url(#metal)" stroke="#627d98" stroke-width="2"/>
+    <rect x="65" y="144" width="58" height="50" rx="5" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+    <circle cx="84" cy="169" r="9" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+    <circle cx="106" cy="169" r="9" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+    <rect x="288" y="148" width="34" height="42" rx="8" fill="#2563eb"/>
+    <text class="small" x="94" y="228" text-anchor="middle">Duplex LC</text>
+    <line class="thin" x1="65" y1="278" x2="130" y2="278" stroke="#7c3aed"/>
+    <line class="thin" x1="65" y1="290" x2="130" y2="290" stroke="#2563eb"/>
+    <line class="thin" x1="65" y1="302" x2="130" y2="302" stroke="#0891b2"/>
+    <line class="thin" x1="65" y1="314" x2="130" y2="314" stroke="#059669"/>
+    <polygon points="130,263 172,296 130,329" fill="#d9e2ec" stroke="#627d98"/>
+    <line class="fiber" x1="172" y1="296" x2="285" y2="296" stroke="#f2c94c"/>
+    <text class="small" x="177" y="354" text-anchor="middle">4 LAN-WDM wavelengths → 1 fiber</text>
+    <text class="label" x="24" y="402">Fiber</text><text class="value" x="135" y="402">OS2 single-mode</text>
+    <text class="label" x="24" y="442">Reach</text><text class="value" x="135" y="442">Up to 10 km</text>
+    <text class="label" x="24" y="482">Method</text><text class="value" x="135" y="482">O-band LAN-WDM</text>
+    <text class="label" x="24" y="522">Breakout</text><text class="value" x="135" y="522">No passive breakout</text>
+    <rect x="24" y="552" width="307" height="52" rx="10" fill="#fff1f0" stroke="#fda29b"/>
+    <circle class="no" cx="52" cy="578" r="13"/><path d="M45 571l14 14m0-14l-14 14" stroke="#fff" stroke-width="4"/>
+    <text class="value" x="76" y="585">Client optic, not DWDM line</text>
+  </g>
+
+  <rect x="55" y="815" width="1495" height="52" rx="12" fill="#e6f6ff" stroke="#84c5f4"/>
+  <text class="footer" x="802" y="848" text-anchor="middle">LC means “two fibers,” not “DWDM compatible.” Wavelength plan—not connector shape—decides DWDM suitability.</text>
+</svg>

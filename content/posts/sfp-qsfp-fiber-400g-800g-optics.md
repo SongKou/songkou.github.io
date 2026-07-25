@@ -33,37 +33,75 @@ Do not infer the speed from appearance. A 1G SFP, 10G SFP+, and 25G SFP28 can us
 
 ### 2.1 Standard optical SFP
 
-![Optical SFP module with a duplex optical receptacle](/posts/sfp-qsfp-fiber-400g-800g-optics/optical-sfp.jpg)
+![Illustrative physical comparison of three SFP-family fronts: duplex-LC optical, simplex-LC BiDi, and shielded RJ45 copper, from left to right](/posts/sfp-qsfp-fiber-400g-800g-optics/sfp-physical-types.png)
 
-The classic optical SFP-family module is narrow and usually has two small LC openings: one transmit and one receive. SX/SR multimode and LX/LR single-mode models may look the same externally. Read the label or the module EEPROM rather than relying on pull-tab color.
+The image is an illustrative physical comparison, not a speed or part-number guide. SFP, SFP+, and SFP28 can use nearly identical housings.
+
+| Photo position | Front interface | What it tells you | What it does not tell you |
+| --- | --- | --- | --- |
+| Left | Duplex LC | Separate transmit and receive fibers; common on SR/LR and many WDM optics | Rate, reach, wavelength, or fiber grade |
+| Center | Simplex LC | A likely BX/BiDi optic using one fiber | The complementary transmit/receive wavelength pair |
+| Right | Shielded RJ45 | A twisted-pair copper module | Supported rate, reach, or host power limits |
+
+The left-hand example is the classic optical SFP-family module: narrow, with two small LC openings for transmit and receive. SX/SR multimode and LX/LR single-mode models may look the same externally. Read the label or module EEPROM rather than relying on pull-tab color.
 
 ### 2.2 Copper RJ45 SFP
 
-![Copper SFP module with an RJ45 socket](/posts/sfp-qsfp-fiber-400g-800g-optics/rj45-sfp.png)
+The right-hand module replaces the optical receptacle with a shielded twisted-pair Ethernet socket. A 1G 1000BASE-T SFP commonly supports 100 m, while a 10GBASE-T SFP+ may be limited to about 30 m and consume substantially more power. Cisco's current [1G SFP documentation](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/gigabit-ethernet-gbic-sfp-modules/datasheet-c78-366584.html) and [10G SFP+ documentation](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/data_sheet_c78-455693.html) are useful examples of the power and reach differences.
 
-An RJ45 SFP replaces the optical receptacle with a shielded twisted-pair Ethernet socket. A 1G 1000BASE-T SFP commonly supports 100 m, while a 10GBASE-T SFP+ may be limited to about 30 m and consume substantially more power. Cisco's current [1G SFP documentation](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/gigabit-ethernet-gbic-sfp-modules/datasheet-c78-366584.html) and [10G SFP+ documentation](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/data_sheet_c78-455693.html) are useful examples of the power and reach differences.
+A real copper module for comparison — note the shielded RJ45 front and the classic narrow SFP body:
 
-### 2.3 Compact and bidirectional SFPs
+![Cisco copper RJ45 SFP module product photograph, showing the shielded twisted-pair socket in a standard SFP housing](/posts/sfp-qsfp-fiber-400g-800g-optics/rj45-sfp.png)
 
-![Compact dual-channel bidirectional SFP](/posts/sfp-qsfp-fiber-400g-800g-optics/compact-bidi-sfp.png)
+### 2.3 Bidirectional and Compact SFPs
 
-The pictured Compact SFP contains two single-fiber BiDi channels. A more common BX/BiDi module presents one simplex LC port and sends the two directions on different wavelengths over one strand. BiDi modules must be installed as complementary pairs: for example, an upstream unit transmitting at one wavelength connects to a downstream unit transmitting at the other.
+The center module illustrates a common BX/BiDi optic: one simplex LC port sends the two directions on different wavelengths over one strand. A Compact SFP is a denser variant that can place two single-fiber BiDi channels in one SFP-width assembly. BiDi optics must be installed as complementary pairs: for example, an upstream unit transmitting at one wavelength connects to a downstream unit transmitting at the other.
+
+A real Compact SFP — Cisco's GLC-2BX-D, two downstream BiDi channels in one SFP-width module, with both simplex LC openings visible at the front:
+
+![Cisco GLC-2BX-D Compact SFP product photograph: a dual-channel bidirectional module with two simplex LC ports in a single SFP housing](/posts/sfp-qsfp-fiber-400g-800g-optics/compact-bidi-sfp.png)
 
 ### 2.4 DAC and AOC assemblies
 
-![SFP+ direct-attach copper cable](/posts/sfp-qsfp-fiber-400g-800g-optics/sfp-dac.png)
+![Illustrative physical comparison of a thick black SFP+ passive DAC assembly and a thinner aqua SFP+ AOC assembly, with both captive module ends visible](/posts/sfp-qsfp-fiber-400g-800g-optics/dac-aoc-physical-comparison.png)
 
-A **direct-attach cable (DAC)** is twinax copper with the transceiver ends permanently attached. Passive DAC is normally the lowest-power, lowest-cost choice for a short in-rack link.
+| Physical clue | Passive DAC, left | AOC, right |
+| --- | --- | --- |
+| Cable between the ends | Thick copper twinax | Thin optical fiber |
+| Conversion electronics | Normally none in a passive DAC | Electrical-to-optical conversion inside each end |
+| Typical fit | Shortest, lowest-power in-rack links | Longer links and easier cable routing |
+| Field replacement | Replace the complete captive assembly | Replace the complete captive assembly |
 
-![SFP+ active optical cable](/posts/sfp-qsfp-fiber-400g-800g-optics/sfp-aoc.jpg)
+The left-hand **direct-attach cable (DAC)** is twinax copper with the transceiver ends permanently attached. Passive DAC is normally the lowest-power, lowest-cost choice for a short in-rack link.
 
-An **active optical cable (AOC)** also has permanently attached ends, but the cable between them is fiber. It is thinner and easier to route than twinax and can reach farther, but a damaged connector normally requires replacing the complete assembly.
+The right-hand **active optical cable (AOC)** also has permanently attached ends, but the cable between them is fiber. It is thinner and easier to route than twinax and can reach farther, but a damaged connector normally requires replacing the complete assembly.
+
+The real products, for the same physical clues — thick black twinax on the DAC, thin colored fiber on the AOC, captive SFP+ ends on both:
+
+![Cisco SFP+ passive direct-attach copper cable product photograph: thick black twinax with permanently attached module ends](/posts/sfp-qsfp-fiber-400g-800g-optics/sfp-dac.png)
+
+![Cisco SFP+ active optical cable product photograph: thin orange fiber with permanently attached module ends](/posts/sfp-qsfp-fiber-400g-800g-optics/sfp-aoc.jpg)
+
+**Ordering check:** Confirm the connector form at both ends, line rate, cable length, breakout mapping, and host-platform qualification. DAC and AOC ends are captive; they do not accept separate patch cords.
 
 ### 2.5 QSFP is visibly wider
 
-![QSFP100 optical modules with duplex-LC and MPO fronts](/posts/sfp-qsfp-fiber-400g-800g-optics/qsfp100-optical-lineup.png)
+![Illustrative 100G QSFP28 purchasing pairs: an SR4-style module with an aqua MPO cable on the left and a CWDM4/LR4-style module with a blue duplex-LC connector on yellow OS2 fiber on the right](/posts/sfp-qsfp-fiber-400g-800g-optics/100g-qsfp28-physical-pairs.png)
 
-QSFP-family modules are wider because they expose four host electrical lanes. The photograph shows that aggregate rate still does not determine the front connector: LR4 and CWDM4 use duplex LC, while SR4 and PSM4 use a rectangular MPO connector.
+The QSFP28 body is visibly wider than SFP because it carries four host electrical lanes. The front connector, however, depends on the optical organization.
+
+| Photo pair | Front interface | Typical 100G class | Cable clue |
+| --- | --- | --- | --- |
+| Left | MPO family | SR4; the same shell is also used by PSM4 variants | Aqua normally suggests OM3/OM4 multimode for SR4 |
+| Right | Duplex LC | CWDM4 or LR4 | Yellow normally suggests OS2 single-mode |
+
+The image is for physical recognition only. The MPO shell rendering does not establish MPO-12 population, key orientation, polarity, or male/female pinning. The same QSFP28 metal body and connector family can carry different reach, wavelength, and fiber specifications, so verify the module label and EEPROM.
+
+![Clear comparison of 100G QSFP28 SR4, PSM4, CWDM4, and LR4 optics, including connector, fiber type, reach, lane organization, breakout behavior, and DWDM suitability](/posts/sfp-qsfp-fiber-400g-800g-optics/100g-optics-connector-guide.svg)
+
+The diagram makes the front-interface difference explicit: **SR4 and PSM4 use parallel fibers through MPO**, while **CWDM4 and LR4 multiplex four optical wavelengths onto a duplex-LC pair**.
+
+LC does not automatically mean DWDM. The 100G CWDM4 and LR4 wavelengths are client-side O-band wavelength plans, not tunable C-band ITU-grid line channels.
 
 ![QSFP28-to-SFP28 adapter with an SFP module inserted](/posts/sfp-qsfp-fiber-400g-800g-optics/qsfp-to-sfp-adapter.jpg)
 
@@ -88,6 +126,22 @@ A QSA adapter places a one-lane SFP/SFP+/SFP28 module in a four-lane QSFP cage. 
 | OSFP | 400G/800G | 8 lanes | Larger module with greater thermal headroom |
 
 The [QSFP-DD MSA](https://www.qsfp-dd.com/specification/) defines eight-lane QSFP-DD, QSFP-DD800, and newer generations. A QSFP-DD cage is mechanically designed to accept earlier four-lane QSFP modules, but the host still decides which electrical rates, protocols, FEC modes, and module power classes are supported. OSFP is a different physical format and does not fit a QSFP-DD cage.
+
+### 3.1 The same families in physical form
+
+The diagram above shows relative sizes; these product photographs show what the major families actually look like in hand. The SFP-family body is pictured in section 2; QSFP112 is pictured in section 5.1.
+
+**QSFP28 (100G)** — four real Cisco modules. The body is identical across all four; only the front interface (duplex LC on LR4/CWDM4, MPO on SR4, and PSM4's MPO behind the orange tab) and the optics inside differ. The colored pull tabs are a vendor convention for the optical class — helpful in a crowded switch faceplate, but never a substitute for reading the label:
+
+![Four Cisco 100G QSFP28 modules side by side: LR4 with blue pull tab and duplex LC, SR4 with beige tab and MPO, CWDM4 with green tab and duplex LC, PSM4 with orange tab and MPO](/posts/sfp-qsfp-fiber-400g-800g-optics/qsfp100-optical-lineup.png)
+
+**QSFP-DD800 (800G)** — same width as QSFP28, but look at the rear: the second, deeper row of host contacts is the "double density" that carries eight electrical lanes. This 2×400G-FR4 unit shows its twin duplex-LC front and a green pull tab labeled with the breakout mode:
+
+![Cisco QSFP-DD800 2x400G-FR4 module product photograph, showing the twin duplex-LC front, green 2x400G pull tab, and the double row of host edge contacts](/posts/sfp-qsfp-fiber-400g-800g-optics/qsfpdd800-2x400g-fr4.png)
+
+**OSFP (400G/800G)** — visibly wider and deeper than the QSFP family, with the integrated heat sink ridges on top that give it its thermal headroom. It requires its own cage; it does not fit QSFP-DD ports:
+
+![Cisco OSFP 800G module product photograph, showing the wider body, integrated heat-sink ridges on the top surface, and MPO front receptacle](/posts/sfp-qsfp-fiber-400g-800g-optics/osfp-800g-dr8p.jpg)
 
 ## 4. Fiber types: multimode and single-mode
 
@@ -128,19 +182,39 @@ The Fiber Optic Association maintains a useful [comparison of OM and OS fiber ty
 
 QSFP and OSFP describe the **pluggable module body** that enters the switch cage. LC and MPO describe the **fiber connector** that enters the front of that module. Therefore, “an OSFP cable” or “a QSFP connector” is incomplete wording: an OSFP or QSFP-family optic may present duplex LC, one MPO, dual MPO, or another optical interface.
 
-| QSFP-family module | OSFP module |
-| --- | --- |
-| ![QSFP112 400G module with a single MPO receptacle](/posts/sfp-qsfp-fiber-400g-800g-optics/qsfp112-400g-dr4.png) | ![OSFP 800G module with integrated heat sink and an MPO-16 receptacle](/posts/sfp-qsfp-fiber-400g-800g-optics/osfp-800g-dr8p.jpg) |
-| QSFP is the narrower four-lane family; QSFP-DD adds a second row of host contacts for eight lanes. The front shown here is MPO, but other QSFP optics use duplex LC. | OSFP is wider and commonly has an integrated heat sink for higher-power 400G/800G optics. It uses a different cage and may expose MPO-16, dual MPO-12, or LC interfaces. |
+#### Module bodies: QSFP-family versus OSFP
 
-| Duplex LC cable connectors | MPO multi-fiber connector |
-| --- | --- |
-| ![Single-mode and multimode duplex LC patch cords](/posts/sfp-qsfp-fiber-400g-800g-optics/singlemode-multimode-patch-cords.jpg) | ![Close-up of a pinned male MPO connector end face](/posts/sfp-qsfp-fiber-400g-800g-optics/mpo-connector-closeup.jpg) |
-| LC carries one fiber per ferrule. A duplex clip normally keeps the Tx and Rx fibers together. LC is common on wavelength-multiplexed FR4/LR4/ZR optics because several wavelengths share one fiber pair. | MPO places a row of fibers between two alignment-pin positions. This photograph shows a **pinned/male** plug; it must mate with an unpinned/female interface. MPO is common on parallel SR4, DR4, VR8, and DR8 optics. |
+![Physical QSFP112 400G module with its MPO receptacle and extraction tab visible](/posts/sfp-qsfp-fiber-400g-800g-optics/qsfp112-400g-dr4.png)
+
+(The OSFP body itself is pictured in section 3.1, and the DR8P module beside its mating MPO-16/APC cable in section 10.2.)
+
+| Module body | Physical clue | Front interface is not implied |
+| --- | --- | --- |
+| QSFP family | Narrower body; QSFP-DD adds a second row of host contacts | Depending on the optic, the front may be duplex LC, one MPO, dual MPO, or another interface |
+| OSFP | Wider and deeper body, commonly with an integrated heat sink | OSFP describes the switch-cage interface, not whether the cable side is LC, MPO-12, or MPO-16 |
+
+#### Cable-side connectors: duplex LC versus MPO
+
+![Illustrative outer-housing and physical form-factor comparison of a blue duplex-LC connector and a green MPO-family multi-fiber connector](/posts/sfp-qsfp-fiber-400g-800g-optics/lc-mpo-connector-form-factors.png)
+
+| Photo position | Connector family | Visible clue | Fields that must still be checked |
+| --- | --- | --- | --- |
+| Left | Duplex LC; blue commonly indicates UPC | Two small LC ferrules held together by a duplex clip | UPC/APC polish, Tx/Rx polarity, fiber grade, and module wavelength |
+| Right | MPO family; green commonly indicates APC | One wide rectangular multi-fiber ferrule and a keyed housing | MPO-12 versus MPO-16, populated fiber count, pin state, key orientation, polarity, and fiber grade |
+
+Connector color is only a convention; the rendered end faces are not suitable for identifying polish, fiber count, or pin state.
+
+LC carries one fiber per ferrule, and a duplex clip normally keeps the Tx and Rx fibers together. LC is common on FR4/LR4 because four client wavelengths share each transmit and receive fiber. It is also common on coherent ZR/ZR+ modules, which place one tunable line carrier per direction on a duplex single-mode pair. MPO places multiple fibers in one rectangular ferrule and is common on parallel SR4, DR4, VR8, and DR8 optics.
 
 ### 5.2 MPO-8 and MPO-12 can look identical from the outside
 
 “MPO-8” usually means a Base-8 assembly with eight active fibers in the outer positions of a 12-position MPO footprint. A fully populated MPO-12 uses all twelve positions. The outer latch, boot, key, and housing can be the same, so do not identify the fiber count from jacket or connector color alone—check the end face, label, and manufacturer part number.
+
+A real MPO plug up close — and this macro photograph teaches the pin rule better than any diagram: the two steel guide pins flanking the fiber row make this a **pinned/male** connector, so it must mate with an unpinned/female interface. The row of fiber end faces between the pins is where MPO-8/12/16 population actually differs:
+
+![Macro photograph of a pinned male MPO connector with aqua push-pull boot, showing the two steel alignment pins and the row of fiber end faces between them](/posts/sfp-qsfp-fiber-400g-800g-optics/mpo-connector-closeup.jpg)
+
+The physical photo identifies the connector family and pin state; the exact diagram below identifies the fiber positions that cannot be trusted from housing shape or color alone.
 
 ![MPO-8, MPO-12, and MPO-16 fiber-position comparison](/posts/sfp-qsfp-fiber-400g-800g-optics/mpo-fiber-position-comparison.svg)
 
@@ -158,23 +232,45 @@ For a typical four-lane parallel optic, positions 1–4 carry one direction and 
 | Dual MPO-12 | Some 800G DR8/VR8 modules | Two independent eight-fiber groups |
 | SC/ST | Legacy panels and industrial environments | Larger connector; adapter loss must enter the link budget |
 
-Blue commonly indicates UPC and green indicates APC, but color is only a clue. Never directly mate APC and UPC end faces. With MPO, also check whether the module is **pinned/male** and therefore requires an **unpinned/female** cable connector.
+**Ordering check:** Blue commonly indicates UPC and green commonly indicates APC, but color is only a clue. Never directly mate APC and UPC end faces. With MPO, also check whether the module is **pinned/male** and therefore requires an **unpinned/female** cable connector.
 
 ## 6. Optical reach codes
 
 The suffix is a technology class, not a complete specification. Exact distance depends on Ethernet generation, fiber grade, connector loss, FEC, and vendor implementation.
 
-| Code | Usual medium | Representative reach | Organization |
-| --- | --- | ---: | --- |
-| SX | MMF, around 850 nm | Hundreds of metres at 1G | One optical lane |
-| SR | MMF, around 850 nm | 10G SR: 300 m OM3 / 400 m OM4 | One or several short-reach lanes |
-| VR | MMF | About 30–50 m at 400G/800G | Very-short-reach parallel PAM4 |
-| LX/LR | SMF, around 1310 nm | Commonly 10 km | One lane or WDM lanes |
-| DR | SMF, around 1310 nm | Commonly 500 m | Parallel single-mode lanes; breakout-friendly |
-| FR | SMF | Commonly 2 km | One 100G wavelength or four WDM wavelengths |
-| ER | SMF | Commonly 40 km | Higher optical budget |
-| ZR | SMF/DWDM | Approximately 80–120 km | Coherent at 400G/800G; older 1G/10G usage differs |
-| ZR+ | Amplified DWDM | Regional to long haul | Coherent, line-system dependent |
+- **SX — hundreds of metres at 1G:** one short-wavelength MMF lane; not a DWDM line optic.
+- **SR — for example, 10G SR at 300 m on OM3 or 400 m on OM4:** one or several parallel MMF lanes; not a DWDM line optic.
+- **VR — about 30–50 m at 400G/800G:** very-short-reach parallel PAM4 on MMF; not a DWDM line optic.
+- **DR — commonly 500 m:** parallel 1310 nm single-mode lanes; not a DWDM line optic.
+- **FR/FR4 — commonly 2 km:** direct detect; FR4 multiplexes four O-band CWDM wavelengths; not a DWDM line optic.
+- **LR/LR4 — 100G commonly 10 km; IEEE 400GBASE-LR4-6 specifies 6 km:** direct detect; LR4 multiplexes four O-band LAN-WDM wavelengths; not a DWDM line optic.
+- **ER — commonly 40 km:** a higher-budget direct-detect single-mode optic; not a DWDM line optic.
+- **ZR — approximately 80–120 km amplified at 400G/800G:** one tunable coherent DWDM carrier; **designed for a compatible DWDM line system**.
+- **ZR+ — regional to long haul:** a coherent carrier with stronger FEC and flexible modulation/rate choices; **designed for an engineered DWDM line system**.
+
+### 6.1 LR and LR4
+
+**LR means long reach, not line-side DWDM.** At 100G and 400G, LR4 is normally a direct-detect Ethernet client optic that multiplexes four closely spaced O-band LAN-WDM wavelengths onto one transmit fiber and receives four wavelengths on the other. Duplex LC and OS2 fiber are typical.
+
+A 100GBASE-LR4 link is commonly specified for 10 km. IEEE 400GBASE-LR4-6 specifies 6 km, while some vendor LR4 modules extend the supported reach to 10 km. LR4 is useful for campus links and unamplified data-center interconnects, but its O-band wavelengths are not ordinary tunable C-band DWDM channels.
+
+### 6.2 FR and FR4
+
+**FR is the shorter, lower-budget relative of LR.** A 400GBASE-FR4 module multiplexes four 100G PAM4 wavelengths onto duplex OS2 fiber for up to 2 km. This reduces fiber count compared with DR4, but it creates one 400G optical interface rather than four independently routable 100G interfaces.
+
+FR4 also is not a DWDM line optic. Its internal CWDM wavelengths are combined and separated inside the transceiver; a C-band DWDM mux or ROADM cannot treat those four wavelengths as four line-system channels.
+
+### 6.3 ZR
+
+Modern **400ZR and 800ZR are coherent line optics**. Instead of four direct-detect client wavelengths, the module creates one tunable carrier on the ITU-T DWDM frequency grid and encodes data in amplitude, phase, and polarization. OIF 400ZR targets interoperable point-to-point DCI, while [OIF 800ZR](https://www.oiforum.com/oif-releases-800zr-coherent-interface-implementation-agreement-ia-and-key-400zr-ia-updates-addressing-market-demands-for-scalable-interoperable-high-capacity-solutions/) targets amplified 80–120 km DCI.
+
+ZR modules commonly use duplex LC/UPC and can connect from a router or switch directly to a compatible passive mux/demux, ROADM, or open line system. The optical design must still satisfy frequency-slot, launch-power, filtering, OSNR, amplification, and receiver-power requirements.
+
+### 6.4 ZR+
+
+**ZR+ is not simply “ZR with more transmit power.”** OpenZR+ adds stronger oFEC, multi-rate 100/200/300/400G operation, and modulation choices such as QPSK, 8QAM, and 16QAM. Lower-order modulation trades capacity for reach; the actual distance depends on the module mode and complete line system.
+
+[OpenZR+](https://openzrplus.org/about/) targets regional and long-haul DCI and carrier applications, including multi-span amplified links and ROADM infrastructure. ZR+ interoperability applies only to supported modes; host software, CMIS application codes, FEC, grid spacing, baud rate, and line-system filters must all agree.
 
 Older 1G names such as EX and ZX and older 10G ZR products are not equivalent to modern 400ZR/800ZR coherent specifications.
 
@@ -236,11 +332,56 @@ Coherent optics encode information in the amplitude, phase, and polarization of 
 
 The result is much longer reach and compatibility with amplified DWDM networks, at the cost of more power, heat, DSP latency, and optical engineering.
 
+### 8.4 Which transceivers can connect directly to DWDM equipment?
+
+“Connect directly to DWDM equipment” can describe two different interfaces:
+
+1. **Client side of an active transponder or muxponder:** the transport device terminates an ordinary Ethernet optic and performs optical-electrical-optical conversion. An LR4 or FR4 module may connect here if the client port supports it, but that module is not itself on the DWDM line.
+2. **Line side, passive mux/demux, ROADM, or open line system:** the router-facing module must generate the correct ITU-grid DWDM wavelength or coherent frequency slot. This is the direct IP-over-DWDM case.
+
+| Router/switch transceiver | Usual front connector | Direct to passive DWDM mux or ROADM line? | Correct interpretation |
+| --- | --- | --- | --- |
+| Fixed-channel or tunable DWDM SFP/SFP+/SFP28 | Commonly duplex LC/UPC | **Yes**, when its ITU channel, power, reach, and host support match | Traditional “colored” 1G/10G/25G DWDM wavelength |
+| 400ZR/400ZR+ or 800ZR/800ZR+ in QSFP-DD/OSFP | Commonly duplex LC/UPC | **Yes**, with a compatible mux/ROADM/open line system | Coherent tunable C-band line optic; some products also support L-band |
+| 100G CWDM4 and 100G/400G FR4 or LR4 | Duplex LC/UPC | **No** on the DWDM line | “Gray” direct-detect client optic; LC shape does not make it DWDM |
+| SR4, VR4/VR8, DR4/DR8, or PSM4 | MPO | **No** | Parallel client fibers, not a wavelength-routed line interface |
+| DAC or AOC | Captive cable ends | **No** | Short client interconnect only |
+
+Cisco’s [10G tunable DWDM SFP+](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/dwdm-transceiver-modules/data_sheet_c78-711186.html) is an example of a classic ITU-channel LC optic. Modern [400G ZR/ZR+ QSFP-DD modules](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/qsfp-dd-400g-zr-zr-coh-lp-optics-ds.html) place the coherent DWDM line function directly in a router or switch port. The grid itself is defined by [ITU-T G.694.1](https://www.itu.int/rec/T-REC-G.694.1-202010-I).
+
+Before connecting a ZR or ZR+ module to a DWDM system, verify:
+
+- The mux/ROADM passband and channel spacing support the module’s baud rate and selected frequency slot.
+- Both endpoints use the same line rate, modulation, FEC, and interoperability mode.
+- Launch power and receive power fit the line system; “bright” high-power optics and low-power optics are not interchangeable in every design.
+- The OSNR, chromatic-dispersion, polarization-mode-dispersion, and nonlinear budgets support the selected mode.
+- The host platform supports the module’s power class, cooling, CMIS application, and coherent configuration commands.
+
 ## 9. Representative 400G modules
 
-![Cisco QSFP112 400G DR4 module with MPO connector](/posts/sfp-qsfp-fiber-400g-800g-optics/qsfp112-400g-dr4.png)
+### 9.1 DR4 and FR4/LR4 purchasing pairs
 
-The photographed QSFP112 module uses four approximately 100G host lanes and an MPO optical interface.
+The photo is an illustrative physical comparison, not a vendor part-number reference. Confirm the host cage and exact module data sheet before ordering. The rendered MPO end faces are simplified and do not establish active-fiber positions, key orientation, polarity, or pin state; the table describes a common DR4 ordering combination.
+
+![Illustrative 400G purchasing pairs: a DR4 QSFP-family module beside a green MPO/APC OS2 cable, and an FR4/LR4-style QSFP-family module beside a blue duplex-LC/UPC OS2 cable](/posts/sfp-qsfp-fiber-400g-800g-optics/400g-dr4-fr4-physical-pairs.png)
+
+| Specification | 400G DR4 pair, left | 400G FR4/LR4 pair, right |
+| --- | --- | --- |
+| Typical cable connector | Female/unpinned MPO-12/APC | Duplex LC/UPC |
+| Fiber | OS2 single-mode | OS2 single-mode |
+| Active physical fibers | Eight: four transmit and four receive | Two: one transmit and one receive |
+| Optical organization | Four parallel 100G optical lanes | Four wavelengths multiplexed in each direction |
+| Typical reach | 500 m | 2 km for FR4; 6 km for IEEE LR4-6; some vendor LR4 modules reach 10 km |
+| Breakout behavior | Often supports 4×100G DR1 or 2×200G DR2 when the host supports it | Normally remains one aggregate 400G optical link |
+| Direct DWDM line role | No | No; coherent ZR/ZR+ can look similar but is a different optical class |
+
+**Ordering check:** Do not order from connector shape alone. Confirm module form factor, reach code, connector polish, MPO pin state and polarity, fiber grade, and host qualification. A duplex-LC front can belong to FR4, LR4, ZR, or ZR+; only the exact module specification establishes DWDM compatibility.
+
+### 9.2 Reach, breakout, and DWDM roles
+
+![Clear comparison of 400G DR4, FR4, LR4, ZR, and ZR+ optics, including connector, reach, optical organization, breakout behavior, and direct DWDM suitability](/posts/sfp-qsfp-fiber-400g-800g-optics/400g-optics-dwdm-guide.svg)
+
+The diagram separates two frequently confused facts: **FR4 and LR4 can use duplex LC without being DWDM line optics**, while **ZR and ZR+ use duplex LC and a tunable coherent ITU-grid carrier that can enter a compatible DWDM line system**.
 
 | Model class | Fiber and connector | Reach | How it works |
 | --- | --- | ---: | --- |
@@ -261,17 +402,41 @@ For coherent transport, 400ZR targets interoperable single-span DCI, while ZR+ a
 
 ## 10. Representative 800G modules
 
-### 10.1 QSFP-DD800 twin-port FR4
+### 10.1 QSFP-DD800 twin-port FR4 and OSFP DR8
 
-![QSFP-DD800 module with two duplex-LC 400G FR4 ports](/posts/sfp-qsfp-fiber-400g-800g-optics/qsfpdd800-2x400g-fr4.png)
+The image is illustrative, not an official vendor photograph. QSFP-DD800 2×FR4 may use dual LC or dual CS depending on the manufacturer, so always check the specific part number. Specifications are based on current [QSFP-DD800 2×FR4 documentation](https://smartoptics.com/wp-content/uploads/2025/02/ds-td8003-sc4c-so-qsfp-dd800-800g-2xfr4-r6.2.pdf) and [the Cisco OSFP 800G data sheet](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/osfp-800g-transceiver-modules-ds.html).
+
+![Illustrative comparison: a twin-duplex-LC QSFP-DD800 2xFR4 module with blue LC/UPC patch cords beside a heatsinked OSFP DR8 module with two green MPO-12/APC cables](/posts/sfp-qsfp-fiber-400g-800g-optics/QSFP-DD800-FR4-DR.jpg)
+
+![Spec cards for QSFP-DD800 2xFR4 (2 km, WDM, four wavelengths per duplex port) and OSFP 800G DR8 (500 m, parallel, eight fibers per MPO-12/APC port)](/posts/sfp-qsfp-fiber-400g-800g-optics/QSFP-DD800-FR4-DR-tech-specs.jpg)
 
 `QDD-2X400G-FR4` contains two independent 400G FR4 engines. Each engine multiplexes four 100G wavelengths onto its own duplex-LC pair, giving two 400G links and 800G aggregate electrical capacity.
 
-### 10.2 OSFP DR8
+The real module, for comparison with the rendering above — twin duplex-LC receptacles at the front, the green pull tab labeled with the 2×400G mode, and the QSFP-DD800 signature visible at the rear: a second, deeper row of host contacts carrying the eight electrical lanes:
 
-![OSFP 800G DR8P module with integrated heat sink and MPO-16 front](/posts/sfp-qsfp-fiber-400g-800g-optics/osfp-800g-dr8p.jpg)
+![Cisco QSFP-DD800 2x400G-FR4 module product photograph showing twin duplex-LC front, green labeled pull tab, and double-row host contacts](/posts/sfp-qsfp-fiber-400g-800g-optics/qsfpdd800-2x400g-fr4.png)
 
-OSFP is physically larger and has more thermal headroom. The photographed `OSFP-800G-DR8P` uses an MPO-16 APC front for eight transmit and eight receive single-mode lanes.
+The two module families solve the same 800G problem in opposite ways — WDM over few fibers versus parallel lanes over many:
+
+| Specification | QSFP-DD800 2×FR4 | OSFP 800G DR8 |
+| --- | --- | --- |
+| Aggregate rate | 800 Gb/s | 800 Gb/s |
+| Independent optical ports | 2 × 400G FR4 | 2 × 400G DR4 |
+| Maximum reach | 2 km | 500 m |
+| Fiber | OS2 single-mode | OS2 / G.652 single-mode |
+| Physical fibers used | 4 total | 16 active total |
+| Optical method | 4 CWDM wavelengths per 400G port | 4 parallel Tx/Rx lane pairs per 400G port |
+| Cable connector | 2 × duplex LC/UPC or CS/UPC* | 2 × MPO-12/APC female |
+| Representative module power | Approximately 16 W* | 14.2 W typical; 16–17 W maximum* |
+| Best fit | Longer reach and low fiber count | Short AI-fabric links and native 2×400G breakout |
+
+⚠️ Do not interchange the patch cords: FR4 uses duplex **UPC** connectors; this DR8 implementation uses parallel **MPO-12/APC**. Confirm the exact port connector and module qualification from the vendor part number.
+
+\* QSFP-DD 2×FR4 connector and power vary by manufacturer. OSFP DR8 values shown follow Cisco's current module specification.
+
+### 10.2 OSFP DR8P
+
+OSFP is physically larger and has more thermal headroom. The `OSFP-800G-DR8P` photographed below uses an MPO-16 APC front for eight transmit and eight receive single-mode lanes — the same eight-lane engine as the DR8 above, delivered through one sixteen-fiber connector instead of two MPO-12s.
 
 #### The OSFP-800G-DR8P purchasing pair, in detail
 
@@ -359,11 +524,33 @@ The received signal must also remain below the receiver's maximum input power. L
 
 ### 13.1 Forward error correction
 
-PAM4 has three decision boundaries instead of the single boundary used by NRZ. Its optical and electrical eye openings are therefore smaller, making FEC a normal part of 100G-per-lane designs.
+**FEC (Forward Error Correction)** is math that lets the receiver *fix* bit errors instead of asking for retransmission. The transmitter appends parity symbols to each block of data; the receiver uses them to detect and correct a bounded number of errors per block. The link deliberately runs "dirty" — a raw PAM4 lane at 50/100G per lane has a native bit-error rate around 10⁻⁴, hopeless by itself — and FEC turns that into a post-correction BER better than 10⁻¹²–10⁻¹⁵. That trade is what makes modern optics affordable: accept a noisy, cheap channel and buy the quality back with coding gain, paying roughly 3–7% bandwidth overhead and some latency.
+
+PAM4 is why FEC stopped being optional: it has three decision boundaries instead of NRZ's one, so its optical and electrical eye openings are much smaller, making FEC a structural part of every 100G-per-lane design.
+
+#### The FEC types, in three generations
+
+| FEC | Also called | Where it's used | Character |
+| --- | --- | --- | --- |
+| Firecode / BASE-R (Clause 74) | FC-FEC, KR-FEC | 10G/25G NRZ era | Weak gain but ultra-low latency (tens of ns); often optional |
+| RS(528,514) (Clause 91) | RS-FEC, KR4, CL91 | 100G with 4×25G NRZ lanes (mandatory for SR4; some LR4 links run without) | Reed-Solomon, corrects 7 symbols per codeword, roughly 5 dB coding gain |
+| RS(544,514) (Clause 134/119) | **KP4** | Everything PAM4: 50G lanes and up — 200G/400G/800G | Corrects 15 symbols per codeword, slightly more overhead than KR4, **mandatory**; PAM4 does not work without it |
+| CFEC | — | 400ZR coherent | Concatenated staircase + Hamming, about 10.8 dB gain, sized for interoperable DCI |
+| oFEC | — | OpenZR+/ZR+, OpenROADM coherent | Soft-decision, about 11.6 dB gain — the "stronger FEC" behind ZR+'s extra reach |
+
+Three ideas organize the table:
+
+1. **Stronger channel impairment → stronger code.** NRZ at 25G per lane could get away with weak, optional FEC; PAM4's squeezed eyes made KP4 non-negotiable; coherent line optics facing 80–120+ km of amplified fiber need the soft-decision heavyweights.
+2. **Hard versus soft decision.** The Ethernet FECs are hard-decision: the receiver commits to definite 1s and 0s, then corrects. Soft-decision oFEC instead works from per-bit confidence levels and extracts roughly 1–2 dB more gain — at the cost of DSP power and latency, one reason ZR+ modules run hot.
+3. **KR4 versus KP4 is the classic interoperability killer.** Both are Reed-Solomon, both appear as "RS-FEC" in CLIs, and they do not interoperate. One side running CL91 against a side running KP4 — or no FEC — produces exactly the symptom this section exists for: receive power fine, link down or flapping.
+
+#### Reading the counters
+
+The two numbers that matter operationally are the **pre-FEC BER** and the **corrected/uncorrectable codeword counters**. Pre-FEC BER is the margin gauge: KP4 can correct up to roughly 2×10⁻⁴, so a link idling at 10⁻⁶ pre-FEC has enormous headroom, while one at 10⁻⁴ is living on the cliff edge — error-free today, one dirty connector away from uncorrectables. Any nonzero **uncorrectable** count means frames are genuinely being lost. Corrected codewords climbing steadily is *normal operation by design*, not a fault — the common misreading is treating corrected counts as errors and "fixing" a healthy link.
 
 When troubleshooting, verify:
 
-- RS-FEC or other FEC mode at both ends
+- RS-FEC or other FEC mode at both ends — the same named mode, not merely "FEC enabled"
 - Pre-FEC BER and corrected-codeword counters
 - Uncorrectable codewords
 - Lane alignment and deskew
@@ -418,7 +605,7 @@ Before ordering or installing a transceiver, verify:
 
 1. **400G and 800G are usually not SFP form factors.** They are QSFP112, QSFP-DD/QSFP-DD800, or OSFP.
 2. **Appearance is insufficient.** Similar housings can carry different speeds, fibers, wavelengths, FEC, and reach.
-3. **DR means parallel and breakout-friendly; FR/LR means low fiber count through WDM; ZR/ZR+ means coherent DWDM.**
+3. **DR means parallel and breakout-friendly; FR/LR means low fiber count through client-side WDM; ZR/ZR+ means coherent line-side DWDM.** A duplex-LC connector alone does not make an optic DWDM-compatible.
 4. **400G modern arithmetic is four 100G PAM4 lanes; 800G is eight 100G PAM4 lanes.** Earlier 400G QSFP-DD commonly uses eight 50G lanes.
 5. **Breakout is not guaranteed by lane count.** It requires a compatible host, module application, FEC mode, and cable map.
 6. **Power and cooling are part of link design at 400G/800G.** A module that fits may exceed the port's thermal envelope.
@@ -426,6 +613,8 @@ Before ordering or installing a transceiver, verify:
 
 ## Photo credits and reference scope
 
-The SFP, DAC/AOC, QSFP100, QSFP112, QSFP-DD800, and OSFP product photographs are reproduced for identification and technical commentary from the linked Cisco data sheets: [1G SFP](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/gigabit-ethernet-gbic-sfp-modules/datasheet-c78-366584.html), [10G SFP+](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/data_sheet_c78-455693.html), [100G QSFP](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/datasheet-c78-736282.html), [400G QSFP112](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/400g-qsfp-transceiver-modules-ds.html), [QSFP-DD800](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/qsfp-dd800-transceiver-modules-ds.html), and [OSFP 800G](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/osfp-800g-transceiver-modules-ds.html).
+The SFP-front, DAC/AOC, connector form-factor, 100G purchasing-pair, 400G purchasing-pair, and Section 10 comparison images are illustrative studio renderings created for this article. They are intended for physical recognition, not as dimensionally exact product drawings. Verify dimensions, connector polish, MPO pinning, keying, polarity, active fiber positions, and part number against the manufacturer’s documentation.
 
-The single-mode and multimode patch-cord photograph is by Christophe Finot, licensed CC BY-SA 3.0, via [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Cordons_monomode-multimode_LC.JPG). The MPO end-face photograph is reproduced for identification and technical commentary from Fluke Networks' [Cleaning and Inspecting MPO/MTP Connectors](https://www.flukenetworks.com/knowledge-base/multifiber-pro/cleaning-and-inspecting-mpompt-connectors). Product identifiers are examples, not purchasing endorsements; current host support and specifications must be confirmed against the vendor's compatibility matrix.
+The copper RJ45 SFP, Compact BiDi SFP, DAC, AOC, 100G QSFP28 lineup, QSFP112, QSA, QSFP-DD800, and OSFP product photographs are reproduced for identification and technical commentary from the linked Cisco data sheets: [1G SFP](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/gigabit-ethernet-gbic-sfp-modules/datasheet-c78-366584.html), [10G SFP+](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/data_sheet_c78-455693.html), [100G QSFP](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/datasheet-c78-736282.html), [400G QSFP112](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/400g-qsfp-transceiver-modules-ds.html), [QSFP-DD800](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/qsfp-dd800-transceiver-modules-ds.html), and [OSFP 800G](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/osfp-800g-transceiver-modules-ds.html).
+
+The MPO close-up photograph is reproduced for identification and technical commentary from Fluke Networks' [Cleaning and Inspecting MPO/MTP Connectors](https://www.flukenetworks.com/knowledge-base/multifiber-pro/cleaning-and-inspecting-mpompt-connectors). The single-mode and multimode patch-cord photograph is by Christophe Finot, licensed CC BY-SA 3.0, via [Wikimedia Commons](https://commons.wikimedia.org/wiki/File:Cordons_monomode-multimode_LC.JPG). Product identifiers are examples, not purchasing endorsements; current host support and specifications must be confirmed against the vendor's compatibility matrix.

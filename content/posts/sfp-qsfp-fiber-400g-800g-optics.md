@@ -279,7 +279,7 @@ OSFP is physically larger and has more thermal headroom. The photographed `OSFP-
 
 The key purchasing combination is the **`OSFP-800G-DR8P` transceiver + a female/unpinned MPO-16/APC OS2 cable** — the pair in the photo: the module's receptacle is pinned (male), so the cable must be unpinned (female), and the green connector housing is the APC giveaway (section 5 covers both rules). Cisco specifies 800G over eight 100G optical lanes at 1310 nm, up to 500 m — see the [official data sheet](https://www.cisco.com/c/en/us/products/collateral/interfaces-modules/transceiver-modules/osfp-800g-transceiver-modules-ds.html).
 
-At a glance: **800 Gb/s aggregate** over 8 optical lanes · **500 m maximum reach** on OS2/G.652 single-mode · **MPO-16/APC** optical interface.
+![OSFP-800G-DR8P at a glance: 800 Gb/s over 8 optical lanes, 500 m reach on OS2 single-mode, MPO-16/APC interface, with eight 100G lanes drawn between two DR8P modules](/posts/sfp-qsfp-fiber-400g-800g-optics/MPO-16-APC-OS2-cable-spec.jpg)
 
 | Specification | Value |
 | --- | --- |

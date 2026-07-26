@@ -2253,7 +2253,88 @@ include:
 {% endfor %}
 ```
 
-With the full file in place, the next apply renders 3 + 3×4 = 15 states. The existing users, grants and tables from the appdb/reportdb era report no change (same MySQL objects, merely under new state IDs), and exactly three states change: `ekou_audit_db_user`, `_grants`, and `_table`. Verify with `mysql.db_tables ekou_audit_db` — it should now list `ekou_audit_table`.
+With the full file in place, the next run renders 3 + 3×4 = **15 states**. The real dry run, trimmed to the interesting rows — every object from the appdb/reportdb era reports no change (same MySQL objects, merely under new state IDs), and only the three missing audit pieces show `Result: None`:
+
+```text
+ekou@saltmaster:~$ sudo salt skou_test state.apply mysql.databases test=True
+skou_test:
+...
+          ID: ekou_test_db_user
+     Comment: User ekoumysql@localhost is already present with the desired password
+          ID: ekou_test_db_table
+     Comment: unless condition is true
+          ID: ekou_report_db_grants
+     Comment: Grant ALL PRIVILEGES on ekou_report_db.* to reportuser@localhost is already present
+          ID: ekou_audit_db_database
+      Result: True
+     Comment: Database ekou_audit_db is already present
+          ID: ekou_audit_db_user
+      Result: None
+     Comment: User audituser@localhost is set to be added
+          ID: ekou_audit_db_grants
+      Result: None
+     Comment: MySQL grant ekou_audit_db_grants is set to be created
+          ID: ekou_audit_db_table
+      Result: None
+     Comment: Query would execute, not storing result
+
+Summary for skou_test
+-------------
+Succeeded: 15 (unchanged=3)
+Failed:     0
+-------------
+Total states run:     15
+Total run time:    1.515 s
+```
+
+And the real apply — exactly the predicted three changes:
+
+```text
+ekou@saltmaster:~$ sudo salt skou_test state.apply mysql.databases
+skou_test:
+...
+          ID: ekou_audit_db_user
+    Function: mysql_user.present
+        Name: audituser
+      Result: True
+     Comment: The user audituser@localhost has been added
+     Changes:
+              ----------
+              audituser:
+                  Present
+----------
+          ID: ekou_audit_db_grants
+    Function: mysql_grants.present
+      Result: True
+     Comment: Grant ALL PRIVILEGES on ekou_audit_db.* to audituser@localhost has been added
+     Changes:
+              ----------
+              ekou_audit_db_grants:
+                  Present
+----------
+          ID: ekou_audit_db_table
+    Function: mysql_query.run
+      Result: True
+     Comment: {'query time': {'human': '11.9ms', 'raw': '0.01185'}, 'rows affected': 0}
+     Changes:
+              ----------
+              query:
+                  Executed
+
+Summary for skou_test
+-------------
+Succeeded: 15 (changed=3)
+Failed:     0
+-------------
+Total states run:     15
+Total run time:    1.734 s
+
+ekou@saltmaster:~$ sudo salt skou_test mysql.db_tables ekou_audit_db
+skou_test:
+    - ekou_audit_table
+```
+
+(Both runs also contain the twelve already-converged states — install, service, deps, and the four states for each of the two older databases — all reporting no change, exactly as in the dry run.) The migration is complete: three databases, one loop file, and the gap from the schematic version closed with the table now present.
 
 After the migration, a fourth database really is a **pillar edit only** — no new state file, no init.sls change. That is the end point of the whole section-7 progression: ad-hoc commands → states → the top file → pillar as data → states as templates that consume it.
 

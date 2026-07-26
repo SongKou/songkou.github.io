@@ -1744,6 +1744,314 @@ Edit `files/nginx.conf` on the master, run the highstate, and Salt rewrites the 
 
 Use `mysql.sls` while the state is one short file; move to `mysql/init.sls` the moment it needs supporting files or a second SLS. The migration is `mkdir` + `git mv mysql.sls mysql/init.sls` — the top file, CLI commands, and requisites all keep working, because the state's *name* never changed.
 
+### 7.8 Adding a second database — and the include rule the layout teaches
+
+With the 7.7 layout in place, adding a second database to `skou_test` should be three touches: one pillar block, one SLS file, one include line. This lab run did exactly that — and hit a compile error on the way that teaches the one rule about `include:` that 7.7 didn't cover. Both the error and the fix are reproduced with the real outputs.
+
+**Step 1 — the pillar block.** `/srv/pillar/mysql.sls` grows a second definition (the pillar top file already matches, so nothing else changes):
+
+```text
+ekou@saltmaster:~$ cat /srv/pillar/mysql.sls
+# Connection default for Salt's mysql modules: talk to MySQL over the unix
+# socket, where Ubuntu's auth_socket lets root in without a password.
+mysql.unix_socket: /var/run/mysqld/mysqld.sock
+
+# Application database definition — names plus the actual secret.
+appdb:
+  name: ekou_test_db
+  table: ekou_test_table
+  user: ekoumysql
+  password: Cisco12345
+
+reportdb:
+  name: ekou_report_db
+  table: ekou_report_table
+  user: reportuser
+  password: Report12345
+```
+
+**Step 2 — the new state file.** `/srv/salt/mysql/reportdb.sls` is the same shape as `appdb.sls` with a different pillar key — and **distinct state IDs**, because IDs are global across a compiled run, so `appdb_database` cannot appear twice.
+
+**Step 3 — first attempt, and the compile error.** Applying just the new piece, exactly as the 7.7 layout promises you can:
+
+```text
+ekou@saltmaster:~$ sudo salt skou_test state.apply mysql.reportdb test=True
+skou_test:
+    Data failed to compile:
+----------
+    Referenced state does not exist for requisite [require: (cmd: salt_mysql_deps)] in state [ekou_report_db] in SLS [mysql.reportdb]
+ERROR: Minions returned with non-zero exit code
+```
+
+The diagnosis: `state.apply mysql.reportdb` renders **only that file** — not the whole `mysql/` directory. Its `require` points at `salt_mysql_deps`, which at that moment lived in `appdb.sls`, outside the render. Requisites are global *within one compiled run*, not across files that were never included. Hence the rule:
+
+> **Every SLS must `include:` the SLS files whose IDs it requires.** Then any file is independently applyable, because it drags in its own dependency chain.
+
+And the chain doesn't stop at one level: `salt_mysql_deps` requires `mysql_running` (service.sls), which requires `install_mysql` (install.sls). Each link includes the one above it: `install ← service ← deps ← appdb / reportdb`.
+
+**Step 4 — the fix.** The bootstrap moves out of `appdb.sls` into its own `deps.sls`, and every file gains the include it depends on. The final tree, from the lab:
+
+```text
+ekou@saltmaster:~$ ls -l /srv/salt/mysql/
+total 24
+-rw-rw-r-- 1 ekou ekou 1120 Jul 26 04:46 appdb.sls
+-rw-rw-r-- 1 ekou ekou  260 Jul 26 04:45 deps.sls
+-rw-rw-r-- 1 ekou ekou   96 Jul 26 04:47 init.sls
+-rw-rw-r-- 1 ekou ekou   57 Jul 26 04:36 install.sls
+-rw-rw-r-- 1 ekou ekou  997 Jul 26 04:46 reportdb.sls
+-rw-rw-r-- 1 ekou ekou  142 Jul 26 04:46 service.sls
+
+ekou@saltmaster:~$ cat /srv/salt/mysql/deps.sls
+include:
+  - mysql.service
+
+salt_mysql_deps:
+  cmd.run:
+    - name: salt-pip install pymysql saltext-mysql
+    - unless: /opt/saltstack/salt/bin/python3 -c "import pymysql, saltext.mysql"
+    - reload_modules: True
+    - require:
+      - service: mysql_running
+
+ekou@saltmaster:~$ cat /srv/salt/mysql/service.sls
+include:
+  - mysql.install
+
+mysql_running:
+  service.running:
+    - name: mysql
+    - enable: True
+    - require:
+      - pkg: install_mysql
+
+ekou@saltmaster:~$ cat /srv/salt/mysql/reportdb.sls
+include:
+  - mysql.deps
+
+{% set db = pillar['reportdb'] %}
+
+reportdb_database:
+  mysql_database.present:
+    - name: {{ db.name }}
+    - require:
+      - cmd: salt_mysql_deps
+
+reportdb_user:
+  mysql_user.present:
+    - name: {{ db.user }}
+    - host: localhost
+    - password: '{{ db.password }}'
+    - require:
+      - mysql_database: reportdb_database
+
+reportdb_grants:
+  mysql_grants.present:
+    - grant: ALL PRIVILEGES
+    - database: {{ db.name }}.*
+    - user: {{ db.user }}
+    - host: localhost
+    - require:
+      - mysql_user: reportdb_user
+
+reportdb_table:
+  mysql_query.run:
+    - database: {{ db.name }}
+    - query: |
+        CREATE TABLE IF NOT EXISTS {{ db.table }} (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          name VARCHAR(64) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    - unless: mysql -N -e "SHOW TABLES IN {{ db.name }} LIKE '{{ db.table }}'" | grep -q {{ db.table }}
+    - require:
+      - mysql_database: reportdb_database
+
+ekou@saltmaster:~$ cat /srv/salt/mysql/init.sls
+include:
+  - mysql.deps
+  - mysql.install
+  - mysql.service
+  - mysql.appdb
+  - mysql.reportdb
+```
+
+(`appdb.sls` gets the same treatment: the `salt_mysql_deps` block deleted, `include: - mysql.deps` added at the top. Order inside `init.sls` doesn't matter — includes are deduplicated and requisites, not listing order, decide execution order.)
+
+**Step 5 — dry-run the new piece alone.** Now it compiles, and the render shows the whole dependency chain pulled in automatically — that's the `unchanged=4` in the summary:
+
+```text
+ekou@saltmaster:~$ sudo salt skou_test state.apply mysql.reportdb test=True
+skou_test:
+----------
+          ID: install_mysql
+    Function: pkg.installed
+        Name: mysql-server
+      Result: True
+     Comment: All specified packages are already installed
+----------
+          ID: mysql_running
+    Function: service.running
+        Name: mysql
+      Result: True
+     Comment: The service mysql is already running
+----------
+          ID: salt_mysql_deps
+    Function: cmd.run
+        Name: salt-pip install pymysql saltext-mysql
+      Result: True
+     Comment: unless condition is true
+----------
+          ID: reportdb_database
+    Function: mysql_database.present
+        Name: ekou_report_db
+      Result: None
+     Comment: Database ekou_report_db is not present and needs to be created
+----------
+          ID: reportdb_user
+    Function: mysql_user.present
+        Name: reportuser
+      Result: None
+     Comment: User reportuser@localhost is set to be added
+----------
+          ID: reportdb_grants
+    Function: mysql_grants.present
+      Result: None
+     Comment: MySQL grant reportdb_grants is set to be created
+----------
+          ID: reportdb_table
+    Function: mysql_query.run
+      Result: None
+     Comment: Database reportdb_table is not present
+
+Summary for skou_test
+------------
+Succeeded: 7 (unchanged=4)
+Failed:    0
+------------
+Total states run:     7
+Total run time:   2.349 s
+```
+
+`Result: None` is test-mode for "would change". Note this dry run works where 7.5's first dry run failed with "not available" — the minion already has PyMySQL and saltext-mysql from the 7.6 saga, so there is no bootstrap chicken-and-egg this time.
+
+**Step 6 — apply, then prove idempotence across the whole tree:**
+
+```text
+ekou@saltmaster:~$ sudo salt skou_test state.apply mysql.reportdb
+skou_test:
+----------
+          ID: reportdb_database
+    Function: mysql_database.present
+        Name: ekou_report_db
+      Result: True
+     Comment: The database ekou_report_db has been created
+     Changes:
+              ----------
+              ekou_report_db:
+                  Present
+----------
+          ID: reportdb_user
+    Function: mysql_user.present
+        Name: reportuser
+      Result: True
+     Comment: The user reportuser@localhost has been added
+     Changes:
+              ----------
+              reportuser:
+                  Present
+----------
+          ID: reportdb_grants
+    Function: mysql_grants.present
+      Result: True
+     Comment: Grant ALL PRIVILEGES on ekou_report_db.* to reportuser@localhost has been added
+     Changes:
+              ----------
+              reportdb_grants:
+                  Present
+----------
+          ID: reportdb_table
+    Function: mysql_query.run
+      Result: True
+     Comment: {'query time': {'human': '29.2ms', 'raw': '0.02916'}, 'rows affected': 0}
+     Changes:
+              ----------
+              query:
+                  Executed
+
+Summary for skou_test
+------------
+Succeeded: 7 (changed=4)
+Failed:    0
+------------
+Total states run:     7
+Total run time:   1.713 s
+```
+
+(The three unchanged dependency states are trimmed above; the full run contains them exactly as in the dry run.) Then the full highstate — now **11 states**: the 7 from the appdb tree plus the 4 new ones, every single one a no-op:
+
+```text
+ekou@saltmaster:~$ sudo salt skou_test state.highstate
+...
+          ID: appdb_database
+     Comment: Database ekou_test_db is already present
+          ID: appdb_user
+     Comment: User ekoumysql@localhost is already present with the desired password
+          ID: reportdb_database
+     Comment: Database ekou_report_db is already present
+          ID: reportdb_user
+     Comment: User reportuser@localhost is already present with the desired password
+          ID: reportdb_table
+     Comment: unless condition is true
+
+Summary for skou_test
+-------------
+Succeeded: 11
+Failed:     0
+-------------
+Total states run:     11
+Total run time:    1.380 s
+
+ekou@saltmaster:~$ sudo salt skou_test mysql.db_list
+skou_test:
+    - ekou_report_db
+    - ekou_test_db
+    - information_schema
+    - mysql
+    - performance_schema
+    - sys
+ekou@saltmaster:~$ sudo salt skou_test mysql.db_tables ekou_report_db
+skou_test:
+    - ekou_report_table
+```
+
+**When the third database arrives** — copying `reportdb.sls` a third time is the signal to go data-driven: make the pillar a dict of databases and replace both per-database files with one loop:
+
+```yaml
+# pillar
+mysql_databases:
+  ekou_test_db:   {table: ekou_test_table,   user: ekoumysql,  password: ...}
+  ekou_report_db: {table: ekou_report_table, user: reportuser, password: ...}
+```
+
+```yaml
+# /srv/salt/mysql/databases.sls — replaces appdb.sls and reportdb.sls
+include:
+  - mysql.deps
+
+{% for name, db in pillar.get('mysql_databases', {}).items() %}
+{{ name }}_database:
+  mysql_database.present:
+    - name: {{ name }}
+    - require:
+      - cmd: salt_mysql_deps
+# ...user, grants, table follow the same pattern with {{ name }}-prefixed IDs
+{% endfor %}
+```
+
+After that, a new database is a **pillar edit only** — no new state file, no init.sls change. That is the end point of the whole section-7 progression: ad-hoc commands → states → the top file → pillar as data → states as templates that consume it.
+
+One housekeeping note from this lab session: the retired flat `mysql.sls` was renamed to `REMOVE_THIS_mysql.sls` but left inside `/srv/salt/` — where it is still a servable state named `REMOVE_THIS_mysql`. Harmless while nothing references it, but move retired files out of the file roots entirely (`sudo mv /srv/salt/REMOVE_THIS_mysql.sls ~/mysql.sls.flat-backup`).
+
 ---
 
 ## 8. Pillar — secure per-minion data

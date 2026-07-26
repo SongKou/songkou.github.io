@@ -2358,6 +2358,62 @@ Two narrower tools worth knowing: `state.sls_id ekou_audit_db_table mysql.databa
 
 The honest framing: this question is the price of Approach 2. Per-file layout gives file-level handles; the loop gives data-level scale with only pillar-level handles, and the CLI override buys the granularity back at the cost of an uglier command line. If your change process routinely demands single-database applies, that is a legitimate reason to stay with one-file-per-database longer than aesthetics suggest.
 
+#### Adding more tables per database — the obvious refactor, and why it deserves a warning
+
+The next wish is predictable: `ekou_audit_db` needs a second and third table. The mechanical answer follows the same pattern as everything above — evolve the pillar key from `table:` (singular) to `tables:` (a list), for **all** databases at once:
+
+```yaml
+mysql_databases:
+  ekou_test_db:
+    user: ekoumysql
+    password: Cisco12345
+    tables:
+      - ekou_test_table
+  ekou_report_db:
+    user: reportuser
+    password: Report12345
+    tables:
+      - ekou_report_table
+  ekou_audit_db:
+    user: audituser
+    password: Audit12345
+    tables:
+      - ekou_audit_table
+      - ekou_audit_log
+      - ekou_audit_archive
+```
+
+…and replace the single `{{ name }}_table` state in `databases.sls` with a nested loop:
+
+```yaml
+{% for table in db.get('tables', []) %}
+{{ name }}_table_{{ table }}:
+  mysql_query.run:
+    - database: {{ name }}
+    - query: |
+        CREATE TABLE IF NOT EXISTS {{ table }} (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          name VARCHAR(64) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    - unless: mysql -N -e "SHOW TABLES IN {{ name }} LIKE '{{ table }}'" | grep -q {{ table }}
+    - require:
+      - mysql_database: {{ name }}_database
+{% endfor %}
+```
+
+Expected result: 17 rendered states (3 core + 3×[database, user, grants] + 5 table states), `changed=2` for the two new audit tables, and every existing table passing its `unless` check.
+
+**⚠️ But this refactor is not the proper way to grow tables, and the reason is the state IDs.** The old ID `ekou_audit_db_table` ceases to exist; per-table IDs like `ekou_audit_db_table_ekou_audit_log` replace it. That matters more than it looks:
+
+- **Salt has no memory of retired IDs.** State IDs are how Salt correlates "what I manage" across runs. Rename an ID and, from Salt's perspective, one managed thing vanished and an unrelated new one appeared — nothing reconciles them.
+- **The rename is only safe here because of the `unless` guard.** `mysql_query.run` re-executes on every run unless guarded; a renamed ID with no guard would have re-run its action as if new. `CREATE TABLE IF NOT EXISTS` plus the `unless` makes this rename a silent no-op — for a less careful state (a bare `cmd.run` bootstrap, a one-shot import), the same rename re-fires the action.
+- **Anything that referenced the old ID breaks.** A `require: - mysql_query: ekou_audit_db_table` in another file becomes exactly the 7.8 compile error — after a refactor that "changed nothing."
+
+The design lesson: **state IDs are contracts — pick loop-stable IDs on day one** (the per-table ID scheme from the start), because renaming them later is a migration, not an edit. If the flat-`table` schema is already deployed, the honest options are: accept the one-time rename knowing every table state is `unless`-guarded (as here), or keep the old singular-table state alongside the new loop until every environment has converged once, then delete it.
+
+And the deeper caveat from 7.5 still applies: this loop stamps out identical schemas, which is lab scaffolding. Real per-table schemas either move into pillar as explicit SQL (ugly fast) or into per-table files — `mysql_query.run_file` with `- query_file: salt://mysql/files/{{ table }}.sql`, the 7.7 directory layout earning its keep again. And when the schemas start *evolving*, that is the signal they belong to the application's migration tooling, not to configuration management: Salt has no `mysql_table.present` for a reason.
+
 One note from this lab session: the retired flat `mysql.sls` was renamed to `REMOVE_THIS_mysql.sls` intentionally as I want to make a backup of the test file.  but left inside `/srv/salt/` — where it is still a servable state named `REMOVE_THIS_mysql`. Harmless while nothing references it, but move retired files out of the file roots entirely in prod is a good approach (`sudo mv /srv/salt/REMOVE_THIS_mysql.sls ~/mysql.sls.flat-backup`).
 
 ---

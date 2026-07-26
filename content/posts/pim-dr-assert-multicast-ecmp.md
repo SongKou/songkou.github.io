@@ -50,6 +50,16 @@ So a DR that *loses* an Assert stops forwarding that tree, and a non-DR that *wi
 
 That left column is the default case for the topology below, and it is why the answers that follow so often reduce to "one router carries everything unless you deliberately change it."
 
+### One tiebreaker, three different jobs
+
+Worth pinning down now, because it causes real confusion: **"highest IP wins" shows up in three separate PIM decisions.** They are unrelated, and the highest-IP router in one is not automatically "the DR":
+
+- **DR election** — highest DR-priority, then highest IP. Decides *who represents a shared segment's hosts.*
+- **RPF-neighbor choice** among equal-cost upstream paths — highest IP by default (or a hash with multicast multipath). Decides *which way a Join travels* (section 4).
+- **Assert** final tiebreak — highest IP, after SPT-bit and metric. Decides *who forwards a tree that is being duplicated onto a shared segment.*
+
+Same tiebreaker, three different questions. When a router "picks the highest-IP neighbor," always ask *which* of these it is doing.
+
 ![PIM multicast topology: a sender reaches R1 (the RP), which feeds R2 and R3; both attach to one Layer 2 switch and shared receiver VLAN, with two possible downstream forwarders](/posts/pim-dr-assert-multicast-ecmp/multicast-ecmp-diagram.svg)
 
 ## Topology assumption
@@ -145,6 +155,23 @@ Once that per-flow hashing is enabled, the router can pick a different upstream 
 - Each `(S,G)` or `(*,G)` resolves to **one** RPF neighbor, so a single stream always rides **one** path—packets from one flow are never striped across R2 and R3.
 - On a path failure, the router re-runs RPF and re-joins the surviving neighbor, moving **only the failed path's** trees. Resilient or consistent hashing, where supported, avoids reshuffling the flows still on the healthy path.
 
+### Why R2 and R3 stop electing a DR, and Assert never fires here
+
+Name the last-hop router `R4`, with `Link1` to R2 and `Link2` to R3 as separate routed links. Trace how one group's tree is actually built, because it explains the whole change:
+
+![Receiver-driven join in the routed topology: the receiver's report reaches R4, which sends its join toward one upstream (R2 over Link1); the active path Sender-R1-R2-R4-Receiver is highlighted while R3 and Link2 stay idle, so no segment carries duplicates and R2/R3 elect no DR](/posts/pim-dr-assert-multicast-ecmp/pim-single-path-join-diagram.svg)
+
+1. The receiver's IGMP report reaches **R4**, the last-hop DR. R4 runs RPF toward the RP and sends a `(*,G)` **Join out one link only**—say toward R2 over Link1 (R2 is the equal-cost neighbor with the higher IP, by default; see the [tiebreaker note](#one-tiebreaker-three-different-jobs)).
+2. R2 puts its R4-facing interface in its outgoing list and passes a Join up to R1. **R1's outgoing list now holds only the R2 branch.**
+3. **This is the crux: multicast is *pulled* by Joins, not *pushed* down every equal-cost path.** A router forwards a group out an interface only where it received a Join. R3 received none, so R3 and Link2 carry nothing—R1 does *not* fan the stream out to both R2 and R3 just because two equal-cost paths exist.
+
+Two consequences fall straight out of that single-path tree:
+
+- **No Assert.** Assert needs two routers duplicating the *same* stream onto *one shared segment*. Here only one branch ever carries the group, on its own dedicated link, so no wire sees a duplicate—there is nothing to assert over. (Even the brief RP-tree-to-SPT overlap during a switchover arrives on R4's two *separate* interfaces and is cleaned up by the `(S,G)RPT-Prune`, an RPF mechanism, not Assert.)
+- **No DR election between R2 and R3.** They no longer share a segment, so they are not even PIM neighbors with each other—there is no election in which both participate. The only DRs that matter are R1 (represents the source) and R4 (represents the receiver). R4's "pick R2" is **RPF-neighbor selection, not a DR election**—the same "highest IP" tiebreak, doing an entirely different job.
+
+That is the real reason the section 1–3 shared-switch diagram and this routed topology behave so differently: replacing the switch with R4 removes the shared segment, and DR-versus-Assert on that segment goes with it.
+
 ### What it takes to actually distribute the trees
 
 For the 500 streams to spread across R2 and R3, all of the following must hold:
@@ -169,7 +196,7 @@ Only the **next-hop-based** variant avoids RPF hash *polarization* on multi-hop 
 - **ASM** builds the shared tree first: the initial `(*,G)` join follows RPF toward the **RP**, and after the switch to the shortest-path tree the `(S,G)` join follows RPF toward the **source**. Those are two independent lookups against different destinations, so the chosen equal-cost path *can* differ between the two phases—it coincides only if the RP happens to sit on the source-ward path.
 - **SSM** builds `(S,G)` state toward the source from the outset, with no RP or shared tree ([RFC 4607](https://www.rfc-editor.org/rfc/rfc4607.html)), so there is no shared-tree-to-SPT transition that could shift the path—though unicast reconvergence can still move it later.
 
-Finally, PIM Assert stops being the selection mechanism in this design. On a shared LAN, Assert elects the single forwarder and, where an Assert winner exists on the RPF interface, it even *overrides* the router's RPF choice. Across **separate routed links** there is no shared segment for duplicates to collide on, so which upstream carries each tree is decided purely by the router's RPF and ECMP selection.
+One subtlety worth adding to the worked example above: on a **shared** LAN, Assert does not merely coexist with RPF—it *overrides* it. When an Assert winner exists on the RPF interface, PIM uses that winner as the upstream in place of the MRIB next-hop. Remove the shared segment, as the routed-R4 topology does, and that override branch never applies, so RPF and ECMP alone decide the upstream.
 
 ### A single high-bandwidth stream still cannot be split
 

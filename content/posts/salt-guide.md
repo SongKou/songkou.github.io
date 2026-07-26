@@ -2412,7 +2412,89 @@ Expected result: 17 rendered states (3 core + 3×[database, user, grants] + 5 ta
 
 The design lesson: **state IDs are contracts — pick loop-stable IDs on day one** (the per-table ID scheme from the start), because renaming them later is a migration, not an edit. If the flat-`table` schema is already deployed, the honest options are: accept the one-time rename knowing every table state is `unless`-guarded (as here), or keep the old singular-table state alongside the new loop until every environment has converged once, then delete it.
 
-And the deeper caveat from 7.5 still applies: this loop stamps out identical schemas, which is lab scaffolding. Real per-table schemas either move into pillar as explicit SQL (ugly fast) or into per-table files — `mysql_query.run_file` with `- query_file: salt://mysql/files/{{ table }}.sql`, the 7.7 directory layout earning its keep again. And when the schemas start *evolving*, that is the signal they belong to the application's migration tooling, not to configuration management: Salt has no `mysql_table.present` for a reason.
+And the deeper caveat from 7.5 still applies: this loop stamps out identical schemas, which is lab scaffolding. Real tables differ — different columns, indexes, and types — which the identical-schema loop cannot express at all.
+
+#### The proper way: keep the schema in a .sql file and let Salt run it
+
+The refactor above fails the "state IDs are contracts" test and can only produce identical tables. The idiomatic fix removes both problems at once: **put the schema in a real `.sql` file, and give it one stable state ID per database.** Adding a table is then an edit inside the SQL file — no Salt state is ever renamed, and each table can have whatever columns and indexes it needs, because you are writing real SQL instead of templating YAML.
+
+The 7.7 directory layout already has the right home for it — `mysql/files/`. Create `/srv/salt/mysql/files/ekou_audit_db.sql`:
+
+```sql
+-- Schema for ekou_audit_db. Every statement is idempotent, so this file
+-- is safe to re-run: existing objects are left untouched, new ones created.
+
+CREATE TABLE IF NOT EXISTS ekou_audit_table (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    name        VARCHAR(64) NOT NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS ekou_audit_log (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    actor       VARCHAR(64)  NOT NULL,
+    action      VARCHAR(128) NOT NULL,
+    detail      TEXT,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_actor (actor),
+    INDEX idx_created_at (created_at)
+);
+
+CREATE TABLE IF NOT EXISTS ekou_audit_archive (
+    id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+    original_id  BIGINT NOT NULL,
+    archived_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+Then, in `databases.sls`, **replace the per-table loop** with two states that carry one stable ID per database — push the file to the minion, then run it:
+
+```yaml
+{% for name, db in pillar.get('mysql_databases', {}).items() %}
+{% if db.get('schema') %}
+{{ name }}_schema_file:
+  file.managed:
+    - name: /etc/mysql/schemas/{{ name }}.sql
+    - source: salt://mysql/files/{{ db.schema }}
+    - makedirs: True
+    - require:
+      - mysql_database: {{ name }}_database
+
+{{ name }}_schema_apply:
+  cmd.run:
+    - name: mysql {{ name }} < /etc/mysql/schemas/{{ name }}.sql
+    - onchanges:
+      - file: {{ name }}_schema_file
+{% endif %}
+{% endfor %}
+```
+
+and point the pillar at the file per database (only `ekou_audit_db` has one here):
+
+```yaml
+mysql_databases:
+  ekou_test_db:
+    user: ekoumysql
+    password: Cisco12345
+  ekou_report_db:
+    user: reportuser
+    password: Report12345
+  ekou_audit_db:
+    user: audituser
+    password: Audit12345
+    schema: ekou_audit_db.sql
+```
+
+Why this is the proper pattern:
+
+- **The state ID is stable.** `ekou_audit_db_schema_file` and `ekou_audit_db_schema_apply` never change no matter how many tables the file grows to. Adding `ekou_audit_report` is one more `CREATE TABLE` in the `.sql`, not a new — or renamed — Salt state. The contract holds.
+- **SQL lives as SQL.** The schema is readable, diffable in git, lintable, and ownable by whoever owns the database — not buried in Jinja. Per-table differences (the `BIGINT` keys and indexes above) are trivial, where the loop could only stamp identical shapes.
+- **`onchanges` is the idempotence mechanism.** `cmd.run` runs *only* when `file.managed` reports the file changed. First apply: the file is created, the script runs, tables appear. Re-apply with no edit: `file.managed` reports no change, so `cmd.run` is skipped entirely — a clean no-op, no perpetual "changed" noise. Edit the `.sql` to add a table: the file changes, the script re-runs, and `CREATE TABLE IF NOT EXISTS` makes the existing tables no-ops while the new one is created.
+- **Connection stays on the socket.** `salt-minion` runs as root, so `mysql {{ name }} < file.sql` authenticates through Ubuntu's `auth_socket` with no password — the same mechanism the rest of section 7 relies on. The `mysql` client path needs no PyMySQL, so this works even independently of the `saltext-mysql` bootstrap.
+
+One honest limit to understand: `onchanges` tracks the **file**, not the database. If someone manually drops `ekou_audit_log` while the `.sql` is unchanged, Salt will *not* notice or recreate it on the next run — the script only re-runs when its content changes. That is the deliberate trade of the "schema as a versioned artifact" model (the same model Flyway and Liquibase use): the file is the source of truth, applied when it advances. If you need Salt to actively reconcile every object on every run, that is exactly what the per-object states give you — at the cost of the unstable IDs the previous section warned about. Pick the guarantee you actually want; do not expect both from one design.
+
+And the ceiling from 7.5 is unchanged: this is still provisioning-grade schema management. A production database with evolving, versioned schema belongs to real migration tooling — Flyway, Liquibase, Alembic, or the application's own migrations — where each change is an ordered, checksummed, rollback-aware step. Salt's proper role there shrinks to what it does best: ensure the migration tool is installed and the schema files are present, then invoke the tool. It should not try to *be* the migration engine.
 
 One note from this lab session: the retired flat `mysql.sls` was renamed to `REMOVE_THIS_mysql.sls` intentionally as I want to make a backup of the test file.  but left inside `/srv/salt/` — where it is still a servable state named `REMOVE_THIS_mysql`. Harmless while nothing references it, but move retired files out of the file roots entirely in prod is a good approach (`sudo mv /srv/salt/REMOVE_THIS_mysql.sls ~/mysql.sls.flat-backup`).
 

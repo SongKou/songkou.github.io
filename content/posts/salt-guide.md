@@ -1777,8 +1777,8 @@ For reference, this is `appdb.sls` as it stood at that moment — the 7.7 versio
 ```yaml
 {% set db = pillar['appdb'] %}
 
-salt_mysql_deps:
-  cmd.run:
+salt_mysql_deps:                        # <-- the shared bootstrap is defined HERE,
+  cmd.run:                              #     inside appdb.sls - that placement is the bug
     - name: salt-pip install pymysql saltext-mysql
     - unless: /opt/saltstack/salt/bin/python3 -c "import pymysql, saltext.mysql"
     - reload_modules: True
@@ -1789,7 +1789,7 @@ appdb_database:
   mysql_database.present:
     - name: {{ db.name }}
     - require:
-      - cmd: salt_mysql_deps
+      - cmd: salt_mysql_deps            # same file: this require always resolves
 
 appdb_user:
   mysql_user.present:
@@ -1831,8 +1831,9 @@ reportdb_database:
   mysql_database.present:
     - name: {{ db.name }}
     - require:
-      - cmd: salt_mysql_deps
-
+      - cmd: salt_mysql_deps            # <-- requires an ID that lives in a DIFFERENT
+                                        #     file (appdb.sls), and nothing here
+                                        #     includes that file - the coming error
 reportdb_user:
   mysql_user.present:
     - name: {{ db.user }}
@@ -1864,7 +1865,9 @@ reportdb_table:
       - mysql_database: reportdb_database
 ```
 
-At this point `init.sls` also gained its `- mysql.reportdb` line, and the full highstate would have worked — because `init.sls` renders every file, so `salt_mysql_deps` would be in the compiled run. The trap only springs when applying the file *alone*.
+The difference between the two files is the whole story: in `appdb.sls`, the `require: cmd: salt_mysql_deps` points at an ID **defined in the same file**, so it always resolves. In `reportdb.sls`, the identical-looking require points at an ID **in another file** — fine in a full highstate where `init.sls` renders everything, broken the moment the file is applied alone.
+
+At this point `init.sls` also gained its `- mysql.reportdb` line, and the full highstate would indeed have worked. The trap only springs when applying the file *alone*.
 
 **Step 3 — first attempt, and the compile error.** Applying just the new piece, exactly as the 7.7 layout promises you can:
 

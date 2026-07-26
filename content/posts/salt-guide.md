@@ -1593,6 +1593,157 @@ mysql> show tables;
 
 Two traps worth remembering from stage 4: `salt-call --local` probes the machine you type it on, not your target minion — and it runs **without pillar**, so any behavior that depends on pillar (like the `mysql.unix_socket` connection setting) will differ from a master-driven run. An error seen only under `salt-call --local` is not necessarily a real error.
 
+### 7.7 Organizing states: mysql.sls versus mysql/init.sls
+
+Everything so far keeps each state as one flat file next to the top file:
+
+```text
+/srv/salt/
+├── top.sls
+├── ntp.sls
+└── mysql.sls
+```
+
+That layout is completely valid, and for a guide this size it is the *better* choice — every state is visible in one `ls`, and there is no namespace convention to explain before the first highstate. But it does not scale: as soon as a state needs supporting files (a config template, an HTML file, a Jinja map), those files pile up loose in `/srv/salt/`, and it stops being obvious whether `nginx.conf` belongs to `nginx.sls` or to something else.
+
+The production convention is one **directory per service** with an `init.sls` inside:
+
+```text
+/srv/salt/
+├── top.sls
+└── mysql/
+    └── init.sls
+```
+
+The key fact that makes the migration painless: **Salt treats `mysql.sls` and `mysql/init.sls` as the same SLS name, `mysql`.** An `init.sls` inherits its parent directory's name, so the top file, `state.apply mysql`, and every requisite keep working unchanged. Two rules follow from how the name resolves:
+
+- Never keep both forms at once — Salt looks up `mysql.sls` first and silently ignores `mysql/init.sls`, which makes edits to the directory version mysteriously do nothing.
+- The dotted notation maps to files inside the directory: `mysql.install` is `/srv/salt/mysql/install.sls`, and each piece is individually runnable with `state.apply mysql.install`.
+
+#### The 7.5 MySQL state, reorganized
+
+Nothing below changes what the highstate does — same state IDs, same requisites, same result. It is purely file organization. The one flat file becomes:
+
+```text
+/srv/salt/mysql/
+├── init.sls        # the seam: includes the pieces
+├── install.sls     # the package
+├── service.sls     # the daemon
+└── appdb.sls       # Salt's own deps + the pillar-driven database objects
+```
+
+`/srv/salt/mysql/init.sls` — nothing but glue:
+
+```yaml
+include:
+  - mysql.install
+  - mysql.service
+  - mysql.appdb
+```
+
+`/srv/salt/mysql/install.sls`:
+
+```yaml
+install_mysql:
+  pkg.installed:
+    - name: mysql-server
+```
+
+`/srv/salt/mysql/service.sls` — the `require` still points at the ID in install.sls; requisites reference state **IDs**, which stay global across included files:
+
+```yaml
+mysql_running:
+  service.running:
+    - name: mysql
+    - enable: True
+    - require:
+      - pkg: install_mysql
+```
+
+`/srv/salt/mysql/appdb.sls` — the bootstrap and every `mysql_*` state from 7.5, moved verbatim:
+
+```yaml
+{% set db = pillar['appdb'] %}
+
+salt_mysql_deps:
+  cmd.run:
+    - name: salt-pip install pymysql saltext-mysql
+    - unless: /opt/saltstack/salt/bin/python3 -c "import pymysql, saltext.mysql"
+    - reload_modules: True
+    - require:
+      - service: mysql_running
+
+appdb_database:
+  mysql_database.present:
+    - name: {{ db.name }}
+    - require:
+      - cmd: salt_mysql_deps
+
+# appdb_user, appdb_grants, appdb_table exactly as in 7.5
+```
+
+The top file entry does not change at all — it still assigns `- mysql`, and the pillar files are untouched. But you gain granular handles for iterating: `sudo salt skou_test state.apply mysql.appdb test=True` reruns just the database layer without touching package or service state.
+
+#### An nginx example with a managed config file
+
+The directory layout earns its keep the moment a state manages *files*, because the files live inside the state's own tree and the `salt://` paths say who owns them:
+
+```text
+/srv/salt/nginx/
+├── init.sls
+├── install.sls
+├── config.sls
+├── service.sls
+└── files/
+    └── nginx.conf      # the actual config, served from the master's file server
+```
+
+`nginx/init.sls`:
+
+```yaml
+include:
+  - nginx.install
+  - nginx.config
+  - nginx.service
+```
+
+`nginx/install.sls`:
+
+```yaml
+install_nginx:
+  pkg.installed:
+    - name: nginx
+```
+
+`nginx/config.sls` — the managed file's source path is self-documenting:
+
+```yaml
+/etc/nginx/nginx.conf:
+  file.managed:
+    - source: salt://nginx/files/nginx.conf
+    - require:
+      - pkg: install_nginx
+```
+
+`nginx/service.sls` — note the new requisite, **`watch`**: like `require`, but it additionally *restarts the service whenever the watched file changes*. This is the piece that turns "config file managed" into "config change deployed":
+
+```yaml
+nginx_running:
+  service.running:
+    - name: nginx
+    - enable: True
+    - require:
+      - pkg: install_nginx
+    - watch:
+      - file: /etc/nginx/nginx.conf
+```
+
+Edit `files/nginx.conf` on the master, run the highstate, and Salt rewrites the file on every matched minion and bounces nginx only where the file actually changed — idempotence extended to configuration content.
+
+#### The practical rule
+
+Use `mysql.sls` while the state is one short file; move to `mysql/init.sls` the moment it needs supporting files or a second SLS. The migration is `mkdir` + `git mv mysql.sls mysql/init.sls` — the top file, CLI commands, and requisites all keep working, because the state's *name* never changed.
+
 ---
 
 ## 8. Pillar — secure per-minion data

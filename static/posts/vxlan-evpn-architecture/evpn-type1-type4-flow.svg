@@ -1,0 +1,160 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="900" viewBox="0 0 1280 900" role="img" aria-labelledby="title desc">
+  <title id="title">EVPN Route Type 1 and Type 4 flow for an all-active multihomed server</title>
+  <desc id="desc">Leaf-A and Leaf-B share ESI-10 and advertise Type 4 routes to discover each other and elect Leaf-A as designated forwarder. Both advertise Type 1 routes to remote Leaf-C, which uses aliasing to install both leaves as next hops for the server MAC. Known unicast may use either leaf, while only the designated forwarder sends BUM traffic to the server. On a Leaf-A attachment failure, Type 1 withdrawal removes Leaf-A from remote next-hop sets and Type 4 withdrawal causes Leaf-B to become designated forwarder.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000000" flood-opacity=".28"/>
+    </filter>
+    <marker id="arrow-cyan" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L10,4 z" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto-start-reverse">
+      <path d="M0,0 L0,8 L10,4 z" fill="#a78bfa"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L10,4 z" fill="#34d399"/>
+    </marker>
+    <marker id="arrow-orange" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L10,4 z" fill="#fbbf24"/>
+    </marker>
+    <style>
+      .title { font: 750 34px Inter, "Segoe UI", Arial, sans-serif; fill: #e5eef9; }
+      .subtitle { font: 450 18px Inter, "Segoe UI", Arial, sans-serif; fill: #9fb0c5; }
+      .section { font: 700 21px Inter, "Segoe UI", Arial, sans-serif; fill: #e5eef9; }
+      .node-title { font: 700 20px Inter, "Segoe UI", Arial, sans-serif; fill: #e5eef9; }
+      .body { font: 500 16px Inter, "Segoe UI", Arial, sans-serif; fill: #c8d6e8; }
+      .small { font: 500 14px Inter, "Segoe UI", Arial, sans-serif; fill: #9fb0c5; }
+      .badge { font: 700 14px Inter, "Segoe UI", Arial, sans-serif; }
+      .step { font: 750 17px Inter, "Segoe UI", Arial, sans-serif; fill: #07111f; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="900" fill="#07111f"/>
+  <text class="title" x="64" y="58">EVPN Type 1 + Type 4: all-active multihoming</text>
+  <text class="subtitle" x="64" y="91">A dual-homed server shows why both route types exist—and why they solve different problems</text>
+
+  <g>
+    <line x1="72" y1="119" x2="118" y2="119" stroke="#a78bfa" stroke-width="4" stroke-dasharray="9 7"/>
+    <text class="small" x="128" y="124">Type 4: ES membership and DF election</text>
+    <line x1="388" y1="119" x2="434" y2="119" stroke="#22d3ee" stroke-width="4" stroke-dasharray="9 7"/>
+    <text class="small" x="444" y="124">Type 1: ES/EVI reachability and aliasing</text>
+    <line x1="790" y1="119" x2="836" y2="119" stroke="#34d399" stroke-width="5"/>
+    <text class="small" x="846" y="124">Known unicast</text>
+    <line x1="1014" y1="119" x2="1060" y2="119" stroke="#fbbf24" stroke-width="5"/>
+    <text class="small" x="1070" y="124">BUM toward the ES</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="146" width="1152" height="420" rx="16" fill="#101e31" stroke="#49627e" stroke-width="2"/>
+  </g>
+  <text class="section" x="88" y="181">Scenario: Server-01 uses one LACP bond across Leaf-A and Leaf-B</text>
+  <text class="small" x="88" y="207">ESI-10 · all-active · VLAN 110 · L2 VNI 10110 · Leaf-A is DF for this service</text>
+
+  <g filter="url(#shadow)">
+    <rect x="88" y="276" width="220" height="126" rx="14" fill="#152944" stroke="#38bdf8" stroke-width="3"/>
+    <text class="node-title" x="198" y="312" text-anchor="middle">Leaf-C / VTEP .13</text>
+    <text class="body" x="198" y="340" text-anchor="middle">remote VNI member</text>
+    <text class="body" x="198" y="367" text-anchor="middle">MAC A → VTEP .11 + .12</text>
+    <text class="small" x="198" y="389" text-anchor="middle">Type 2 + Type 1 aliasing</text>
+
+    <rect x="378" y="258" width="244" height="164" rx="18" fill="#152944" stroke="#49627e" stroke-width="3"/>
+    <text class="node-title" x="500" y="301" text-anchor="middle">MP-BGP / RR</text>
+    <text class="body" x="500" y="331" text-anchor="middle">reflects EVPN routes</text>
+    <text class="small" x="500" y="361" text-anchor="middle">Type 4 imported only by</text>
+    <text class="small" x="500" y="382" text-anchor="middle">members of the same ESI</text>
+    <text class="small" x="500" y="404" text-anchor="middle">Type 1 reaches VNI members</text>
+
+    <rect x="716" y="238" width="202" height="120" rx="14" fill="#152944" stroke="#34d399" stroke-width="3"/>
+    <text class="node-title" x="817" y="274" text-anchor="middle">Leaf-A / VTEP .11</text>
+    <text class="body" x="817" y="302" text-anchor="middle">learns MAC A</text>
+    <text class="small" x="817" y="327" text-anchor="middle">originates Type 2</text>
+
+    <rect x="982" y="238" width="202" height="120" rx="14" fill="#152944" stroke="#a78bfa" stroke-width="3"/>
+    <text class="node-title" x="1083" y="274" text-anchor="middle">Leaf-B / VTEP .12</text>
+    <text class="body" x="1083" y="302" text-anchor="middle">same ESI and VNI</text>
+    <text class="small" x="1083" y="327" text-anchor="middle">no Type 2 required</text>
+
+    <rect x="814" y="454" width="286" height="86" rx="14" fill="#152944" stroke="#fbbf24" stroke-width="3"/>
+    <text class="node-title" x="957" y="486" text-anchor="middle">Server-01 / MAC A</text>
+    <text class="body" x="957" y="513" text-anchor="middle">LACP bond · ESI-10 · VLAN 110</text>
+  </g>
+
+  <rect x="740" y="211" width="154" height="28" rx="14" fill="#123b31"/>
+  <text class="badge" x="817" y="230" text-anchor="middle" fill="#6ee7b7">DF for VLAN 110</text>
+  <rect x="1008" y="211" width="150" height="28" rx="14" fill="#2d2448"/>
+  <text class="badge" x="1083" y="230" text-anchor="middle" fill="#c4b5fd">non-DF</text>
+
+  <path d="M780 234 C830 180 1068 180 1120 234" fill="none" stroke="#a78bfa" stroke-width="4" stroke-dasharray="9 7" marker-start="url(#arrow-purple)" marker-end="url(#arrow-purple)"/>
+  <text class="badge" x="950" y="174" text-anchor="middle" fill="#c4b5fd">1 · Type 4 ES routes via BGP</text>
+  <text class="small" x="950" y="195" text-anchor="middle">discover same-ES peers → deterministic DF election</text>
+
+  <path d="M716 312 L622 312" fill="none" stroke="#22d3ee" stroke-width="4" stroke-dasharray="9 7" marker-end="url(#arrow-cyan)"/>
+  <path d="M982 337 L622 337" fill="none" stroke="#22d3ee" stroke-width="4" stroke-dasharray="9 7" marker-end="url(#arrow-cyan)"/>
+  <path d="M378 342 L308 342" fill="none" stroke="#22d3ee" stroke-width="4" stroke-dasharray="9 7" marker-end="url(#arrow-cyan)"/>
+  <text class="badge" x="590" y="458" text-anchor="middle" fill="#67e8f9">2 · Type 1 per-ES + per-EVI from both leaves</text>
+  <text class="small" x="590" y="480" text-anchor="middle">Leaf-C builds the eligible {VTEP .11, VTEP .12} set</text>
+
+  <line x1="817" y1="358" x2="898" y2="454" stroke="#49627e" stroke-width="6" stroke-linecap="round"/>
+  <line x1="1083" y1="358" x2="1016" y2="454" stroke="#49627e" stroke-width="6" stroke-linecap="round"/>
+  <line x1="828" y1="365" x2="905" y2="451" stroke="#fbbf24" stroke-width="4" stroke-linecap="round" marker-end="url(#arrow-orange)"/>
+  <circle cx="1047" cy="410" r="17" fill="#401b25" stroke="#fb7185" stroke-width="3"/>
+  <path d="M1039 402 L1055 418 M1055 402 L1039 418" stroke="#fb7185" stroke-width="4" stroke-linecap="round"/>
+  <text class="small" x="777" y="432" text-anchor="middle" fill="#fcd34d">BUM forwarded by DF</text>
+  <text class="small" x="1117" y="410" text-anchor="middle" fill="#fda4af">NDF suppresses</text>
+
+  <text class="small" x="88" y="541">Type 1 per-EVI is optional in base RFC 7432; this worked example assumes aliasing support.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="592" width="560" height="232" rx="16" fill="#101e31" stroke="#49627e" stroke-width="2"/>
+    <rect x="656" y="592" width="560" height="232" rx="16" fill="#101e31" stroke="#49627e" stroke-width="2"/>
+  </g>
+
+  <text class="section" x="88" y="630">Forwarding after convergence</text>
+  <text class="small" x="88" y="654">DF status limits multi-destination delivery; it does not disable all-active unicast.</text>
+
+  <rect x="88" y="680" width="122" height="52" rx="11" fill="#152944" stroke="#38bdf8" stroke-width="2"/>
+  <text class="body" x="149" y="712" text-anchor="middle">Leaf-C</text>
+  <rect x="278" y="680" width="168" height="52" rx="11" fill="#152944" stroke="#34d399" stroke-width="2"/>
+  <text class="body" x="362" y="701" text-anchor="middle">Leaf-A or Leaf-B</text>
+  <text class="small" x="362" y="721" text-anchor="middle">per-flow hash</text>
+  <rect x="502" y="680" width="98" height="52" rx="11" fill="#152944" stroke="#fbbf24" stroke-width="2"/>
+  <text class="body" x="551" y="712" text-anchor="middle">Server</text>
+  <line x1="210" y1="706" x2="278" y2="706" stroke="#34d399" stroke-width="4" marker-end="url(#arrow-green)"/>
+  <line x1="446" y1="706" x2="502" y2="706" stroke="#34d399" stroke-width="4" marker-end="url(#arrow-green)"/>
+  <text class="small" x="88" y="758" fill="#6ee7b7">Known unicast: Type 1 aliasing permits either multihoming leaf.</text>
+  <text class="small" x="88" y="784" fill="#fcd34d">BUM: Type 3 replicates across VXLAN; Type 4-derived DF state permits only Leaf-A to deliver.</text>
+
+  <text class="section" x="680" y="630">Leaf-A loses the whole Ethernet segment</text>
+  <text class="small" x="680" y="654">The two withdrawals have different consumers and different jobs.</text>
+  <line x1="710" y1="704" x2="1160" y2="704" stroke="#49627e" stroke-width="3"/>
+
+  <circle cx="714" cy="704" r="22" fill="#fb7185"/>
+  <text class="step" x="714" y="710" text-anchor="middle">1</text>
+  <circle cx="862" cy="704" r="22" fill="#22d3ee"/>
+  <text class="step" x="862" y="710" text-anchor="middle">2</text>
+  <circle cx="1010" cy="704" r="22" fill="#34d399"/>
+  <text class="step" x="1010" y="710" text-anchor="middle">3</text>
+  <circle cx="1158" cy="704" r="22" fill="#a78bfa"/>
+  <text class="step" x="1158" y="710" text-anchor="middle">4</text>
+
+  <text class="small" x="714" y="748" text-anchor="middle">
+    <tspan x="714" dy="0">access link</tspan>
+    <tspan x="714" dy="19">goes down</tspan>
+  </text>
+  <text class="small" x="862" y="748" text-anchor="middle">
+    <tspan x="862" dy="0">withdraw Type 1</tspan>
+    <tspan x="862" dy="19">per-ES / EVI</tspan>
+  </text>
+  <text class="small" x="1010" y="748" text-anchor="middle">
+    <tspan x="1010" dy="0">Leaf-C removes</tspan>
+    <tspan x="1010" dy="19">VTEP .11 at once</tspan>
+  </text>
+  <text class="small" x="1158" y="748" text-anchor="middle">
+    <tspan x="1158" dy="0">withdraw Type 4</tspan>
+    <tspan x="1158" dy="19">Leaf-B becomes DF</tspan>
+  </text>
+  <text class="small" x="680" y="806" fill="#9fb0c5">Mass withdrawal avoids waiting for every dependent Type 2 MAC route to disappear.</text>
+
+  <text class="small" x="64" y="868">Logical sequence; exact DF timers and extensions depend on the implementation.</text>
+  <text class="small" x="1216" y="868" text-anchor="end">VXLAN EVPN Architecture</text>
+</svg>

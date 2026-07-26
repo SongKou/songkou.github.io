@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="620" viewBox="0 0 1280 620" role="img" aria-labelledby="title desc">
+  <title id="title">Step 2: EVPN Type 1 reachability and Type 2 MAC aliasing</title>
+  <desc id="desc">PE1 and PE2 advertise Type 1 per-Ethernet-segment and per-EVI routes for ESI 01 and L2 VNI 10110. PE1 alone advertises the Type 2 route for MAC M1. Remote PE3 combines the Type 2 route with the Type 1 routes and installs PE1 and PE2 as eligible next hops.</desc>
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity=".25"/>
+    </filter>
+    <marker id="arrow-cyan" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L10,4 z" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L10,4 z" fill="#34d399"/>
+    </marker>
+    <style>
+      .title { font: 750 31px Inter, "Segoe UI", Arial, sans-serif; fill: #e5eef9; }
+      .subtitle { font: 450 17px Inter, "Segoe UI", Arial, sans-serif; fill: #9fb0c5; }
+      .node-title { font: 700 20px Inter, "Segoe UI", Arial, sans-serif; fill: #e5eef9; }
+      .body { font: 500 16px Inter, "Segoe UI", Arial, sans-serif; fill: #c8d6e8; }
+      .small { font: 500 14px Inter, "Segoe UI", Arial, sans-serif; fill: #9fb0c5; }
+      .small-cyan { font: 650 14px Inter, "Segoe UI", Arial, sans-serif; fill: #67e8f9; }
+      .small-green { font: 650 14px Inter, "Segoe UI", Arial, sans-serif; fill: #6ee7b7; }
+      .pill { font: 650 14px Inter, "Segoe UI", Arial, sans-serif; }
+      .result-title { font: 700 19px Inter, "Segoe UI", Arial, sans-serif; fill: #e5eef9; }
+      .result-body { font: 500 15px Inter, "Segoe UI", Arial, sans-serif; fill: #c8d6e8; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="620" fill="#07111f"/>
+  <text class="title" x="64" y="48">Step 2 · Advertise reachability and build aliasing</text>
+  <text class="subtitle" x="64" y="77">Type 1 identifies eligible ESI paths; Type 2 still identifies the individual endpoint MAC</text>
+
+  <g aria-label="Three-step sequence">
+    <rect x="64" y="94" width="180" height="30" rx="15" fill="#101e31" stroke="#49627e"/>
+    <text class="pill" x="154" y="114" text-anchor="middle" fill="#9fb0c5">1 · Discover ESI</text>
+    <rect x="254" y="94" width="228" height="30" rx="15" fill="#e5eef9"/>
+    <text class="pill" x="368" y="114" text-anchor="middle" fill="#07111f">2 · Advertise reachability</text>
+    <rect x="492" y="94" width="194" height="30" rx="15" fill="#101e31" stroke="#49627e"/>
+    <text class="pill" x="589" y="114" text-anchor="middle" fill="#9fb0c5">3 · Attachment fails</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="140" width="1152" height="344" rx="16" fill="#101e31" stroke="#49627e" stroke-width="2"/>
+  </g>
+
+  <line x1="266" y1="302" x2="360" y2="239" stroke="#64748b" stroke-width="5" stroke-linecap="round"/>
+  <line x1="266" y1="354" x2="360" y2="413" stroke="#64748b" stroke-width="5" stroke-linecap="round"/>
+  <text class="small" x="294" y="274">LAG</text>
+  <text class="small" x="294" y="399">LAG</text>
+
+  <path d="M565 210 C690 172 847 200 1000 276" fill="none" stroke="#34d399" stroke-width="4" marker-end="url(#arrow-green)"/>
+  <path d="M565 246 C700 258 846 284 1000 314" fill="none" stroke="#22d3ee" stroke-width="4" stroke-dasharray="9 7" marker-end="url(#arrow-cyan)"/>
+  <path d="M565 412 C700 430 848 389 1000 350" fill="none" stroke="#22d3ee" stroke-width="4" stroke-dasharray="9 7" marker-end="url(#arrow-cyan)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="96" y="284" width="170" height="96" rx="14" fill="#152944" stroke="#49627e" stroke-width="2"/>
+    <rect x="360" y="186" width="205" height="104" rx="14" fill="#152944" stroke="#34d399" stroke-width="3"/>
+    <rect x="360" y="360" width="205" height="104" rx="14" fill="#152944" stroke="#22d3ee" stroke-width="3"/>
+    <rect x="1000" y="248" width="184" height="148" rx="14" fill="#152944" stroke="#38bdf8" stroke-width="3"/>
+  </g>
+
+  <text class="node-title" x="181" y="319" text-anchor="middle">CE</text>
+  <text class="body" x="181" y="348" text-anchor="middle">ESI 01 · VLAN 10</text>
+
+  <text class="node-title" x="462" y="218" text-anchor="middle">PE1</text>
+  <text class="body" x="462" y="247" text-anchor="middle">VTEP PE1 IP</text>
+  <text class="small-green" x="462" y="272" text-anchor="middle">learns MAC M1</text>
+
+  <text class="node-title" x="462" y="393" text-anchor="middle">PE2</text>
+  <text class="body" x="462" y="422" text-anchor="middle">VTEP PE2 IP</text>
+  <text class="small-cyan" x="462" y="447" text-anchor="middle">same ESI and L2VNI</text>
+
+  <text class="small-green" x="760" y="168" text-anchor="middle">RT-2: MAC M1 + ESI 01 → PE1</text>
+  <text class="small-cyan" x="770" y="246" text-anchor="middle">RT-1 per-EVI: ESI 01 + VNI 10110</text>
+  <text class="small-cyan" x="770" y="432" text-anchor="middle">RT-1 per-EVI: ESI 01 + VNI 10110</text>
+  <text class="small" x="785" y="305" text-anchor="middle">logical advertisements via MP-BGP</text>
+
+  <text class="node-title" x="1092" y="278" text-anchor="middle">Remote PE3</text>
+  <text class="small" x="1092" y="307" text-anchor="middle">Type 2 alone:</text>
+  <text class="body" x="1092" y="330" text-anchor="middle">M1 → PE1</text>
+  <text class="small" x="1092" y="354" text-anchor="middle">after Type 1 aliasing:</text>
+  <text class="small-green" x="1092" y="378" text-anchor="middle">M1 → {PE1, PE2}</text>
+  <text class="small" x="1092" y="425" text-anchor="middle">per-ES RT-1 also sent</text>
+  <text class="small" x="1092" y="447" text-anchor="middle">for mass withdrawal</text>
+
+  <g filter="url(#shadow)">
+    <rect x="64" y="500" width="1152" height="84" rx="14" fill="#152944" stroke="#49627e" stroke-width="2"/>
+  </g>
+  <text class="result-title" x="88" y="527">Type 1 result</text>
+  <text class="result-body" x="88" y="551">Type 2 supplies MAC M1. Type 1 per-EVI lets Remote PE3 add PE2 as an eligible all-active next hop.</text>
+  <text class="result-body" x="88" y="574">Type 1 itself does not advertise the MAC; per-ES Type 1 supplies the mass-withdraw scope.</text>
+</svg>

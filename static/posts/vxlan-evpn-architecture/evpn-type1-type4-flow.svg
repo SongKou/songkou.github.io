@@ -52,9 +52,9 @@
 
   <g filter="url(#shadow)">
     <rect x="88" y="276" width="220" height="126" rx="14" fill="#152944" stroke="#38bdf8" stroke-width="3"/>
-    <text class="node-title" x="198" y="312" text-anchor="middle">Leaf-C / VTEP .13</text>
+    <text class="node-title" x="198" y="312" text-anchor="middle">Leaf-C / PE .13</text>
     <text class="body" x="198" y="340" text-anchor="middle">remote VNI member</text>
-    <text class="body" x="198" y="367" text-anchor="middle">MAC A → VTEP .11 + .12</text>
+    <text class="body" x="198" y="367" text-anchor="middle">MAC A → PE .11 + .12</text>
     <text class="small" x="198" y="389" text-anchor="middle">Type 2 + Type 1 aliasing</text>
 
     <rect x="378" y="258" width="244" height="164" rx="18" fill="#152944" stroke="#49627e" stroke-width="3"/>
@@ -65,12 +65,12 @@
     <text class="small" x="500" y="404" text-anchor="middle">Type 1 reaches VNI members</text>
 
     <rect x="716" y="238" width="202" height="120" rx="14" fill="#152944" stroke="#34d399" stroke-width="3"/>
-    <text class="node-title" x="817" y="274" text-anchor="middle">Leaf-A / VTEP .11</text>
+    <text class="node-title" x="817" y="274" text-anchor="middle">Leaf-A / PE .11</text>
     <text class="body" x="817" y="302" text-anchor="middle">learns MAC A</text>
     <text class="small" x="817" y="327" text-anchor="middle">originates Type 2</text>
 
     <rect x="982" y="238" width="202" height="120" rx="14" fill="#152944" stroke="#a78bfa" stroke-width="3"/>
-    <text class="node-title" x="1083" y="274" text-anchor="middle">Leaf-B / VTEP .12</text>
+    <text class="node-title" x="1083" y="274" text-anchor="middle">Leaf-B / PE .12</text>
     <text class="body" x="1083" y="302" text-anchor="middle">same ESI and VNI</text>
     <text class="small" x="1083" y="327" text-anchor="middle">no Type 2 required</text>
 
@@ -92,7 +92,7 @@
   <path d="M982 337 L622 337" fill="none" stroke="#22d3ee" stroke-width="4" stroke-dasharray="9 7" marker-end="url(#arrow-cyan)"/>
   <path d="M378 342 L308 342" fill="none" stroke="#22d3ee" stroke-width="4" stroke-dasharray="9 7" marker-end="url(#arrow-cyan)"/>
   <text class="badge" x="590" y="458" text-anchor="middle" fill="#67e8f9">2 · Type 1 per-ES + per-EVI from both leaves</text>
-  <text class="small" x="590" y="480" text-anchor="middle">Leaf-C builds the eligible {VTEP .11, VTEP .12} set</text>
+  <text class="small" x="590" y="480" text-anchor="middle">Leaf-C builds the eligible {PE .11, PE .12} set</text>
 
   <line x1="817" y1="358" x2="898" y2="454" stroke="#49627e" stroke-width="6" stroke-linecap="round"/>
   <line x1="1083" y1="358" x2="1016" y2="454" stroke="#49627e" stroke-width="6" stroke-linecap="round"/>
@@ -122,7 +122,7 @@
   <line x1="210" y1="706" x2="278" y2="706" stroke="#34d399" stroke-width="4" marker-end="url(#arrow-green)"/>
   <line x1="446" y1="706" x2="502" y2="706" stroke="#34d399" stroke-width="4" marker-end="url(#arrow-green)"/>
   <text class="small" x="88" y="758" fill="#6ee7b7">Known unicast: Type 1 aliasing permits either multihoming leaf.</text>
-  <text class="small" x="88" y="784" fill="#fcd34d">BUM: Type 3 replicates across VXLAN; Type 4-derived DF state permits only Leaf-A to deliver.</text>
+  <text class="small" x="88" y="784" fill="#fcd34d">BUM: Type 3 replicates overlay-wide; Type 4-derived DF state permits only Leaf-A to deliver.</text>
 
   <text class="section" x="680" y="630">Leaf-A loses the whole Ethernet segment</text>
   <text class="small" x="680" y="654">The two withdrawals have different consumers and different jobs.</text>
@@ -147,7 +147,7 @@
   </text>
   <text class="small" x="1010" y="748" text-anchor="middle">
     <tspan x="1010" dy="0">Leaf-C removes</tspan>
-    <tspan x="1010" dy="19">VTEP .11 at once</tspan>
+    <tspan x="1010" dy="19">PE .11 at once</tspan>
   </text>
   <text class="small" x="1158" y="748" text-anchor="middle">
     <tspan x="1158" dy="0">withdraw Type 4</tspan>

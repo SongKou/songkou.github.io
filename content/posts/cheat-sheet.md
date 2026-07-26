@@ -652,6 +652,59 @@ findmnt /mnt/usb                 # 5. verify; df -h /mnt/usb shows its capacity
 - `iostat -x 2` (sysstat) — per-device `%util` (how busy) and `await` (average I/O latency in ms). High `%util` with rising `await` is a saturated disk — this is the confirmation for the high-`wa` CPU signal above.
 - `sudo iotop` — the per-process view: *who* is doing the I/O.
 
+### 5.12 ethtool — the NIC, the link, and the hardware counters
+
+ethtool works **below the IP layer**: `ip` owns addresses and routes, `tc` owns shaping, ethtool owns the physical link, NIC queues, offloads, interrupts, transceivers, and hardware counters. Reads generally work unprivileged; changes need root. Everything here is driver-dependent — `netlink error: Operation not supported` means the driver doesn't implement it, not that the NIC is broken. Nearly all changes are **runtime-only**: persist them through your network manager (NetworkManager `ethtool.*` properties, systemd-networkd `.link` files) or they vanish at reboot.
+
+**Link basics:**
+
+- `ethtool <if>` — speed, duplex, autoneg, and the three advertisement lists (what the NIC supports, what it advertises, what the partner advertises — negotiation failures live in the mismatch between the last two). Compact form: `ethtool <if> | grep -E 'Speed|Duplex|Auto-negotiation|Link detected'`.
+- `Link detected: yes` means **carrier only** — not addresses, not VLANs, not gateway, not DNS. It answers exactly one question: does the NIC see light/signal.
+- `sudo ethtool -r <if>` — restart autonegotiation without changing config. `sudo ethtool -s <if> speed 1000 duplex full autoneg off` forces the link — **and can drop your SSH session instantly**; on modern twisted-pair, autoneg should normally stay on, and forcing one side only creates duplex mismatches.
+- `ethtool -i <if>` — driver, firmware, and `bus-info` (feed it to `lspci -s <bus> -nnk` to reach the physical device). `ethtool -P <if>` — the permanent MAC, regardless of what software randomized. `sudo ethtool -p <if> 15` — blink the port LED for 15 s; the only reliable way to find one port among 48.
+
+**Counters (`-S`) — and the RoCE/HPC counters specifically:**
+
+- `sudo ethtool -S <if> | grep -Ei 'drop|discard|error|crc|miss|timeout|overrun|buffer'` — the generic problem sweep. Counter names are driver-defined; a nonzero value is history, a **rising** value is a problem: `watch -d -n1 "ethtool -S <if> | grep -Ei 'drop|error|pause'"`. (`ip -s link` gives the standardized kernel counters; `-S` gives the richer driver/hardware set. Stats can't be reset — snapshot and diff instead.)
+- On **ConnectX/mlx5**, this is where the lossless-fabric truth lives — and it counts RoCE traffic even though RDMA bypasses the kernel, because the physical-port and vPort counters sit in NIC hardware:
+  - `grep -E 'prio3.*pause'` — per-priority PFC. `rx_prio3_pause` rising = the **switch** is congested and pausing you; `tx_prio3_pause` rising = **your host** is the bottleneck and pausing the switch. These counters only exist while PFC is enabled on that priority — their complete absence means PFC isn't on, which is itself the finding.
+  - `rx_pause_ctrl_phy` / `tx_pause_ctrl_phy` — global 802.3x pause. Note: mlx5 has no bare `rx_pause`/`tx_pause`; that naming belongs to other drivers.
+  - `rx_discards_phy` — packets actually dropped at the port for lack of buffer: hard evidence your "lossless" fabric is losing packets. `rx_out_of_buffer` — the host couldn't post receive buffers fast enough (look at rings, IRQ affinity, CPU). `rx_buffer_passed_thres_phy` — early warning: port buffer crossed 85%.
+  - `rx_corrected_bits_phy` vs `rx_pcs_symbol_err_phy` — FEC working vs errors *escaping* FEC; steady low corrections are normal, fast growth means a marginal link, symbol errors mean it's already losing.
+  - `rx_vport_rdma_unicast_packets` / `_bytes` — RoCE volume as seen from ethtool.
+- Division of labor: `ethtool -S` for wire/port/PFC/physical health; `rdma statistic show link mlx5_0/1` and the verbs tools for RDMA-level counters; ECN/CNP (DCQCN) counters live in `/sys/class/infiniband/*/ports/*/hw_counters/`, not in ethtool at all — ethtool shows you PFC and drops, never ECN marking.
+
+**Pause vs PFC — the trap:** `ethtool -a/-A <if>` reads/sets **link-level global pause** (all traffic). It is *not* PFC. Per-priority flow control on ConnectX is configured with `mlnx_qos -i <if> --pfc 0,0,0,1,0,0,0,0` (priority 3 lossless), and running global pause and PFC together is invalid. `ethtool -A` on a RoCE host is almost always the wrong knob — see the [RoCEv2 end-to-end post](/posts/rocev2-cisco-cumulus-connectx-end-to-end/).
+
+**Offloads (`-k`/`-K`):**
+
+- `ethtool -k <if>` — the feature list; `[fixed]` = not changeable on this driver/hardware. `sudo ethtool -K <if> gro off` etc. to toggle.
+- Keep offloads **on** for throughput (TSO/GSO/GRO save real CPU); `lro off` for latency-sensitive and forwarding roles. Note these affect only kernel-stack traffic — RoCE verbs traffic never touches them.
+- The capture artifact: locally captured *outgoing* packets showing "bad checksum" usually means tx checksum offload — the capture sees the packet before the NIC fills the checksum in. `ethtool -K <if> tx off` for a clean diagnostic capture, back on afterward.
+
+**Performance knobs (measure before and after; none is a universal win):**
+
+- `ethtool -g <if>` / `sudo ethtool -G <if> rx 2048 tx 2048` — ring buffers. Bigger absorbs bursts and stops `rx_out_of_buffer`; it also adds queuing latency and memory. Raise only when the drop counters say so.
+- `ethtool -l <if>` / `sudo ethtool -L <if> combined 8` — channels (queues + IRQ paths). More spreads load across CPUs; too many wrecks cache locality. **Changing channel count resets the RSS table.** Pair with `grep <if> /proc/interrupts` and NUMA-local IRQ pinning (MLNX_OFED ships `set_irq_affinity*.sh`; stop `irqbalance` first).
+- `ethtool -c <if>` / `-C` — interrupt coalescing, *the* latency-vs-throughput dial. Low latency: `sudo ethtool -C <if> adaptive-rx off rx-usecs 0 rx-frames 0` — interrupt immediately, pay in CPU. Throughput: adaptive on, or large static values. Two rules: adaptive coalescing means *variable* delay — jitter — so deterministic-latency work (HFT, MPI) turns it off; and on mlx5, a static `rx-usecs` is **ignored until** `adaptive-rx off` is set.
+- `ethtool -x <if>` / `sudo ethtool -X <if> equal 8` — RSS indirection table (hashing flows to queues). Remember: one flow stays on one queue by design, so RSS never accelerates a single elephant flow (same reason `iperf3 -P 4` and perftest `-q` exist).
+- `sudo ethtool -N <if> flow-type tcp4 dst-port 443 action 3` — hardware flow steering to a specific queue; `-n` lists rules, `-N <if> delete <id>` removes. Support varies from thousands of rules to none.
+
+**High-speed link bring-up (25G+):**
+
+- `sudo ethtool --show-fec <if>` / `sudo ethtool --set-fec <if> encoding auto|off|rs|baser|llrs` — FEC mode. `rs` = Reed-Solomon (Clause 91/108), `baser` = Firecode (Clause 74, lower latency, weaker), `llrs` = low-latency RS. **Both ends must match or the link stays down** — the classic 25G/100G "cable is fine, link won't come up." With autoneg on, FEC is negotiated; setting it manually only means something with autoneg off. 25G DAC classes encode the requirement: CA-25G-L needs RS, CA-25G-S needs BaseR, CA-25G-N none. (Full FEC theory: the [optics post, section 13.1](/posts/sfp-qsfp-fiber-400g-800g-optics/).)
+- `sudo ethtool -m <if>` — transceiver EEPROM with DDM/DOM when driver and module support it: vendor/part/serial, wavelength, temperature, voltage, **Tx/Rx optical power** — weak Rx power, wrong optic type, and overheating diagnosed without touching the fiber. Passive DACs have no DDM; virtual NICs expose nothing.
+
+**First-pass collection** — the no-changes snapshot worth pasting into any NIC ticket:
+
+```bash
+IFACE=enp3s0
+ip -details link show dev "$IFACE"; ip -s link show dev "$IFACE"
+ethtool "$IFACE"; ethtool -i "$IFACE"; ethtool -k "$IFACE"
+ethtool -g "$IFACE"; ethtool -l "$IFACE"; ethtool -c "$IFACE"; ethtool -x "$IFACE"
+sudo ethtool -S "$IFACE" | grep -Ei 'drop|discard|error|crc|pause|miss|timeout'
+```
+
 ### 5.12 Disable console messages (kernel log spam on the terminal)
 
 The kernel prints its log messages straight onto the console — on a serial console or lab VM (interface flaps, USB events, firewall logging) they type right over whatever you're doing. The messages still land in `dmesg` and the journal; these commands only stop them from being *painted on your screen*.

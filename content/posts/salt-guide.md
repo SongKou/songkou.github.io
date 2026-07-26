@@ -2447,10 +2447,37 @@ CREATE TABLE IF NOT EXISTS ekou_audit_archive (
 );
 ```
 
-Then, in `databases.sls`, **replace the per-table loop** with two states that carry one stable ID per database — push the file to the minion, then run it:
+Then, in `databases.sls`, **replace the per-table loop** with two states that carry one stable ID per database — push the file to the minion, then run it. Here is the complete file, exactly as run in the lab: the database/user/grants stay as before, and the schema block is folded into the *same* loop under an `{% if db.get('schema') %}` guard so only databases that declare a `schema:` key get one:
 
 ```yaml
+# /srv/salt/mysql/databases.sls — replaces appdb.sls and reportdb.sls
+include:
+  - mysql.deps
+
 {% for name, db in pillar.get('mysql_databases', {}).items() %}
+{{ name }}_database:
+  mysql_database.present:
+    - name: {{ name }}
+    - require:
+      - cmd: salt_mysql_deps
+
+{{ name }}_user:
+  mysql_user.present:
+    - name: {{ db.user }}
+    - host: localhost
+    - password: '{{ db.password }}'
+    - require:
+      - mysql_database: {{ name }}_database
+
+{{ name }}_grants:
+  mysql_grants.present:
+    - grant: ALL PRIVILEGES
+    - database: {{ name }}.*
+    - user: {{ db.user }}
+    - host: localhost
+    - require:
+      - mysql_user: {{ name }}_user
+
 {% if db.get('schema') %}
 {{ name }}_schema_file:
   file.managed:
@@ -2468,6 +2495,8 @@ Then, in `databases.sls`, **replace the per-table loop** with two states that ca
 {% endif %}
 {% endfor %}
 ```
+
+Note the structure carefully — this is exactly the shape the gotcha at the end of this section is about. There is **one** loop, not two; the schema `{% if %}` lives *inside* it; and the old per-table block is **gone**, not commented. A second nested `{% for %}` or a `#`-commented leftover block is what produces the errors that follow.
 
 and point the pillar at the file per database (only `ekou_audit_db` has one here):
 

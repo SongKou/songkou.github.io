@@ -1922,7 +1922,7 @@ mysql_running:
       - pkg: install_mysql
 
 ekou@saltmaster:~$ cat /srv/salt/mysql/reportdb.sls
-include:
+include:             # <--calls the deps to include salt_mysql_deps
   - mysql.deps
 
 {% set db = pillar['reportdb'] %}
@@ -2121,14 +2121,93 @@ skou_test:
     - ekou_report_table
 ```
 
-**When the third database arrives** — copying `reportdb.sls` a third time is the signal to go data-driven: make the pillar a dict of databases and replace both per-database files with one loop:
+#### When the third database arrives: going data-driven
 
-```yaml
-# pillar
+Copying `reportdb.sls` a third time is the signal to go data-driven: make the pillar a **dict of databases** and replace all the per-database files with one loop. The migration touches three things — the pillar, one new state file, and `init.sls` — and this lab performed it live for a third database, `ekou_audit_db`, hitting one instructive gap on the way.
+
+**Migration step 1 — pillar.** The per-database blocks become one dict; this lab kept the old keys commented out during the cutover:
+
+```text
+ekou@saltmaster:~$ cat /srv/pillar/mysql.sls
+# Connection default for Salt's mysql modules: talk to MySQL over the unix
+# socket, where Ubuntu's auth_socket lets root in without a password.
+mysql.unix_socket: /var/run/mysqld/mysqld.sock
+
+#appdb:
+#  name: ekou_test_db
+#  ...
+#reportdb:
+#  name: ekou_report_db
+#  ...
+
 mysql_databases:
-  ekou_test_db:   {table: ekou_test_table,   user: ekoumysql,  password: ...}
-  ekou_report_db: {table: ekou_report_table, user: reportuser, password: ...}
+  ekou_test_db:   {table: ekou_test_table,   user: ekoumysql,  password: Cisco12345}
+  ekou_report_db: {table: ekou_report_table, user: reportuser, password: Report12345}
+  ekou_audit_db:  {table: ekou_audit_table,  user: audituser,  password: Audit12345}
 ```
+
+**Migration step 2 — init.sls swaps the includes.** This is a real edit the migration needs (only *after* the migration do new databases become pillar-only):
+
+```text
+ekou@saltmaster:~$ cat /srv/salt/mysql/init.sls
+include:
+  - mysql.deps
+  - mysql.install
+  - mysql.service
+  - mysql.databases
+#  - mysql.appdb
+#  - mysql.reportdb
+```
+
+Retire `appdb.sls` and `reportdb.sls` properly — move them out of `/srv/salt/mysql/` rather than leaving them dormant. They are worse than clutter now: their pillar keys (`appdb`, `reportdb`) no longer exist, so anyone running `state.apply mysql.appdb` gets a Jinja rendering error on `pillar['appdb']`.
+
+**Migration step 3 — the loop file, and the gap this lab hit.** The first version of `databases.sls` used in the lab was the schematic from above — with a `# ...user, grants, table follow the same pattern` comment standing in for three-quarters of the loop body. Pasted literally, it manages **only the databases**. The apply looked like a success:
+
+```text
+ekou@saltmaster:~$ sudo salt skou_test state.apply mysql.databases test=True
+...
+          ID: ekou_test_db_database
+     Comment: Database ekou_test_db is already present
+          ID: ekou_report_db_database
+     Comment: Database ekou_report_db is already present
+          ID: ekou_audit_db_database
+      Result: None
+     Comment: Database ekou_audit_db is not present and needs to be created
+
+Summary for skou_test
+------------
+Succeeded: 6 (unchanged=1)
+Failed:    0
+------------
+
+ekou@saltmaster:~$ sudo salt skou_test state.apply mysql.databases
+...
+          ID: ekou_audit_db_database
+      Result: True
+     Comment: The database ekou_audit_db has been created
+     Changes:
+              ----------
+              ekou_audit_db:
+                  Present
+
+Summary for skou_test
+------------
+Succeeded: 6 (changed=1)
+Failed:    0
+------------
+
+ekou@saltmaster:~$ sudo salt skou_test mysql.db_list
+skou_test:
+    - ekou_audit_db
+    - ekou_report_db
+    - ekou_test_db
+    ...
+ekou@saltmaster:~$ sudo salt skou_test mysql.db_tables ekou_audit_db
+skou_test:
+ekou@saltmaster:~$
+```
+
+Database present — **table missing**, and no user or grants either. Nothing failed; the states for them simply never existed, because a schematic's `# ...` comment is load-bearing. Salt only manages what renders: a green summary means "everything I was given converged," never "everything you meant is covered." The complete loop file:
 
 ```yaml
 # /srv/salt/mysql/databases.sls — replaces appdb.sls and reportdb.sls
@@ -2141,13 +2220,64 @@ include:
     - name: {{ name }}
     - require:
       - cmd: salt_mysql_deps
-# ...user, grants, table follow the same pattern with {{ name }}-prefixed IDs
+
+{{ name }}_user:
+  mysql_user.present:
+    - name: {{ db.user }}
+    - host: localhost
+    - password: '{{ db.password }}'
+    - require:
+      - mysql_database: {{ name }}_database
+
+{{ name }}_grants:
+  mysql_grants.present:
+    - grant: ALL PRIVILEGES
+    - database: {{ name }}.*
+    - user: {{ db.user }}
+    - host: localhost
+    - require:
+      - mysql_user: {{ name }}_user
+
+{{ name }}_table:
+  mysql_query.run:
+    - database: {{ name }}
+    - query: |
+        CREATE TABLE IF NOT EXISTS {{ db.table }} (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          name VARCHAR(64) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    - unless: mysql -N -e "SHOW TABLES IN {{ name }} LIKE '{{ db.table }}'" | grep -q {{ db.table }}
+    - require:
+      - mysql_database: {{ name }}_database
 {% endfor %}
 ```
 
-After that, a new database is a **pillar edit only** — no new state file, no init.sls change. That is the end point of the whole section-7 progression: ad-hoc commands → states → the top file → pillar as data → states as templates that consume it.
+With the full file in place, the next apply renders 3 + 3×4 = 15 states. The existing users, grants and tables from the appdb/reportdb era report no change (same MySQL objects, merely under new state IDs), and exactly three states change: `ekou_audit_db_user`, `_grants`, and `_table`. Verify with `mysql.db_tables ekou_audit_db` — it should now list `ekou_audit_table`.
 
-One housekeeping note from this lab session: the retired flat `mysql.sls` was renamed to `REMOVE_THIS_mysql.sls` but left inside `/srv/salt/` — where it is still a servable state named `REMOVE_THIS_mysql`. Harmless while nothing references it, but move retired files out of the file roots entirely (`sudo mv /srv/salt/REMOVE_THIS_mysql.sls ~/mysql.sls.flat-backup`).
+After the migration, a fourth database really is a **pillar edit only** — no new state file, no init.sls change. That is the end point of the whole section-7 progression: ad-hoc commands → states → the top file → pillar as data → states as templates that consume it.
+
+#### Applying one database without touching the others
+
+The loop costs you the per-file handle: there is no `state.apply mysql.auditdb` any more, because all databases render from one SLS. Two answers, in order of preference.
+
+**The Salt-native answer: don't isolate — idempotence already does it.** Run `state.apply mysql.databases test=True` and read it: in the capture above, the two existing databases report "already present" while only the audit states show `Result: None`. "Not touching" in Salt does not mean *not running* a state — it means running it and changing nothing, which the dry run proves before you commit. For almost every case this is the right workflow, and the full highstate gives the same guarantee fleet-wide.
+
+**The surgical answer: shrink the pillar for one run.** When a change window genuinely covers only the new database, override the pillar on the CLI — a `pillar=` argument **replaces the top-level key** for that run, so the loop renders only what you pass:
+
+```bash
+sudo salt skou_test state.apply mysql.databases \
+  pillar='{"mysql_databases": {"ekou_audit_db": {"table": "ekou_audit_table", "user": "audituser", "password": "Audit12345"}}}' \
+  test=True
+```
+
+Only the four `ekou_audit_db_*` states render; the others cannot be modified because they do not exist in this run (and nothing is removed — unrendered states are simply not run). The same trick also lets you *trial* a database that is not in pillar yet, then commit the block once it applies cleanly.
+
+Two narrower tools worth knowing: `state.sls_id ekou_audit_db_table mysql.databases` re-runs a single state ID out of the rendered SLS — good for re-poking one failed state, awkward for deploying a four-state unit; and `state.single mysql_database.present name=...` bypasses SLS and pillar entirely — handy ad hoc, but whatever it creates is not yet under management.
+
+The honest framing: this question is the price of Approach 2. Per-file layout gives file-level handles; the loop gives data-level scale with only pillar-level handles, and the CLI override buys the granularity back at the cost of an uglier command line. If your change process routinely demands single-database applies, that is a legitimate reason to stay with one-file-per-database longer than aesthetics suggest.
+
+One note from this lab session: the retired flat `mysql.sls` was renamed to `REMOVE_THIS_mysql.sls` intentionally as I want to make a backup of the test file.  but left inside `/srv/salt/` — where it is still a servable state named `REMOVE_THIS_mysql`. Harmless while nothing references it, but move retired files out of the file roots entirely in prod is a good approach (`sudo mv /srv/salt/REMOVE_THIS_mysql.sls ~/mysql.sls.flat-backup`).
 
 ---
 

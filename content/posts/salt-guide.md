@@ -2540,7 +2540,7 @@ skou_test:
 #        CREATE TABLE IF NOT EXISTS {{ db.table }} (    <====== line 33, inside a "#" comment
 ```
 
-The cause: **Salt renders Jinja first, YAML second.** A `#` is a *YAML* comment, but Jinja runs before YAML ever sees the file, so `{{ db.table }}` inside that "commented" block is still evaluated — and the new pillar has no `table` key, so it fails. `#` hides a line from YAML, never from Jinja. Two rules follow:
+The cause: I initially thought the sls is a yaml file so I use # to hash out things, but it is not. **Salt renders Jinja first, YAML second.** A `#` is a *YAML* comment, but Jinja runs before YAML ever sees the file, so `{{ db.table }}` inside that "commented" block is still evaluated — and the new pillar has no `table` key, so it fails. `#` hides a line from YAML, never from Jinja. Two rules follow:
 
 - To disable a line that contains Jinja, **delete it or wrap it in a Jinja comment `{# ... #}`** — a `{# #}` block is removed *during* the Jinja pass, so nothing inside it is evaluated.
 - Don't keep dead template code "just in case." Unlike a plain config file, a commented-out Salt state can still crash the render if it references pillar keys that no longer exist.

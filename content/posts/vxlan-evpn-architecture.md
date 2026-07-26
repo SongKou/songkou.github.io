@@ -1376,7 +1376,7 @@ This appendix keeps the Type 1 and Type 4 behavior available as a general EVPN r
 
 ### A.1 Worked scenario: why Type 4 and Type 1 are both needed
 
-Assume `Server-01` forms one all-active LACP bond to `Leaf-A` and `Leaf-B`. Both leaves use the same nonzero `ESI-10` for the bond and map VLAN 110 to L2 VNI 10110. `Leaf-C` is a remote PE in that VNI. For this example, `Leaf-A` is the Designated Forwarder (DF) for VLAN 110.
+Assume `Server-01` forms one all-active LACP bond to `Leaf-A` and `Leaf-B`. Both leaves use the same nonzero `ESI-10` for the bond and place VLAN 110 in the same EVI (encoded as L2 VNI 10110 on this VXLAN fabric). `Leaf-C` is a remote PE in that EVI. For this example, `Leaf-A` is the Designated Forwarder (DF) for VLAN 110.
 
 (Type 1 and Type 4 are RFC 7432 EVPN mechanisms, independent of the data-plane encapsulation. This reference therefore uses the standards term **PE** for the routing device rather than the VXLAN-specific **VTEP**; on a VXLAN fabric each PE is simply a leaf VTEP.)
 
@@ -1387,9 +1387,9 @@ Assume `Server-01` forms one all-active LACP bond to `Leaf-A` and `Leaf-B`. Both
 ### A.2 Control-plane flow
 
 1. **The multihoming leaves advertise Type 4 ES routes.** `Leaf-A` and `Leaf-B` advertise the same ESI with their own originator IP addresses. The ES-Import Route Target limits import to leaves attached to that Ethernet segment, so the two leaves discover each other while remote `Leaf-C` normally does not import the Type 4 routes. The resulting candidate set is used for DF election. [RFC 7432, Sections 8.1 and 8.5](https://www.rfc-editor.org/rfc/rfc7432.html#section-8.1)
-2. **Each leaf advertises Type 1 A-D routes.** A per-ES route represents reachability to the entire Ethernet segment and enables mass withdrawal. A per-EVI route represents the leaf's participation in VNI 10110 on that segment and enables aliasing for that service. Type 1 per-EVI advertisement is optional in the base specification; this scenario assumes the implementation supports and advertises it. [RFC 7432, Sections 8.2 and 8.4](https://www.rfc-editor.org/rfc/rfc7432.html#section-8.2)
+2. **Each leaf advertises Type 1 A-D routes.** A per-ES route represents reachability to the entire Ethernet segment and enables mass withdrawal. A per-EVI route represents the leaf's participation in that EVI on the segment and enables aliasing for that service. Type 1 per-EVI advertisement is optional in the base specification; this scenario assumes the implementation supports and advertises it. [RFC 7432, Sections 8.2 and 8.4](https://www.rfc-editor.org/rfc/rfc7432.html#section-8.2)
 3. **Only one leaf needs to originate the host's Type 2 route.** Suppose LACP hashes the first source frame from `Server-01` to `Leaf-A`. `Leaf-A` learns MAC A and advertises a Type 2 MAC/IP route containing `ESI-10`. `Leaf-B` may not yet have learned that MAC.
-4. **The remote PE creates an aliased next-hop set.** `Leaf-C` correlates the Type 2 route from `Leaf-A` with the Type 1 per-EVI advertisements for the same ESI and VNI. It can therefore install both `PE .11` and `PE .12` as eligible next hops for MAC A instead of pinning traffic to the Type 2 originator.
+4. **The remote PE creates an aliased next-hop set.** `Leaf-C` correlates the Type 2 route from `Leaf-A` with the Type 1 per-EVI advertisements for the same ESI and EVI. It can therefore install both `PE .11` and `PE .12` as eligible next hops for MAC A instead of pinning traffic to the Type 2 originator.
 
 **Aside — EVI versus ESI.** An **EVI (EVPN Instance)** is one logical Layer-2 forwarding domain inside an EVPN network — roughly a VLAN or bridge domain extended across the fabric. A customer VLAN maps to an EVI, and every PE participating in that EVI exchanges reachability for the same broadcast domain; in VXLAN EVPN the EVI is commonly associated with an L2 VNI. In this scenario, VLAN 110 → EVI → VNI 10110.
 
@@ -1419,13 +1419,15 @@ If only VLAN 110 fails while the physical Ethernet segment remains up, the per-E
 |---|---|
 | Which leaves belong to this Ethernet segment, and which is DF? | **Type 4** ES route |
 | How can remote PEs rapidly invalidate reachability to the whole segment? | **Type 1 per-ES** A-D route |
-| Which leaves can reach this ESI in VNI 10110 for aliasing? | **Type 1 per-EVI** A-D route |
+| Which leaves can reach this ESI in that EVI for aliasing? | **Type 1 per-EVI** A-D route |
 | Where was MAC A learned? | **Type 2** MAC/IP route carrying the ESI |
 | Which PEs receive overlay BUM copies? | **Type 3** Inclusive Multicast route |
 
 ### A.6 Alternative three-step CE/PE example
 
-The following example uses vendor-neutral **CE/PE terminology**. A customer-edge switch is dual-homed in all-active mode to `PE1` and `PE2` through one LACP bundle. Both PEs identify the attachment as `ESI 01`; local VLAN 10 maps to L2 VNI 10110. `Remote PE3` participates in the same EVPN service but is **not** attached to `ESI 01`.
+Where A.1–A.5 stayed at the standards abstraction — PEs, Ethernet segments, and the **EVI** — this second telling deliberately drops down to the **VXLAN encoding** of that same EVI, the **L2 VNI**, so you can see how the two connect. (A.6.2 makes the mapping explicit via RFC 8365.)
+
+The example uses vendor-neutral **CE/PE terminology**. A customer-edge switch is dual-homed in all-active mode to `PE1` and `PE2` through one LACP bundle. Both PEs identify the attachment as `ESI 01`; local VLAN 10 maps to L2 VNI 10110. `Remote PE3` participates in the same EVPN service but is **not** attached to `ESI 01`.
 
 Keep these route responsibilities separate:
 

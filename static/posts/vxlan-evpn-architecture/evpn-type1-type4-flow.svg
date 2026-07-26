@@ -53,7 +53,7 @@
   <g filter="url(#shadow)">
     <rect x="88" y="276" width="220" height="126" rx="14" fill="#152944" stroke="#38bdf8" stroke-width="3"/>
     <text class="node-title" x="198" y="312" text-anchor="middle">Leaf-C / PE .13</text>
-    <text class="body" x="198" y="340" text-anchor="middle">remote VNI member</text>
+    <text class="body" x="198" y="340" text-anchor="middle">remote EVI member</text>
     <text class="body" x="198" y="367" text-anchor="middle">MAC A → PE .11 + .12</text>
     <text class="small" x="198" y="389" text-anchor="middle">Type 2 + Type 1 aliasing</text>
 
@@ -62,7 +62,7 @@
     <text class="body" x="500" y="331" text-anchor="middle">reflects EVPN routes</text>
     <text class="small" x="500" y="361" text-anchor="middle">Type 4 imported only by</text>
     <text class="small" x="500" y="382" text-anchor="middle">members of the same ESI</text>
-    <text class="small" x="500" y="404" text-anchor="middle">Type 1 reaches VNI members</text>
+    <text class="small" x="500" y="404" text-anchor="middle">Type 1 reaches EVI members</text>
 
     <rect x="716" y="238" width="202" height="120" rx="14" fill="#152944" stroke="#34d399" stroke-width="3"/>
     <text class="node-title" x="817" y="274" text-anchor="middle">Leaf-A / PE .11</text>
@@ -71,7 +71,7 @@
 
     <rect x="982" y="238" width="202" height="120" rx="14" fill="#152944" stroke="#a78bfa" stroke-width="3"/>
     <text class="node-title" x="1083" y="274" text-anchor="middle">Leaf-B / PE .12</text>
-    <text class="body" x="1083" y="302" text-anchor="middle">same ESI and VNI</text>
+    <text class="body" x="1083" y="302" text-anchor="middle">same ESI and EVI</text>
     <text class="small" x="1083" y="327" text-anchor="middle">no Type 2 required</text>
 
     <rect x="814" y="454" width="286" height="86" rx="14" fill="#152944" stroke="#fbbf24" stroke-width="3"/>

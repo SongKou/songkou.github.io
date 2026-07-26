@@ -1770,7 +1770,59 @@ reportdb:
   password: Report12345
 ```
 
-**Step 2 — the new state file.** `/srv/salt/mysql/reportdb.sls` is the same shape as `appdb.sls` with a different pillar key — and **distinct state IDs**, because IDs are global across a compiled run, so `appdb_database` cannot appear twice. As first written it looked like this — note there is **no `include:` line yet**, an omission that is about to matter:
+**Step 2 — the new state file.** `/srv/salt/mysql/reportdb.sls` is the same shape as `appdb.sls` with a different pillar key — and **distinct state IDs**, because IDs are global across a compiled run, so `appdb_database` cannot appear twice.
+
+For reference, this is `appdb.sls` as it stood at that moment — the 7.7 version, still carrying the `salt_mysql_deps` bootstrap block. Keep an eye on that ID; it is the one `reportdb.sls` is about to `require`:
+
+```yaml
+{% set db = pillar['appdb'] %}
+
+salt_mysql_deps:
+  cmd.run:
+    - name: salt-pip install pymysql saltext-mysql
+    - unless: /opt/saltstack/salt/bin/python3 -c "import pymysql, saltext.mysql"
+    - reload_modules: True
+    - require:
+      - service: mysql_running
+
+appdb_database:
+  mysql_database.present:
+    - name: {{ db.name }}
+    - require:
+      - cmd: salt_mysql_deps
+
+appdb_user:
+  mysql_user.present:
+    - name: {{ db.user }}
+    - host: localhost
+    - password: '{{ db.password }}'
+    - require:
+      - mysql_database: appdb_database
+
+appdb_grants:
+  mysql_grants.present:
+    - grant: ALL PRIVILEGES
+    - database: {{ db.name }}.*
+    - user: {{ db.user }}
+    - host: localhost
+    - require:
+      - mysql_user: appdb_user
+
+appdb_table:
+  mysql_query.run:
+    - database: {{ db.name }}
+    - query: |
+        CREATE TABLE IF NOT EXISTS {{ db.table }} (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          name VARCHAR(64) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    - unless: mysql -N -e "SHOW TABLES IN {{ db.name }} LIKE '{{ db.table }}'" | grep -q {{ db.table }}
+    - require:
+      - mysql_database: appdb_database
+```
+
+And the new `reportdb.sls` as first written — note there is **no `include:` line yet**, an omission that is about to matter:
 
 ```yaml
 {% set db = pillar['reportdb'] %}

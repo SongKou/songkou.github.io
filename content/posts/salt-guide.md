@@ -2496,6 +2496,108 @@ One honest limit to understand: `onchanges` tracks the **file**, not the databas
 
 And the ceiling from 7.5 is unchanged: this is still provisioning-grade schema management. A production database with evolving, versioned schema belongs to real migration tooling — Flyway, Liquibase, Alembic, or the application's own migrations — where each change is an ordered, checksummed, rollback-aware step. Salt's proper role there shrinks to what it does best: ensure the migration tool is installed and the schema files are present, then invoke the tool. It should not try to *be* the migration engine.
 
+#### The switch in practice — one gotcha, then the working run
+
+Making this switch in the lab tripped over one of Salt's most counterintuitive traps. The instinct when replacing the old per-table loop is to comment it out with `#` rather than delete it — and that produces a compile error that points at a line you thought was disabled:
+
+```text
+ekou@saltmaster:~$ sudo salt skou_test state.apply mysql.databases test=True
+skou_test:
+    Data failed to compile:
+----------
+    Rendering SLS 'base:mysql.databases' failed: Jinja variable
+    'salt.utils.secret.MaskedDict object' has no attribute 'table'; line 33
+...
+#        CREATE TABLE IF NOT EXISTS {{ db.table }} (    <====== line 33, inside a "#" comment
+```
+
+The cause: **Salt renders Jinja first, YAML second.** A `#` is a *YAML* comment, but Jinja runs before YAML ever sees the file, so `{{ db.table }}` inside that "commented" block is still evaluated — and the new pillar has no `table` key, so it fails. `#` hides a line from YAML, never from Jinja. Two rules follow:
+
+- To disable a line that contains Jinja, **delete it or wrap it in a Jinja comment `{# ... #}`** — a `{# #}` block is removed *during* the Jinja pass, so nothing inside it is evaluated.
+- Don't keep dead template code "just in case." Unlike a plain config file, a commented-out Salt state can still crash the render if it references pillar keys that no longer exist.
+
+(The `MaskedDict` in the message is just the 3008 pillar value masking from Section 8.1 — a red herring; the real fault is the missing attribute.)
+
+With the old block **deleted** (not commented) and the single-loop `databases.sls` from above in place, the dry run compiles and previews both schema states without touching anything — note the actual table list is still just the one pre-existing table:
+
+```text
+ekou@saltmaster:~$ sudo salt skou_test state.apply mysql.databases test=True
+...
+          ID: ekou_audit_db_schema_file
+    Function: file.managed
+        Name: /etc/mysql/schemas/ekou_audit_db.sql
+      Result: None
+     Comment: The file /etc/mysql/schemas/ekou_audit_db.sql is set to be changed
+     Changes:
+              ----------
+              newfile:
+                  /etc/mysql/schemas/ekou_audit_db.sql
+----------
+          ID: ekou_audit_db_schema_apply
+    Function: cmd.run
+        Name: mysql ekou_audit_db < /etc/mysql/schemas/ekou_audit_db.sql
+      Result: None
+     Comment: Command "mysql ekou_audit_db < /etc/mysql/schemas/ekou_audit_db.sql" would have been executed
+
+Summary for skou_test
+-------------
+Succeeded: 14 (unchanged=2, changed=2)
+Failed:     0
+-------------
+
+ekou@saltmaster:~$ sudo salt skou_test mysql.db_tables ekou_audit_db
+skou_test:
+    - ekou_audit_table
+```
+
+Then the real apply — `file.managed` writes the schema, `onchanges` fires `cmd.run`, and the script runs (`retcode: 0`, empty stderr):
+
+```text
+ekou@saltmaster:~$ sudo salt skou_test state.apply mysql.databases
+...
+          ID: ekou_audit_db_schema_file
+    Function: file.managed
+        Name: /etc/mysql/schemas/ekou_audit_db.sql
+      Result: True
+     Comment: File /etc/mysql/schemas/ekou_audit_db.sql updated
+     Changes:
+              ----------
+              diff:
+                  New file
+----------
+          ID: ekou_audit_db_schema_apply
+    Function: cmd.run
+        Name: mysql ekou_audit_db < /etc/mysql/schemas/ekou_audit_db.sql
+      Result: True
+     Comment: Command "mysql ekou_audit_db < /etc/mysql/schemas/ekou_audit_db.sql" run
+     Changes:
+              ----------
+              pid:
+                  4127
+              retcode:
+                  0
+              stderr:
+              stdout:
+
+Summary for skou_test
+-------------
+Succeeded: 14 (changed=2)
+Failed:     0
+-------------
+
+ekou@saltmaster:~$ sudo salt skou_test mysql.db_tables ekou_audit_db
+skou_test:
+    - ekou_audit_archive
+    - ekou_audit_log
+    - ekou_audit_table
+```
+
+Three things this run confirms about the pattern:
+
+- **The `test=True` list proves the dry run was inert** — still one table afterward. Only the real apply created `ekou_audit_log` and `ekou_audit_archive`; `ekou_audit_table` already existed and the `CREATE TABLE IF NOT EXISTS` skipped it.
+- **`onchanges` did its job.** The file was newly written (a change), so `cmd.run` fired. A third run with no edit to the `.sql` would report the file unchanged and skip the command entirely — the clean no-op that keeps this idempotent.
+- **Two states, any number of tables.** Adding a fourth table is one more `CREATE TABLE` in `ekou_audit_db.sql`; the state IDs `ekou_audit_db_schema_file` and `ekou_audit_db_schema_apply` never change. That is the whole point — the contract the per-table loop broke.
+
 One note from this lab session: the retired flat `mysql.sls` was renamed to `REMOVE_THIS_mysql.sls` intentionally as I want to make a backup of the test file.  but left inside `/srv/salt/` — where it is still a servable state named `REMOVE_THIS_mysql`. Harmless while nothing references it, but move retired files out of the file roots entirely in prod is a good approach (`sudo mv /srv/salt/REMOVE_THIS_mysql.sls ~/mysql.sls.flat-backup`).
 
 ---

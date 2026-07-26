@@ -1770,7 +1770,49 @@ reportdb:
   password: Report12345
 ```
 
-**Step 2 — the new state file.** `/srv/salt/mysql/reportdb.sls` is the same shape as `appdb.sls` with a different pillar key — and **distinct state IDs**, because IDs are global across a compiled run, so `appdb_database` cannot appear twice.
+**Step 2 — the new state file.** `/srv/salt/mysql/reportdb.sls` is the same shape as `appdb.sls` with a different pillar key — and **distinct state IDs**, because IDs are global across a compiled run, so `appdb_database` cannot appear twice. As first written it looked like this — note there is **no `include:` line yet**, an omission that is about to matter:
+
+```yaml
+{% set db = pillar['reportdb'] %}
+
+reportdb_database:
+  mysql_database.present:
+    - name: {{ db.name }}
+    - require:
+      - cmd: salt_mysql_deps
+
+reportdb_user:
+  mysql_user.present:
+    - name: {{ db.user }}
+    - host: localhost
+    - password: '{{ db.password }}'
+    - require:
+      - mysql_database: reportdb_database
+
+reportdb_grants:
+  mysql_grants.present:
+    - grant: ALL PRIVILEGES
+    - database: {{ db.name }}.*
+    - user: {{ db.user }}
+    - host: localhost
+    - require:
+      - mysql_user: reportdb_user
+
+reportdb_table:
+  mysql_query.run:
+    - database: {{ db.name }}
+    - query: |
+        CREATE TABLE IF NOT EXISTS {{ db.table }} (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          name VARCHAR(64) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    - unless: mysql -N -e "SHOW TABLES IN {{ db.name }} LIKE '{{ db.table }}'" | grep -q {{ db.table }}
+    - require:
+      - mysql_database: reportdb_database
+```
+
+At this point `init.sls` also gained its `- mysql.reportdb` line, and the full highstate would have worked — because `init.sls` renders every file, so `salt_mysql_deps` would be in the compiled run. The trap only springs when applying the file *alone*.
 
 **Step 3 — first attempt, and the compile error.** Applying just the new piece, exactly as the 7.7 layout promises you can:
 

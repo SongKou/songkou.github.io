@@ -705,7 +705,7 @@ ethtool -g "$IFACE"; ethtool -l "$IFACE"; ethtool -c "$IFACE"; ethtool -x "$IFAC
 sudo ethtool -S "$IFACE" | grep -Ei 'drop|discard|error|crc|pause|miss|timeout'
 ```
 
-### 5.12 Disable console messages (kernel log spam on the terminal)
+### 5.13 Disable console messages (kernel log spam on the terminal)
 
 The kernel prints its log messages straight onto the console — on a serial console or lab VM (interface flaps, USB events, firewall logging) they type right over whatever you're doing. The messages still land in `dmesg` and the journal; these commands only stop them from being *painted on your screen*.
 
@@ -732,3 +732,43 @@ sudo sysctl --system             # apply now; the file applies on every boot
 
 - `mesg n` — blocks `write`/`wall` messages from other users on your tty (`mesg y` re-enables).
 - systemd can be configured to forward the journal to the console: if the spam includes service logs, check `ForwardToConsole=` in `/etc/systemd/journald.conf` and set it to `no` (then `sudo systemctl restart systemd-journald`).
+
+### 5.14 Capturing multicast traffic (tcpdump)
+
+```bash
+tcpdump -ni eth0 -vv 'igmp or (icmp and dst host 239.1.1.1)'
+```
+
+One filter grabs both halves of a multicast test: all **IGMP** (the join/query control plane) and **ICMP destined to the group `239.1.1.1`** (a multicast-ping data test). `-n` skips DNS, `-i` picks the interface, and `-vv` prints the IP header (TTL, ToS, options) — which is what makes multicast readable. Real capture, trimmed:
+
+```text
+12:43:17 IP (tos 0xc0, ttl 1, ..., proto IGMP (2), length 32, options (RA))
+    192.168.40.1 > 224.0.0.1: igmp query v2               # querier → all-hosts, every ~60s
+12:44:19 IP (tos 0xc0, ttl 1, ..., proto IGMP (2), length 32, options (RA))
+    192.168.40.10 > 239.1.1.1: igmp v2 report 239.1.1.1   # host answers: "I want this group"
+...
+12:46:43 IP (tos 0x0, ttl 252, ..., proto ICMP (1), length 100)
+    192.168.10.10 > 239.1.1.1: ICMP echo request, id 4, seq 0, length 80
+12:46:45 IP (tos 0x0, ttl 252, ...)
+    192.168.10.10 > 239.1.1.1: ICMP echo request, id 4, seq 1, length 80   # copy via short path
+12:46:45 IP (tos 0x0, ttl 251, ...)
+    192.168.10.10 > 239.1.1.1: ICMP echo request, id 4, seq 1, length 80   # SAME seq, one extra hop = duplicate
+12:46:47 IP (tos 0x0, ttl 251, ...)
+    192.168.10.10 > 239.1.1.1: ICMP echo request, id 4, seq 2, length 80   # settled to one path
+^C
+252 packets captured
+```
+
+How to read it:
+
+- **General Query vs Membership Report.** `192.168.40.1 > 224.0.0.1 igmp query v2` is the **IGMP querier** (the segment's router) polling `224.0.0.1` (all-hosts) on a timer. `192.168.40.10 > 239.1.1.1 igmp v2 report` is a **host** answering that it wants group `239.1.1.1` — IGMPv2 reports are sent to the group address itself. The steady query→report heartbeat is what keeps the group's forwarding state alive (see the IGMP-snooping/querier notes in the Arista and Cumulus posts).
+- **`ttl 1` and `options (RA)` on the IGMP packets are correct, not a bug.** IGMP is link-local — it must never be routed, so TTL is always 1, and the **Router Alert** option makes routers punt it to the control plane. `tos 0xc0` is DSCP CS6 (network control), the normal marking for control traffic.
+- **The multicast ping** (`ICMP echo request` to `239.1.1.1`) comes from `192.168.10.10` — a *different* subnet — and reaches this segment only because the local host joined the group. Its `ttl` starts high and decrements per router hop (252 → 251 here ≈ three to four hops from source).
+- **The duplicate is the interesting find.** `seq 1` appears **twice — once at `ttl 252`, once at `ttl 251`** — i.e. the same multicast packet arrived over two paths of different lengths, then everything settled onto the single `ttl 251` path. That momentary double-delivery is exactly the *duplicate-multicast-on-a-segment* condition **PIM Assert** exists to resolve; the settle-to-one-TTL is Assert (or the tree converging) electing a single forwarder. See [PIM DR, Assert, and Multicast ECMP](/posts/pim-dr-assert-multicast-ecmp/).
+
+Useful filter variants:
+
+- `tcpdump -ni eth0 igmp` — just the join/query control plane (who wants what).
+- `tcpdump -ni eth0 'ip multicast'` — every multicast packet (the `224.0.0.0/4` range), data and control.
+- `tcpdump -ni eth0 'ip multicast and not igmp'` — multicast *data* only, no control chatter.
+- Add `dst host 239.1.1.1` to focus one group; add `-w mcast.pcap` to save the capture for Wireshark instead of printing it.

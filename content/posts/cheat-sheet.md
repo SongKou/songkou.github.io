@@ -788,9 +788,11 @@ socat UDP4-RECV:5000,ip-add-membership=239.1.1.1:192.168.40.10,reuseaddr -
 Confirm the membership registered, and send test traffic from another host (multicast TTL defaults to 1, so raise it to cross routers):
 
 ```bash
-ip maddr show dev eth0        # 239.1.1.1 listed under the interface
-netstat -g                    # group memberships per interface (net-tools)
+cat /proc/net/igmp            # universal (incl. BusyBox/Alpine): group in byte-reversed hex — 239.1.1.1 → 010101EF
+ip maddr show dev eth0        # readable dotted form, but needs full iproute2 (apk add iproute2; BusyBox's ip has no 'maddr')
 echo "hello group" | socat - UDP4-DATAGRAM:239.1.1.1:5000,ip-multicast-ttl=8   # sender
 ```
+
+On a minimal image (the Alpine/BusyBox lab nodes) reach for `/proc/net/igmp` — it needs no package. The group prints **byte-reversed in hex** (`239.1.1.1` → `010101EF`, `224.0.0.1` → `010000E0`), so `grep -i 010101EF /proc/net/igmp` is the quick "did the join take?" check. `netstat -g` has the same BusyBox gap as `ip maddr` — it needs `net-tools`.
 
 Non-socat alternatives: `iperf -s -u -B 239.1.1.1` (receiver, joins the group) with `iperf -c 239.1.1.1 -u -T 8` (sender) — this is **iperf2**; iperf3 dropped multicast support. NVIDIA's `mtools` (`mreceive -g 239.1.1.1 -p 5000` / `msend -g 239.1.1.1 -p 5000`) is another lightweight option.

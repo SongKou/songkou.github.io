@@ -772,3 +772,25 @@ Useful filter variants:
 - `tcpdump -ni eth0 'ip multicast'` — every multicast packet (the `224.0.0.0/4` range), data and control.
 - `tcpdump -ni eth0 'ip multicast and not igmp'` — multicast *data* only, no control chatter.
 - Add `dst host 239.1.1.1` to focus one group; add `-w mcast.pcap` to save the capture for Wireshark instead of printing it.
+
+**Joining a group and generating traffic to test.** The capture above shows the *result* of a host joining a group — here is how to produce it. To join `239.1.1.1` and print whatever arrives on UDP port 5000:
+
+```bash
+socat UDP4-RECVFROM:5000,ip-add-membership=239.1.1.1:192.168.40.10,reuseaddr,fork -
+```
+
+This is a valid join: `ip-add-membership=<group>:<local-interface-IP>` issues the `IP_ADD_MEMBERSHIP` setsockopt (join `239.1.1.1` via the interface holding `192.168.40.10`), `reuseaddr` lets several receivers share the port, and `-` dumps received datagrams to stdout. The moment it runs the host emits the `igmp v2 report 239.1.1.1` seen in the capture above, and the switch/router begins forwarding the group to this port. One refinement: `UDP4-RECVFROM ...,fork` forks a new process **per datagram** (it is built for request/reply); for a pure receiver of a steady stream, `UDP4-RECV` is lighter and needs no `fork`:
+
+```bash
+socat UDP4-RECV:5000,ip-add-membership=239.1.1.1:192.168.40.10,reuseaddr -
+```
+
+Confirm the membership registered, and send test traffic from another host (multicast TTL defaults to 1, so raise it to cross routers):
+
+```bash
+ip maddr show dev eth0        # 239.1.1.1 listed under the interface
+netstat -g                    # group memberships per interface (net-tools)
+echo "hello group" | socat - UDP4-DATAGRAM:239.1.1.1:5000,ip-multicast-ttl=8   # sender
+```
+
+Non-socat alternatives: `iperf -s -u -B 239.1.1.1` (receiver, joins the group) with `iperf -c 239.1.1.1 -u -T 8` (sender) — this is **iperf2**; iperf3 dropped multicast support. NVIDIA's `mtools` (`mreceive -g 239.1.1.1 -p 5000` / `msend -g 239.1.1.1 -p 5000`) is another lightweight option.

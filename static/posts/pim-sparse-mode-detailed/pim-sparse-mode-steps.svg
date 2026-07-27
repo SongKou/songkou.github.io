@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1320" viewBox="0 0 1200 1320" role="img" aria-labelledby="title desc">
+  <title id="title">PIM Sparse Mode detailed control-plane steps</title>
+  <desc id="desc">Twelve-step diagram showing membership, shared-tree construction, source registration, native source-tree construction, and shortest-path-tree switchover.</desc>
+  <defs>
+    <style>
+      .bg{fill:#fff}.node{fill:#eef6ff;stroke:#7c9bbd;stroke-width:2}.label{font:600 19px Arial,sans-serif;fill:#17212b;text-anchor:middle}.sub{font:15px Arial,sans-serif;fill:#506070;text-anchor:middle}.step{font:600 17px Arial,sans-serif;fill:#17212b}.detail{font:15px Arial,sans-serif;fill:#506070}.line{stroke:#d2dbe5;stroke-width:2}.igmp{stroke:#7257c7;stroke-width:4;fill:none}.pim{stroke:#1677c8;stroke-width:4;fill:none}.data{stroke:#138a5b;stroke-width:5;fill:none}.stop{stroke:#d06b25;stroke-width:4;fill:none;stroke-dasharray:9 6}.phase{font:600 18px Arial,sans-serif;fill:#17212b}.key{font:14px Arial,sans-serif;fill:#506070}
+    </style>
+    <marker id="igmp-arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#7257c7"/></marker>
+    <marker id="pim-arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#1677c8"/></marker>
+    <marker id="data-arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#138a5b"/></marker>
+    <marker id="stop-arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#d06b25"/></marker>
+  </defs>
+  <rect class="bg" width="1200" height="1320"/>
+  <text x="50" y="45" class="phase">PIM Sparse Mode — control-plane and data-plane progression</text>
+  <g transform="translate(55 75)">
+    <rect class="node" width="150" height="64" rx="10"/><text class="label" x="75" y="28">Receiver</text><text class="sub" x="75" y="50">Interested in G</text>
+    <rect class="node" x="235" width="150" height="64" rx="10"/><text class="label" x="310" y="28">LHR</text><text class="sub" x="310" y="50">Receiver-side DR</text>
+    <rect class="node" x="470" width="150" height="64" rx="10"/><text class="label" x="545" y="28">RP</text><text class="sub" x="545" y="50">Meeting point</text>
+    <rect class="node" x="705" width="150" height="64" rx="10"/><text class="label" x="780" y="28">FHR</text><text class="sub" x="780" y="50">Source-side DR</text>
+    <rect class="node" x="940" width="150" height="64" rx="10"/><text class="label" x="1015" y="28">Source S</text><text class="sub" x="1015" y="50">Sends to G</text>
+    <path class="line" d="M75 70V1150M310 70V1150M545 70V1150M780 70V1150M1015 70V1150"/>
+    <text class="step" x="0" y="113">1</text><path class="igmp" marker-end="url(#igmp-arrow)" d="M75 105H310"/><text class="detail" x="90" y="96">IGMP Membership Report for G</text>
+    <text class="step" x="0" y="203">2</text><path class="pim" marker-end="url(#pim-arrow)" d="M310 195H545"/><text class="detail" x="330" y="186">PIM (*,G) Join toward RP</text>
+    <text class="step" x="0" y="293">3</text><path class="data" marker-end="url(#data-arrow)" d="M1015 285H780"/><text class="detail" x="810" y="276">First multicast packet to G</text>
+    <text class="step" x="0" y="383">4</text><path class="pim" marker-end="url(#pim-arrow)" d="M780 375H545"/><text class="detail" x="575" y="366">PIM Register with data</text>
+    <text class="step" x="0" y="473">5</text><path class="data" marker-end="url(#data-arrow)" d="M545 465H310H75"/><text class="detail" x="190" y="456">Decapsulated data down RPT</text>
+    <text class="step" x="0" y="563">6</text><path class="pim" marker-end="url(#pim-arrow)" d="M545 555H780"/><text class="detail" x="575" y="546">RP sends PIM (S,G) Join</text>
+    <text class="step" x="0" y="653">7</text><path class="data" marker-end="url(#data-arrow)" d="M780 645H545"/><text class="detail" x="575" y="636">Native (S,G) data reaches RP</text>
+    <text class="step" x="0" y="743">8</text><path class="stop" marker-end="url(#stop-arrow)" d="M545 735H780"/><text class="detail" x="595" y="726">PIM Register-Stop</text>
+    <text class="step" x="0" y="833">9</text><path class="pim" marker-end="url(#pim-arrow)" d="M310 825C420 770 655 770 780 825"/><text class="detail" x="435" y="785">Optional PIM (S,G) Join toward S</text>
+    <text class="step" x="0" y="923">10</text><path class="data" marker-end="url(#data-arrow)" d="M780 915C655 970 420 970 310 915H75"/><text class="detail" x="420" y="982">Native data over the SPT</text>
+    <text class="step" x="0" y="1043">11</text><path class="stop" marker-end="url(#stop-arrow)" d="M310 1035H545"/><text class="detail" x="340" y="1026">PIM (S,G,rpt) Prune</text>
+    <text class="step" x="0" y="1133">12</text><path class="data" marker-end="url(#data-arrow)" d="M1015 1125H780C650 1180 430 1180 310 1125H75"/><text class="detail" x="425" y="1198">Steady state: source traffic bypasses RP</text>
+  </g>
+  <g transform="translate(55 1270)">
+    <line class="igmp" x2="45"/><text class="key" x="55" y="5">IGMP</text>
+    <line class="pim" x1="150" x2="195"/><text class="key" x="205" y="5">PIM Join/Register</text>
+    <line class="data" x1="370" x2="415"/><text class="key" x="425" y="5">Multicast data</text>
+    <line class="stop" x1="570" x2="615"/><text class="key" x="625" y="5">Stop/Prune control</text>
+  </g>
+</svg>

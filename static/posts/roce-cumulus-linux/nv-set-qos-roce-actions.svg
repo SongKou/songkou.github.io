@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="nvr-title nvr-desc">
+  <title id="nvr-title">What nv set qos roce programs</title>
+  <desc id="nvr-desc">One command fans out into four configuration areas: PFC on switch priority 3, ECN thresholds on traffic classes 0 and 3, buffer pool allocation which the profile splits roughly evenly, and DSCP classification for RoCE data and CNP traffic. The buffer split is the item to verify before production — hand-rolled PFC without the profile leaves the lossless class with nothing.</desc>
+  <defs>
+    <marker id="nvr-arrow" viewBox="0 0 10 10" markerWidth="7" markerHeight="7" refX="9" refY="4" orient="auto"><path d="M0,0 L0,8 L10,4 z" fill="#49627e"/></marker>
+    <filter id="nvr-shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/></filter>
+    <style>
+      .nvr{font-family:Inter,'Segoe UI',Arial,sans-serif}
+      .nvr-mono{font-family:Consolas,'Cascadia Mono',Menlo,monospace}
+      .nvr-title{font-size:34px;font-weight:750;fill:#e5eef9}
+      .nvr-sub{font-size:18px;font-weight:450;fill:#9fb0c5}
+      .nvr-cmd{font-size:24px;font-weight:700;fill:#fbbf24}
+      .nvr-node{font-size:20px;font-weight:650;fill:#e5eef9}
+      .nvr-line{font-size:15px;font-weight:450;fill:#9fb0c5}
+      .nvr-warn{font-size:16px;font-weight:700;fill:#fbbf24}
+      .nvr-warn-sub{font-size:15px;font-weight:450;fill:#9fb0c5}
+      .nvr-footer{font-size:15px;font-weight:500;fill:#9fb0c5}
+      .nvr-flow{stroke:#49627e;stroke-width:4;stroke-linecap:round;marker-end:url(#nvr-arrow)}
+    </style>
+  </defs>
+  <rect width="1280" height="760" fill="#07111f"/>
+
+  <text class="nvr nvr-title" x="64" y="68">What one command programs</text>
+  <text class="nvr nvr-sub" x="64" y="102">nv set qos roce = PFC + ECN + buffer pools + classification — with a buffer split worth verifying</text>
+
+  <g filter="url(#nvr-shadow)">
+    <rect x="440" y="150" width="400" height="70" rx="12" fill="#152944" stroke="#fbbf24" stroke-width="2.5"/>
+    <text class="nvr-mono nvr-cmd" x="640" y="195" text-anchor="middle">nv set qos roce</text>
+  </g>
+
+  <line class="nvr-flow" x1="530" y1="228" x2="230" y2="292"/>
+  <line class="nvr-flow" x1="595" y1="228" x2="525" y2="292"/>
+  <line class="nvr-flow" x1="685" y1="228" x2="755" y2="292"/>
+  <line class="nvr-flow" x1="750" y1="228" x2="1050" y2="292"/>
+
+  <g filter="url(#nvr-shadow)">
+    <rect x="64" y="300" width="272" height="190" rx="14" fill="#152944" stroke="#38bdf8" stroke-width="3"/>
+    <rect x="368" y="300" width="272" height="190" rx="14" fill="#152944" stroke="#34d399" stroke-width="3"/>
+    <rect x="672" y="300" width="272" height="190" rx="14" fill="#152944" stroke="#fbbf24" stroke-width="3"/>
+    <rect x="976" y="300" width="240" height="190" rx="14" fill="#152944" stroke="#a78bfa" stroke-width="3"/>
+  </g>
+
+  <text class="nvr nvr-node" x="200" y="338" text-anchor="middle">PFC</text>
+  <text class="nvr nvr-line" x="200" y="372" text-anchor="middle">switch priority 3 → no-drop</text>
+  <text class="nvr nvr-line" x="200" y="398" text-anchor="middle">XOFF + headroom set</text>
+  <text class="nvr nvr-line" x="200" y="424" text-anchor="middle">from cable-length 100 m</text>
+  <text class="nvr nvr-line" x="200" y="450" text-anchor="middle">pause frames per priority</text>
+
+  <text class="nvr nvr-node" x="504" y="338" text-anchor="middle">ECN</text>
+  <text class="nvr nvr-line" x="504" y="372" text-anchor="middle">WRED marking, enabled-tc 0,3</text>
+  <text class="nvr nvr-line" x="504" y="398" text-anchor="middle">min 146.48 KB · max 1.43 MB</text>
+  <text class="nvr nvr-line" x="504" y="424" text-anchor="middle">defaults are per platform —</text>
+  <text class="nvr nvr-line" x="504" y="450" text-anchor="middle">never copy other vendors'</text>
+
+  <text class="nvr nvr-node" x="808" y="338" text-anchor="middle">Buffer pools</text>
+  <text class="nvr nvr-line" x="808" y="372" text-anchor="middle">ingress split lossy / lossless</text>
+  <text class="nvr nvr-line" x="808" y="398" text-anchor="middle">profile default: ~50 / 50</text>
+  <text class="nvr nvr-warn" x="808" y="430" text-anchor="middle">⚠ verify, then tune</text>
+  <text class="nvr nvr-line" x="808" y="456" text-anchor="middle">nv show qos traffic-pool</text>
+
+  <text class="nvr nvr-node" x="1096" y="338" text-anchor="middle">Classification</text>
+  <text class="nvr nvr-line" x="1096" y="372" text-anchor="middle">trust DSCP</text>
+  <text class="nvr nvr-line" x="1096" y="398" text-anchor="middle">DSCP 26 → SP3 · RoCE data</text>
+  <text class="nvr nvr-line" x="1096" y="424" text-anchor="middle">DSCP 48 → SP6 · CNP</text>
+  <text class="nvr nvr-line" x="1096" y="450" text-anchor="middle">TC3 lossless · TC6 strict</text>
+
+  <g filter="url(#nvr-shadow)">
+    <rect x="64" y="560" width="1152" height="90" rx="14" fill="#1f1503" stroke="#fbbf24" stroke-width="2"/>
+    <text class="nvr nvr-warn" x="640" y="598" text-anchor="middle">Hand-rolled PFC without the profile leaves the lossless class at 0% — the profile itself splits ~50/50</text>
+    <text class="nvr nvr-warn-sub" x="640" y="628" text-anchor="middle">Either way: read the split with nv show qos traffic-pool, and deepen it for RoCE-heavy fabrics (A.2)</text>
+  </g>
+
+  <text class="nvr nvr-footer" x="1216" y="725" text-anchor="end">RoCE on Cumulus Linux</text>
+</svg>

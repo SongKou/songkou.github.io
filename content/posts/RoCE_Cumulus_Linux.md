@@ -663,6 +663,8 @@ nv show interface swp1 qos roce status
 
 Available display paths can vary slightly by Cumulus Linux version.
 
+This one-liner is deliberately treated as a black box here — **Part 3** at the end of this post opens it up: what the command actually programs, which defaults are safe, and the buffer-split lore that deserves a fact-check.
+
 ### 9. Example small laboratory deployment
 
 #### Topology
@@ -1375,3 +1377,164 @@ The operational goal is not: **"See many PFC frames, so lossless Ethernet is wor
 The healthier goal is: **"ECN controls congestion, PFC is rare, and buffer discards remain zero."**
 
 Topics beyond the scope of this post — worth exploring for AI-cluster fabrics — include rail-optimized topologies, ECMP entropy and adaptive routing, incast and oversubscription, NVIDIA Spectrum-X, the emerging **Ultra Ethernet Consortium (UEC)** transport designed to address RoCE's limitations for AI/HPC, NCCL traffic patterns, and multi-NIC GPU server placement.
+
+## Part 3: Appendix — inside `nv set qos roce`, and the defaults worth checking
+
+On most NOSes the equivalent lossless setup spans several layers of QoS configuration — Cumulus Linux compresses the whole thing into one command. Sections 8 and 9 used `nv set qos roce` exactly that way: as a black box. This appendix opens the box: what the command actually programs, the defaults that deserve scrutiny before production traffic arrives, and one piece of widely circulated buffer-pool lore that NVIDIA's own documentation contradicts. The notes below come from lab work on Spectrum switches running Cumulus Linux 5.x; as everywhere in this post, verify the details against your release and platform.
+
+The demo fabric for this appendix — and the first rule of the one-liner:
+
+![Demo GPU fabric: two spines, two leaves, four dual-homed GPU servers; every switch tier runs nv set qos roce because PFC is hop-by-hop](/posts/roce-cumulus-linux/gpu-fabric-pfc-ecn-topology.svg)
+
+**The profile goes on every switch tier, not just the leaves.** PFC is a hop-by-hop mechanism (Section 4): a pause frame only protects the single link it is sent on. If the leaves run the RoCE profile but the spines do not, the spine–leaf hops have no lossless guarantee and the fabric silently degrades to Section 15's mismatched-hop failure mode. Run `nv set qos roce` + `nv config apply` on the spines too — they generally do not need separately tuned ECN thresholds, but they do need the profile.
+
+### A.1 What the one command actually programs
+
+On a switch with no RoCE mode set, `nv set qos roce` is equivalent to `nv set qos roce mode lossless` (recall Section 8's caveat: it does not flip a switch already in lossy mode). Behind it, four things are configured at once:
+
+![What nv set qos roce programs: PFC on switch priority 3, ECN thresholds on traffic classes 0 and 3, buffer pool allocation, and DSCP classification — with the buffer split flagged as the item to verify](/posts/roce-cumulus-linux/nv-set-qos-roce-actions.svg)
+
+1. **PFC** — switch priority 3 becomes no-drop, with XOFF and headroom values derived from the profile's `cable-length` (default 100 m — worth correcting if your cables are much longer, since headroom scales with round-trip time on the wire, Section 6).
+2. **ECN** — WRED/ECN marking is enabled on TC3 and, per the profile default, on best-effort TC0 as well (`enabled-tc 0,3`), with platform-derived min/max thresholds.
+3. **Buffer pools** — ingress buffer is split between lossy and lossless pools. The profile itself sets a roughly even split; the widely repeated "lossless gets nothing" claim belongs to a different configuration entirely (A.2).
+4. **Classification** — the port trust mode and DSCP mapping follow the same policy used throughout this post: DSCP 26 → switch priority 3 (RoCE data, lossless TC3), DSCP 48 → switch priority 6 (CNP — which the profile schedules strict, unlike Section 19's generic DWRR illustration).
+
+Verify what the profile applied — the output shows the `operational` and `applied` columns side by side:
+
+```bash
+nv show qos roce
+```
+
+```text
+                    operational  applied
+mode                lossless     lossless
+cable-length        100          100
+congestion-control
+  min-threshold     146.48 KB    146.48 KB
+  max-threshold     1.43 MB      1.43 MB
+  enabled-tc        0,3          0,3
+pfc
+  pfc-priority      3            3
+```
+
+If `operational` and `applied` disagree, the commit did not fully take — re-run `nv config apply` before debugging anything else.
+
+### A.2 The buffer split: check the lore against the switch
+
+A claim circulates widely in RoCE write-ups: *"enabling the Cumulus RoCE profile leaves the lossless pool at 0% — PFC fires the moment traffic starts."* **Checked against NVIDIA's documentation, that claim is wrong for the profile — but it is true for a configuration that looks deceptively similar.** The distinction matters enough to pin down precisely:
+
+- **With `nv set qos roce` (lossless):** the profile allocates the buffer split itself. Current NVIDIA docs show the lossless profile dividing ingress buffer roughly evenly — `lossy-default-ingress Dynamic 50%`, `roce-reserved-ingress Dynamic 50%` in the profile's own `nv show qos roce` buffer output. The default is a sane starting point, not an empty pool.
+- **With hand-rolled PFC and no RoCE profile** (`nv set qos pfc ...` built by hand): Cumulus's *base* QoS default applies — **100% of memory in `default-lossy`, nothing in a lossless pool** — and that is where the "PFC fires immediately" behavior genuinely comes from. The lore appears to have transplanted this base-config fact onto the one-liner.
+
+![Buffer pools compared across three configurations: hand-rolled PFC without the profile leaves the lossless class at zero percent; the RoCE profile defaults to an even split; RoCE-dominated fabrics deepen the lossless pool to sixty percent or more](/posts/roce-cumulus-linux/cumulus-buffer-pools-default-vs-tuned.svg)
+
+The operational rule that survives the fact-check: **never assume the split — read it.**
+
+```bash
+nv show qos traffic-pool
+```
+
+Then tune it to the traffic mix. Fabrics where RoCE dominates commonly deepen the lossless pool — NVIDIA's own documentation example moves it to 60/40:
+
+```bash
+sudo nv set qos traffic-pool roce-lossless memory-percent 60
+sudo nv set qos traffic-pool default-lossy memory-percent 40
+sudo nv config apply
+```
+
+```text
+pool            memory-percent
+roce-lossless   60
+default-lossy   40
+```
+
+(Pool names can differ by release — list what your switch actually created with `nv show qos traffic-pool` before setting percentages.) A too-shallow lossless pool produces exactly Section 6's failure: queues cross the PFC XOFF point early, and pause frames become the first line of defense instead of the last.
+
+Cumulus 5.x also offers a mode that merges the lossy and lossless **ingress** pools into one, absorbing lossless bursts better than two rigid partitions:
+
+```bash
+sudo nv set qos roce mode lossless-single-ipool
+sudo nv config apply
+```
+
+If several no-drop priorities interact badly on your platform, this single-ingress-pool mode is the first thing to try.
+
+### A.3 ECN thresholds: the configured value is not the hardware value
+
+Cumulus has one behavior here that other platforms do not: **the threshold you configure and the threshold the hardware programs are not identical.** The default `min-threshold` displays as `146.48 KB` in `nv show qos roce`, but the interface-level congestion-control view reports `156 KB` (159,744 bytes) actually in force. NVIDIA documents the mismatch as expected ASIC threshold-programming behavior (called out for Spectrum-4 in current docs) — consistent with Spectrum's cell-granular buffer accounting, and not a defect.
+
+Two practical consequences:
+
+- **Never copy ECN thresholds from another vendor's platform.** The units differ (Cumulus takes bytes — a Cisco `30000` pasted here means 30 KB, not 30 cells), the cell rounding differs, and the defaults were derived for different buffer architectures. Start from the Cumulus platform defaults and tune from evidence.
+- When you do tune, expect the operational value to differ slightly from what you typed.
+
+Adjusting the thresholds (values in **bytes**, on the lossless traffic class):
+
+```bash
+sudo nv set qos congestion-control default-global traffic-class 3 min-threshold 150000
+sudo nv set qos congestion-control default-global traffic-class 3 max-threshold 1500000
+sudo nv config apply
+```
+
+```bash
+nv show qos congestion-control default-global
+```
+
+```text
+traffic-class  min-threshold  max-threshold  probability
+3              150000         1500000        100%
+```
+
+Evidence-driven tuning rules that have served well:
+
+- **PFC `tx-pause` counters climbing** → ECN is marking too late; lower `min-threshold` by 20–30%.
+- **ECN marking rate above ~5% of RoCE packets** → marking too aggressively (throughput jitters as DCQCN over-throttles); raise `min-threshold` by 10–15%.
+- Keep **at least ~40% of the shared lossless pool** as budget between the ECN marking band and the PFC XOFF point, so DCQCN has room to act before PFC must — a pool-level budget expressing Section 6's ordering, not positions in one physical queue (Section 6's egress-vs-ingress caveat applies).
+
+### A.4 Configured state vs hardware truth
+
+Section 13 covered the `nv show` counter set. The operational habit this appendix adds: **`nv show` tells you what was configured and what the switch believes; `ethtool` reads the hardware counters directly.** When the two disagree, believe `ethtool`.
+
+| Question | Command |
+|---|---|
+| RoCE profile state (operational vs applied) | `nv show qos roce` |
+| Per-port RoCE view | `nv show interface swp1 qos roce status` |
+| Per-port RoCE/ECN/CNP counters | `nv show interface swp1 qos roce counters` |
+| ECN thresholds in force | `nv show qos congestion-control default-global` |
+| Buffer pool split | `nv show qos traffic-pool` |
+| PFC pause counters, hardware-level | `ethtool -S swp1 \| grep -i pause` |
+| ECN marks, hardware-level | `ethtool -S swp1 \| grep ecn` |
+
+The two-command health check (counter names vary slightly by driver release — the Spectrum driver exposes per-priority pause counters, which is what you want, since PFC is per-priority):
+
+```bash
+ethtool -S swp1 | grep -i pause
+# rx_pause_prio_3: 0
+# tx_pause_prio_3: 0
+
+ethtool -S swp1 | grep ecn
+# ecn_marked: 0
+```
+
+Interpretation under load:
+
+- **Pause counters for the lossless priority continuously increasing** → the lossless pool is too shallow (A.2) or the ECN thresholds are too high (A.3) — congestion is reaching the PFC backstop instead of being handled by ECN.
+- `ecn_marked` **stuck at zero while the fabric is congested** → ECN is not actually in effect: wrong traffic class, classification miss (Section 15), or thresholds above where queues ever reach.
+
+### A.5 Symptom → root cause → fix
+
+| Symptom | Likely root cause | Check with | Fix |
+|---|---|---|---|
+| PFC pause counters climbing steadily | Lossless pool too shallow for the load — or PFC hand-rolled without the profile | `nv show qos traffic-pool` | Deepen `roce-lossless` toward 60–70% (A.2); confirm the profile with `nv show qos roce` |
+| ECN marks always zero | ECN not in effect, or thresholds too high | `ethtool -S swp1 \| grep ecn` | Confirm `enabled-tc`, lower `min-threshold` (A.3) |
+| Config seems ignored after apply | NVUE commit incomplete | `nv show qos roce` — compare `operational` vs `applied` | Re-run `nv config apply` |
+| Training throughput oscillates periodically | ECN marking too aggressively | `ethtool -S swp1 \| grep ecn` | Raise `min-threshold` 10–15% (A.3) |
+| Multiple no-drop priorities degrade each other | Separate rigid ingress pools | `nv show qos roce` (mode) | Switch to `lossless-single-ipool` (A.2) |
+
+### A.6 Three operating principles
+
+1. **Know the buffer split first — never assume it.** The RoCE profile starts near 50/50; hand-rolled PFC without the profile gives the lossless class nothing. Read `nv show qos traffic-pool`, deepen toward 60–70% lossless when RoCE dominates, and consider `lossless-single-ipool` when several no-drop priorities share the switch.
+2. **ECN thresholds start from the platform defaults**, never from another vendor's numbers, and move only on evidence — PFC frame counts and ECN marking rates, in that order of authority.
+3. **Troubleshoot with `ethtool -S`.** It reads hardware-level truth; `nv show` sometimes only reflects intent. The healthy end state is Section 23's: ECN does the work, PFC stays rare, discards stay zero.
+
+Sources: [NVIDIA Cumulus Linux — RoCE](https://docs.nvidia.com/networking-ethernet-software/cumulus-linux/Network-Solutions/RDMA-over-Converged-Ethernet-RoCE/) and [Quality of Service](https://docs.nvidia.com/networking-ethernet-software/cumulus-linux/Layer-1-and-Switch-Ports/Quality-of-Service/) documentation.

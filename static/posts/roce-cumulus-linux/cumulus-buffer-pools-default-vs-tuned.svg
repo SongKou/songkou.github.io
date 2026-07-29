@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="bp-title bp-desc">
+  <title id="bp-title">Cumulus buffer pools: no profile, profile default, and tuned</title>
+  <desc id="bp-desc">Three bar charts compare buffer pool allocation. Hand-rolled PFC without the RoCE profile leaves 100 percent of memory in the lossy pool and none for the lossless class, so PFC fires immediately. The RoCE lossless profile itself defaults to a roughly even split. RoCE-dominated fabrics deepen the lossless pool to 60 percent or more, which is NVIDIA's own tuning example.</desc>
+  <defs>
+    <filter id="bp-shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/></filter>
+    <style>
+      .bp{font-family:Inter,'Segoe UI',Arial,sans-serif}
+      .bp-mono{font-family:Consolas,'Cascadia Mono',Menlo,monospace}
+      .bp-title{font-size:34px;font-weight:750;fill:#e5eef9}
+      .bp-sub{font-size:18px;font-weight:450;fill:#9fb0c5}
+      .bp-panel-bad{font-size:21px;font-weight:750;fill:#f87171}
+      .bp-panel-mid{font-size:21px;font-weight:750;fill:#38bdf8}
+      .bp-panel-good{font-size:21px;font-weight:750;fill:#34d399}
+      .bp-seg{font-size:16px;font-weight:650;fill:#e5eef9}
+      .bp-seg-sub{font-size:13px;font-weight:450;fill:#9fb0c5}
+      .bp-caption{font-size:14px;font-weight:500;fill:#9fb0c5}
+      .bp-cmd{font-size:17px;font-weight:700;fill:#fbbf24}
+      .bp-footer{font-size:15px;font-weight:500;fill:#9fb0c5}
+    </style>
+  </defs>
+  <rect width="1280" height="720" fill="#07111f"/>
+
+  <text class="bp bp-title" x="64" y="68">Buffer pools: read the split, then tune it</text>
+  <text class="bp bp-sub" x="64" y="102">The 0% lossless trap is real — but it belongs to hand-rolled PFC, not to the RoCE profile, which starts near 50/50</text>
+
+  <rect x="64" y="140" width="368" height="470" rx="16" fill="#101e31" stroke="#f87171" stroke-width="2"/>
+  <rect x="456" y="140" width="368" height="470" rx="16" fill="#101e31" stroke="#38bdf8" stroke-width="2"/>
+  <rect x="848" y="140" width="368" height="470" rx="16" fill="#101e31" stroke="#34d399" stroke-width="2"/>
+
+  <text class="bp bp-panel-bad" x="248" y="188" text-anchor="middle">Hand-rolled PFC, no profile</text>
+  <text class="bp bp-panel-mid" x="640" y="188" text-anchor="middle">nv set qos roce default</text>
+  <text class="bp bp-panel-good" x="1032" y="188" text-anchor="middle">Tuned for RoCE-heavy</text>
+
+  <g filter="url(#bp-shadow)">
+    <rect x="158" y="220" width="180" height="302" rx="10" fill="#22436b" stroke="#49627e" stroke-width="2"/>
+    <rect x="158" y="522" width="180" height="8" rx="4" fill="#0d3328" stroke="#34d399" stroke-width="1.5"/>
+  </g>
+  <text class="bp bp-seg" x="248" y="360" text-anchor="middle">default-lossy</text>
+  <text class="bp bp-seg-sub" x="248" y="382" text-anchor="middle">100% of memory</text>
+  <text class="bp bp-seg-sub" x="248" y="552" text-anchor="middle">lossless: 0%</text>
+
+  <g filter="url(#bp-shadow)">
+    <rect x="550" y="220" width="180" height="155" rx="10" fill="#22436b" stroke="#49627e" stroke-width="2"/>
+    <rect x="550" y="375" width="180" height="155" rx="10" fill="#0d3328" stroke="#34d399" stroke-width="2.5"/>
+  </g>
+  <text class="bp bp-seg" x="640" y="290" text-anchor="middle">lossy ~50%</text>
+  <text class="bp bp-seg" x="640" y="445" text-anchor="middle">lossless ~50%</text>
+  <text class="bp bp-seg-sub" x="640" y="469" text-anchor="middle">set by the profile</text>
+
+  <g filter="url(#bp-shadow)">
+    <rect x="942" y="220" width="180" height="124" rx="10" fill="#22436b" stroke="#49627e" stroke-width="2"/>
+    <rect x="942" y="344" width="180" height="186" rx="10" fill="#0d3328" stroke="#34d399" stroke-width="2.5"/>
+  </g>
+  <text class="bp bp-seg" x="1032" y="278" text-anchor="middle">lossy 40%</text>
+  <text class="bp bp-seg" x="1032" y="425" text-anchor="middle">roce-lossless 60%</text>
+  <text class="bp bp-seg-sub" x="1032" y="449" text-anchor="middle">NVIDIA's docs example</text>
+
+  <text class="bp bp-caption" x="248" y="586" text-anchor="middle">PFC fires the moment RoCE load arrives</text>
+  <text class="bp bp-caption" x="640" y="586" text-anchor="middle">Sane start — verify per release</text>
+  <text class="bp bp-caption" x="1032" y="586" text-anchor="middle">ECN leads; PFC stays a rare backstop</text>
+
+  <text class="bp-mono bp-cmd" x="640" y="655" text-anchor="middle">nv show qos traffic-pool · nv set qos traffic-pool roce-lossless memory-percent 60</text>
+  <text class="bp bp-footer" x="1216" y="695" text-anchor="end">RoCE on Cumulus Linux</text>
+</svg>

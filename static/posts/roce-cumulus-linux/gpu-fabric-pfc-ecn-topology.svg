@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="880" viewBox="0 0 1280 880" role="img" aria-labelledby="topo-title topo-desc">
+  <title id="topo-title">Demo GPU fabric: where the RoCE profile applies</title>
+  <desc id="topo-desc">A spine-leaf demo fabric with two spines, two leaves, and four dual-homed GPU servers. PFC is hop-by-hop, so every switch tier runs nv set qos roce — the lossless guarantee holds only if PFC and ECN cover every link on the RoCE path from GPU through leaf and spine back to GPU.</desc>
+  <defs>
+    <filter id="topo-shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/></filter>
+    <style>
+      .tp{font-family:Inter,'Segoe UI',Arial,sans-serif}
+      .tp-mono{font-family:Consolas,'Cascadia Mono',Menlo,monospace}
+      .tp-title{font-size:34px;font-weight:750;fill:#e5eef9}
+      .tp-sub{font-size:18px;font-weight:450;fill:#9fb0c5}
+      .tp-node{font-size:21px;font-weight:650;fill:#e5eef9}
+      .tp-line{font-size:14px;font-weight:450;fill:#9fb0c5}
+      .tp-cmd{font-size:13px;font-weight:700;fill:#fbbf24}
+      .tp-zone{font-size:15px;font-weight:600;fill:#9fb0c5}
+      .tp-key{font-size:16px;font-weight:700;fill:#fbbf24}
+      .tp-footer{font-size:15px;font-weight:500;fill:#9fb0c5}
+      .tp-link{stroke:#49627e;stroke-width:2.5;stroke-linecap:round}
+    </style>
+  </defs>
+  <rect width="1280" height="880" fill="#07111f"/>
+
+  <text class="tp tp-title" x="64" y="68">Demo fabric: where the RoCE profile applies</text>
+  <text class="tp tp-sub" x="64" y="102">PFC is hop-by-hop — every switch tier runs the profile, and PFC + ECN must cover every link on the RoCE path</text>
+
+  <g filter="url(#topo-shadow)">
+    <rect x="320" y="150" width="220" height="90" rx="14" fill="#152944" stroke="#a78bfa" stroke-width="3"/>
+    <rect x="740" y="150" width="220" height="90" rx="14" fill="#152944" stroke="#a78bfa" stroke-width="3"/>
+  </g>
+  <text class="tp tp-node" x="430" y="187" text-anchor="middle">Spine-1</text>
+  <text class="tp-mono tp-cmd" x="430" y="217" text-anchor="middle">nv set qos roce</text>
+  <text class="tp tp-node" x="850" y="187" text-anchor="middle">Spine-2</text>
+  <text class="tp-mono tp-cmd" x="850" y="217" text-anchor="middle">nv set qos roce</text>
+
+  <line class="tp-link" x1="430" y1="240" x2="430" y2="380"/>
+  <line class="tp-link" x1="430" y1="240" x2="850" y2="380"/>
+  <line class="tp-link" x1="850" y1="240" x2="430" y2="380"/>
+  <line class="tp-link" x1="850" y1="240" x2="850" y2="380"/>
+  <rect x="440" y="300" width="400" height="28" rx="8" fill="#07111f"/>
+  <text class="tp tp-zone" x="640" y="320" text-anchor="middle">PFC + ECN on every spine–leaf link (hop-by-hop)</text>
+
+  <g filter="url(#topo-shadow)">
+    <rect x="310" y="380" width="240" height="100" rx="14" fill="#152944" stroke="#38bdf8" stroke-width="3"/>
+    <rect x="730" y="380" width="240" height="100" rx="14" fill="#152944" stroke="#38bdf8" stroke-width="3"/>
+  </g>
+  <text class="tp tp-node" x="430" y="418" text-anchor="middle">Leaf-1</text>
+  <text class="tp-mono tp-cmd" x="430" y="444" text-anchor="middle">nv set qos roce</text>
+  <text class="tp tp-line" x="430" y="466" text-anchor="middle">server ports swp1–swp4</text>
+  <text class="tp tp-node" x="850" y="418" text-anchor="middle">Leaf-2</text>
+  <text class="tp-mono tp-cmd" x="850" y="444" text-anchor="middle">nv set qos roce</text>
+  <text class="tp tp-line" x="850" y="466" text-anchor="middle">server ports swp1–swp4</text>
+
+  <line class="tp-link" x1="430" y1="480" x2="189" y2="620"/>
+  <line class="tp-link" x1="430" y1="480" x2="489" y2="620"/>
+  <line class="tp-link" x1="430" y1="480" x2="789" y2="620"/>
+  <line class="tp-link" x1="430" y1="480" x2="1089" y2="620"/>
+  <line class="tp-link" x1="850" y1="480" x2="189" y2="620"/>
+  <line class="tp-link" x1="850" y1="480" x2="489" y2="620"/>
+  <line class="tp-link" x1="850" y1="480" x2="789" y2="620"/>
+  <line class="tp-link" x1="850" y1="480" x2="1089" y2="620"/>
+  <rect x="490" y="540" width="300" height="28" rx="8" fill="#07111f"/>
+  <text class="tp tp-zone" x="640" y="560" text-anchor="middle">PFC + ECN on every leaf–server link</text>
+
+  <g filter="url(#topo-shadow)">
+    <rect x="64" y="620" width="250" height="120" rx="14" fill="#152944" stroke="#34d399" stroke-width="3"/>
+    <rect x="364" y="620" width="250" height="120" rx="14" fill="#152944" stroke="#34d399" stroke-width="3"/>
+    <rect x="664" y="620" width="250" height="120" rx="14" fill="#152944" stroke="#34d399" stroke-width="3"/>
+    <rect x="964" y="620" width="250" height="120" rx="14" fill="#152944" stroke="#34d399" stroke-width="3"/>
+  </g>
+  <text class="tp tp-node" x="189" y="658" text-anchor="middle">GPU server 1</text>
+  <text class="tp tp-line" x="189" y="686" text-anchor="middle">8× GPU · 2× ConnectX-7</text>
+  <text class="tp tp-line" x="189" y="710" text-anchor="middle">eth1 → Leaf-1 · eth2 → Leaf-2</text>
+  <text class="tp tp-node" x="489" y="658" text-anchor="middle">GPU server 2</text>
+  <text class="tp tp-line" x="489" y="686" text-anchor="middle">8× GPU · 2× ConnectX-7</text>
+  <text class="tp tp-line" x="489" y="710" text-anchor="middle">eth1 → Leaf-1 · eth2 → Leaf-2</text>
+  <text class="tp tp-node" x="789" y="658" text-anchor="middle">GPU server 3</text>
+  <text class="tp tp-line" x="789" y="686" text-anchor="middle">8× GPU · 2× ConnectX-7</text>
+  <text class="tp tp-line" x="789" y="710" text-anchor="middle">eth1 → Leaf-1 · eth2 → Leaf-2</text>
+  <text class="tp tp-node" x="1089" y="658" text-anchor="middle">GPU server 4</text>
+  <text class="tp tp-line" x="1089" y="686" text-anchor="middle">8× GPU · 2× ConnectX-7</text>
+  <text class="tp tp-line" x="1089" y="710" text-anchor="middle">eth1 → Leaf-1 · eth2 → Leaf-2</text>
+
+  <text class="tp tp-key" x="640" y="800" text-anchor="middle">RoCE path: GPU → leaf → spine → leaf → GPU — lossless only if every hop runs the profile</text>
+  <text class="tp tp-footer" x="1216" y="850" text-anchor="end">RoCE on Cumulus Linux</text>
+</svg>

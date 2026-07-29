@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="ftd-title ftd-desc">
+  <title id="ftd-title">East-west firewall attachment: two transit designs</title>
+  <desc id="ftd-desc">Two ways to attach a firewall leg to a tenant VRF on a service leaf: Design A uses a bridged transit VLAN with an SVI and supports firewall HA pairs; Design B uses a point-to-point routed dot1q subinterface. Either way there is one transit leg per tenant VRF and per-tenant eBGP to the firewall.</desc>
+  <defs>
+    <marker id="ftd-arrow" viewBox="0 0 10 10" markerWidth="7" markerHeight="7" refX="9" refY="4" orient="auto"><path d="M0,0 L0,8 L10,4 z" fill="#49627e"/></marker>
+    <filter id="ftd-shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/></filter>
+    <style>
+      .ftd{font-family:Inter,'Segoe UI',Arial,sans-serif}
+      .ftd-title{font-size:34px;font-weight:750;fill:#e5eef9}
+      .ftd-sub{font-size:18px;font-weight:450;fill:#9fb0c5}
+      .ftd-panel-a{font-size:24px;font-weight:750;fill:#38bdf8}
+      .ftd-panel-b{font-size:24px;font-weight:750;fill:#34d399}
+      .ftd-node{font-size:19px;font-weight:650;fill:#e5eef9}
+      .ftd-line{font-size:15px;font-weight:450;fill:#9fb0c5}
+      .ftd-note{font-size:15px;font-weight:500;fill:#9fb0c5}
+      .ftd-link{font-size:13px;font-weight:500;fill:#9fb0c5}
+      .ftd-key{font-size:16px;font-weight:700;fill:#fbbf24}
+      .ftd-footer{font-size:15px;font-weight:500;fill:#9fb0c5}
+      .ftd-flow{stroke:#49627e;stroke-width:4;stroke-linecap:round;marker-end:url(#ftd-arrow)}
+    </style>
+  </defs>
+  <rect width="1280" height="720" fill="#07111f"/>
+
+  <text class="ftd ftd-title" x="64" y="68">East–west firewall attachment: two transit designs</text>
+  <text class="ftd ftd-sub" x="64" y="102">One transit leg per tenant VRF — RED on 3801, BLUE on 3802 — either design gives the firewall one zone per tenant</text>
+
+  <rect x="64" y="140" width="552" height="460" rx="16" fill="#101e31" stroke="#38bdf8" stroke-width="2"/>
+  <rect x="664" y="140" width="552" height="460" rx="16" fill="#101e31" stroke="#34d399" stroke-width="2"/>
+
+  <text class="ftd ftd-panel-a" x="340" y="192" text-anchor="middle">A — Transit VLAN + SVI</text>
+  <text class="ftd ftd-panel-b" x="940" y="192" text-anchor="middle">B — Routed subinterface</text>
+
+  <g filter="url(#ftd-shadow)">
+    <rect x="100" y="230" width="225" height="170" rx="14" fill="#152944" stroke="#38bdf8" stroke-width="3"/>
+    <rect x="391" y="230" width="225" height="170" rx="14" fill="#152944" stroke="#fb7185" stroke-width="3"/>
+    <rect x="700" y="230" width="225" height="170" rx="14" fill="#152944" stroke="#34d399" stroke-width="3"/>
+    <rect x="991" y="230" width="225" height="170" rx="14" fill="#152944" stroke="#fb7185" stroke-width="3"/>
+  </g>
+
+  <text class="ftd ftd-node" x="212.5" y="264" text-anchor="middle">Service leaf</text>
+  <text class="ftd ftd-line" x="212.5" y="294" text-anchor="middle">vlan 3801 · L2 bridge</text>
+  <text class="ftd ftd-line" x="212.5" y="320" text-anchor="middle">SVI vlan3801 · VRF RED</text>
+  <text class="ftd ftd-line" x="212.5" y="346" text-anchor="middle">172.16.1.1/29</text>
+
+  <text class="ftd ftd-node" x="503.5" y="264" text-anchor="middle">Firewall HA pair</text>
+  <text class="ftd ftd-line" x="503.5" y="294" text-anchor="middle">RED zone e1/1.3801</text>
+  <text class="ftd ftd-line" x="503.5" y="320" text-anchor="middle">172.16.1.4/29 floating</text>
+  <text class="ftd ftd-line" x="503.5" y="346" text-anchor="middle">BLUE zone on 3802</text>
+
+  <text class="ftd ftd-node" x="812.5" y="264" text-anchor="middle">Service leaf</text>
+  <text class="ftd ftd-line" x="812.5" y="294" text-anchor="middle">Eth1/48.3801 routed</text>
+  <text class="ftd ftd-line" x="812.5" y="320" text-anchor="middle">VRF RED · no SVI</text>
+  <text class="ftd ftd-line" x="812.5" y="346" text-anchor="middle">172.16.1.0/31</text>
+
+  <text class="ftd ftd-node" x="1103.5" y="264" text-anchor="middle">Firewall</text>
+  <text class="ftd ftd-line" x="1103.5" y="294" text-anchor="middle">RED zone e1/1.3801</text>
+  <text class="ftd ftd-line" x="1103.5" y="320" text-anchor="middle">172.16.1.1/31</text>
+  <text class="ftd ftd-line" x="1103.5" y="346" text-anchor="middle">BLUE zone on 3802</text>
+
+  <line class="ftd-flow" x1="329" y1="315" x2="385" y2="315"/>
+  <text class="ftd ftd-link" x="357" y="300" text-anchor="middle">802.1Q</text>
+  <line class="ftd-flow" x1="929" y1="315" x2="985" y2="315"/>
+  <text class="ftd ftd-link" x="957" y="300" text-anchor="middle">p2p /31</text>
+
+  <text class="ftd ftd-note" x="100" y="455">• Supports firewall HA pairs and vPC attachment</text>
+  <text class="ftd ftd-note" x="100" y="485">• The transit VLAN can stretch through an L2 VNI</text>
+  <text class="ftd ftd-note" x="100" y="515">• A few more moving parts: bridge domain + SVI</text>
+
+  <text class="ftd ftd-note" x="700" y="455">• No bridge domain — simplest to reason about</text>
+  <text class="ftd ftd-note" x="700" y="485">• Fast convergence on the point-to-point /31</text>
+  <text class="ftd ftd-note" x="700" y="515">• Single-attaches the firewall to that one leaf</text>
+
+  <text class="ftd ftd-key" x="640" y="655" text-anchor="middle">Both designs: per-tenant eBGP over the transit — the firewall is the only path between RED and BLUE</text>
+  <text class="ftd ftd-footer" x="1216" y="700" text-anchor="end">VXLAN EVPN Architecture</text>
+</svg>

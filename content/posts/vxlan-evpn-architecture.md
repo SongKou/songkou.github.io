@@ -100,7 +100,7 @@ On a leaf, a local VLAN or bridge domain is mapped to an L2 VNI. The VLAN identi
 
 ## 3. Underlay design
 
-The underlay must provide IP reachability between every participating VTEP. It can use OSPF, IS-IS, EIGRP, or BGP. The course emphasizes that all proven IP-routing practices still apply: redundant links, fast convergence, predictable addressing, and ECMP.
+The underlay must provide IP reachability between every participating VTEP. It can use OSPF, IS-IS, EIGRP, or BGP. All the proven IP-routing practices still apply: redundant links, fast convergence, predictable addressing, and ECMP.
 
 A leaf-spine Clos fabric is common because every leaf is the same number of routed hops from every other leaf. With equal-cost routes through multiple spines, VXLAN flows can be distributed across the fabric. The UDP source port is usually derived from a hash of the inner packet, giving the underlay entropy for ECMP.
 
@@ -837,7 +837,7 @@ Both the ingress and egress VTEPs perform an IP routing lookup. The packet cross
 
 The reverse flow uses the same two-sided pattern: Leaf 2 routes into L3 VNI 50000, and Leaf 1 routes out of it. "Symmetric" likewise names the lookup pattern at the two ends of one path — the ingress and egress PEs each route and bridge in mirror image — with the practical consequence that the forwarding pipeline is identical in both directions.
 
-The egress leaf needs only its locally used L2 VNIs plus the tenant L3 VNI. This is the more scalable model and is the design emphasized by the course.
+The egress leaf needs only its locally used L2 VNIs plus the tenant L3 VNI. This is the more scalable model and the design to default to.
 
 In standards terminology, symmetric IRB forwards between the ingress and egress **IP-VRFs**. With Ethernet NVO encapsulation such as VXLAN, the inner source and destination MAC addresses are router MACs, not the final destination host MAC. This is why the ingress leaf does not need the remote host's ARP entry merely to carry routed traffic across the L3 VNI. The egress leaf resolves the local host after its IP-VRF lookup. [RFC 9135, Section 4](https://www.rfc-editor.org/rfc/rfc9135.html#section-4)
 
@@ -885,7 +885,7 @@ ARP suppression, Type 2 host learning, and Type 3 membership work together: know
 
 ## 12. Design choices: pod, multi-pod, fabric, and site
 
-The course distinguishes designs that are often casually grouped together.
+It is worth carefully distinguishing designs that are often casually grouped together.
 
 ### 12.1 Pod
 
@@ -1014,7 +1014,7 @@ A local BUM frame is replicated within the source site and, if the VNI is stretc
 
 ## 15. Representative Cisco NX-OS configuration model
 
-The source dedicates many slides to a two-site lab. The following is a consolidated translation of its workflow. It is a pattern, not a paste-ready build.
+My study lab is a two-site build; the following is the consolidated pattern from it. It is a pattern, not a paste-ready build.
 
 The snippets intentionally show the configuration hierarchy, not a complete production configuration. They omit platform-specific TCAM carving, route policies, authentication, BFD, maximum-path settings, multicast RP configuration, QoS, telemetry, and management-plane hardening. Choose one documented NX-OS release as the source of truth and lab-test the exact switch image and line card.
 
@@ -1050,7 +1050,7 @@ interface Ethernet1/1
   no shutdown
 ```
 
-The source lab uses OSPF and PIM in the underlay. A modern deployment may instead use eBGP underlay and ingress replication.
+The lab uses OSPF and PIM in the underlay. A modern deployment may instead use eBGP underlay and ingress replication.
 
 A dedicated VTEP loopback is generally preferable to reusing the BGP router ID. It makes tunnel-source migration, route policy, troubleshooting, and vPC/ESI-specific PIP/VIP behavior easier to reason about. Advertise it as a host route and ensure every ECMP path supports the overlay MTU.
 
@@ -1163,7 +1163,7 @@ The site ID must be unique per site and identical across redundant BGWs in that 
 
 The current Cisco Multi-Site guide requires planning loopback addresses and confirming their underlay advertisement before enabling the BGW function. It also documents feature-specific restrictions—for example, some PIP advertisement combinations differ with vPC and IPv6 underlays—so this abbreviated template must not be used as a capability matrix. [Cisco Multi-Site configuration guide](https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/105x/configuration/vxlan/cisco-nexus-9000-series-nx-os-vxlan-configuration-guide-release-105x/configuring-multisite.pdf)
 
-![Two-site lab topology used by the source course](/posts/vxlan-evpn-architecture/two-site-lab.svg)
+![Two-site lab topology used for this study](/posts/vxlan-evpn-architecture/two-site-lab.svg)
 
 ## 16. Failure handling and verification
 
@@ -1222,28 +1222,125 @@ A disciplined troubleshooting order is:
 8. Inspect the NVE peer and local MAC/ARP tables.
 9. Capture the packet and compare inner versus outer headers.
 
-## 17. Multi-tenant connectivity with firewall insertion
+## 17. Inter-tenant (east–west) firewall insertion
 
-VXLAN EVPN isolates tenant VRFs by default. Connecting tenants is a policy decision. The first multi-tenant design in the course inserts an ASAv firewall between tenant domains.
+VXLAN EVPN isolates tenant VRFs by default. Connecting tenants is a policy decision. This section and section 18 answer two different questions that are easy to conflate, because both involve a firewall at a border or service leaf:
 
-![Multi-tenant dual-site topology with centralized firewall insertion](/posts/vxlan-evpn-architecture/firewall-insertion.svg)
+- **This section — east–west:** when tenant RED must talk to tenant BLUE, how is that *inter-tenant* traffic steered through a stateful inspection point instead of being routed directly?
+- **Section 18 — north–south:** how does each tenant reach the Internet or WAN? The firewall there does per-tenant edge policy and NAT; it does not answer the inter-tenant question — 18.3's RT policy keeps tenants from learning each other's routes through the shared VRF, and the residual hairpin path through that VRF's own table needs its own policing (see 18.3).
 
-Two questions must be answered:
+The same physical firewall cluster often serves both roles — the appliance doing tenant NAT toward the WAN can also hold the inter-tenant zones — but the two designs are configured and reasoned about independently.
 
-1. How does a border or service leaf pass traffic between tenant VRFs and the firewall?
-2. How do remote leaves steer inter-tenant traffic toward that border/service leaf?
+The rest of this section builds the insertion end to end with the same tenants as section 18: **RED** (`10.10.0.0/16`, L3 VNI `50001`) and **BLUE** (`10.20.0.0/16`, L3 VNI `50002`). In my lab build the inspection point is an ASAv pair; any stateful firewall fits the same design. Two questions must be answered, and they structure the subsections:
 
-A common design uses dedicated transit VLANs or routed interfaces between the service leaf and firewall. Each tenant VRF sends selected routes or a default route to the firewall. The firewall owns inter-tenant policy and returns traffic into the appropriate tenant-facing interface.
+1. **Plumbing (17.1):** how does the service leaf hand traffic between a tenant VRF and the firewall?
+2. **Steering (17.2):** how do all the *other* leaves learn to send inter-tenant traffic toward that service leaf in the first place?
 
-Important details include:
+![Inter-tenant firewall insertion overview: the RED and BLUE VRFs meet only through the firewall zones attached to a service leaf](/posts/vxlan-evpn-architecture/firewall-insertion.svg)
 
-- Keep each tenant in a distinct firewall zone or subinterface.
-- Advertise only the routes needed to reach the service insertion point.
-- Avoid importing tenant routes directly into one another when inspection is mandatory.
-- Ensure the forward and return directions traverse the same stateful firewall context.
-- Consider redundancy, ECMP support, and session synchronization for firewall pairs.
+### 17.1 The transit plumbing: two attachment designs
 
-The design is centralized from the policy perspective, even though endpoints and gateways remain distributed.
+The firewall needs **one routed leg per tenant VRF** — a RED leg and a BLUE leg — so that each firewall zone maps to exactly one tenant. Each leg is a small transit segment between the service leaf and the firewall, and there are two standard ways to build it:
+
+**Design A — transit VLAN + SVI.** The service leaf bridges a dedicated VLAN toward the firewall and terminates it on an SVI inside the tenant VRF:
+
+```text
+vlan 3801                          ! RED transit — L2 only, no hosts
+interface vlan 3801
+  vrf member RED
+  ip address 172.16.1.1/29
+
+interface Ethernet1/48             ! trunk toward the firewall
+  switchport mode trunk
+  switchport trunk allowed vlan 3801-3802
+```
+
+The firewall's RED interface lives in the same subnet — `172.16.1.4/29`, a floating IP across the HA pair. Because this leg is a bridge domain, it accommodates **firewall HA pairs and vPC-attached appliances**, and the transit VLAN can even be stretched through an L2 VNI when the standby unit sits behind a different leaf.
+
+**Design B — routed subinterface.** No bridge domain at all — a dot1q subinterface on a routed port, structurally the same as the external handoff in 18.1:
+
+```text
+interface Ethernet1/48.3801
+  encapsulation dot1q 3801
+  vrf member RED
+  ip address 172.16.1.0/31         ! firewall RED leg: 172.16.1.1/31
+```
+
+Point-to-point, fastest convergence, simplest to reason about — but it single-attaches the firewall to that one leaf.
+
+![Side-by-side comparison of the two transit designs: a bridged transit VLAN with SVI that supports firewall HA pairs, versus a point-to-point routed subinterface](/posts/vxlan-evpn-architecture/firewall-transit-designs.svg)
+
+BLUE mirrors the same construction on tag `3802` and `172.16.2.x`. In either design, three properties hold:
+
+- The transits are **pure plumbing**: no hosts, no anycast gateway, no VLAN-to-VNI mapping (unless a Design-A VLAN is deliberately stretched).
+- The tags (`3801`, `3802`) and subnets (`172.16.1.x`, `172.16.2.x`) exist only on the leaf–firewall link; they never appear in the fabric (again, unless a Design-A transit is deliberately stretched).
+- One tenant = one leg = one firewall zone. A shared leg would collapse the zone model.
+
+### 17.2 Routing and steering
+
+Over each transit leg, the service leaf runs a routing exchange **inside the tenant VRF**. eBGP is typical — firewall AS `65200` against the fabric's `65000`; static routes work for small designs:
+
+```text
+BGP in VRF RED     neighbor 172.16.1.4  remote-as 65200   advertise 10.10.0.0/16
+BGP in VRF BLUE    neighbor 172.16.2.4  remote-as 65200   advertise 10.20.0.0/16
+
+(with Design-B /31 addressing the neighbors are 172.16.1.1 and 172.16.2.1)
+```
+
+The firewall now knows both tenants — RED through its RED leg, BLUE through its BLUE leg — and advertises each tenant's prefixes into the *other* tenant's session, subject to policy.
+
+One eBGP detail is **mandatory** here, because the U-turn trips AS-path loop prevention. The service leaf originates `10.10.0.0/16` toward the firewall with AS `65000` in the path; when the firewall re-advertises that route into the BLUE session *on the same leaf*, the path arrives as `65200 65000` — the leaf sees its own AS and silently rejects the route. Without a fix, the cross-tenant route is never installed, no Type-5 is ever re-originated, and inter-tenant traffic simply never flows. Use one of:
+
+- `allowas-in 1` on the per-VRF firewall neighbors at the service leaf,
+- `as-override` on the firewall — or have the firewall originate its own aggregates instead of re-advertising, or
+- static routes over the transits instead of eBGP, which sidestep the problem entirely.
+
+With that in place, steering across the whole fabric follows:
+
+1. In VRF RED, the service leaf learns `10.20.0.0/16` from the firewall over the RED transit.
+2. It re-originates that route into EVPN as a **Type-5** with RED's RT and L3 VNI.
+3. Every RED leaf now resolves BLUE-bound destinations to the service-leaf VTEP — the fabric itself steers inter-tenant traffic to the insertion point.
+
+The mirror happens in VRF BLUE with `10.10.0.0/16`. Neither tenant ever imports the other's Route Target — the only cross-tenant path is through the firewall.
+
+### 17.3 Packet walk
+
+RED host `10.10.1.20` sends to BLUE host `10.20.2.30`:
+
+1. The RED leaf's VRF lookup matches the Type-5 route for `10.20.0.0/16`; the next hop is the service-leaf VTEP.
+2. The packet crosses the fabric in RED's L3 VNI `50001`.
+3. The service leaf decapsulates, looks up VRF RED, and forwards over the RED transit to the firewall — this is the hop where Designs A and B differ, unpacked below.
+4. The firewall applies RED→BLUE zone policy and, if permitted, routes the packet out its BLUE leg back to the service leaf.
+5. The service leaf receives it **in VRF BLUE**, resolves the destination through EVPN, and encapsulates in BLUE's L3 VNI `50002` toward the destination leaf.
+6. The destination leaf decapsulates and delivers the packet to `10.20.2.30`.
+
+**Step 3 with Design A (transit VLAN + SVI) — routing into a bridge domain.** The part that looks like magic is ordinary last-hop behavior: the *route* delivers the packet to the SVI, then the *bridge domain* delivers the frame to the firewall's MAC.
+
+1. The VRF RED lookup returns `10.20.0.0/16 → next hop 172.16.1.4` (the firewall's floating IP, learned over eBGP). That next hop falls inside `172.16.1.0/29` — the **connected subnet of SVI vlan3801** — so the egress interface is the SVI.
+2. The leaf resolves `172.16.1.4` with ARP *inside VLAN 3801*, out the trunk. The **active** firewall unit answers with its MAC (the floating IP always belongs to the active unit).
+3. The leaf writes a fresh Ethernet header — source MAC = the SVI's MAC, destination MAC = the firewall's MAC, 802.1Q tag `3801` — and **bridges** the frame out the trunk port.
+4. On the wire this is now a plain tagged Ethernet frame; the VXLAN encapsulation ended at decapsulation in step 3 of the main walk. The firewall receives it on `e1/1.3801`, strips the tag, and processes it in the RED zone.
+
+Note what the customer's traffic does **not** do: it never rides its original VLAN or L2 VNI onto this link. After the VRF lookup, the tenant frame's original L2 context is gone — only the inner IP packet continues, re-framed for VLAN 3801. The transit VLAN carries *routed* tenant packets, not the tenant's bridge domain.
+
+This mechanism is also exactly why Design A handles firewall HA cleanly. On failover, the standby unit takes over `172.16.1.4` and sends gratuitous ARP; the leaf updates its ARP and MAC entries, and **no routing changes at all** — the next hop is still `172.16.1.4`. And if the standby sits behind a different leaf with the transit VLAN stretched through an L2 VNI, this same bridged frame is VXLAN-**bridged** (L2 VNI, not L3) across the fabric to that leaf — still the same routed next hop, just a longer bridge domain.
+
+**Step 3 with Design B (routed subinterface).** The same lookup resolves next hop `172.16.1.1` out point-to-point subinterface `Eth1/48.3801`. There is no bridge domain, no MAC table, no flooding — the frame is tagged `3801` and handed straight to the single peer on the /31. Routing-wise the walk is identical to Design A; only the final-hop delivery is simpler (and the firewall is single-attached).
+
+**Step 4, both designs.** The firewall's return hop onto the BLUE leg mirrors the same mechanics: it routes toward the service leaf's BLUE address (`172.16.2.1`), resolves it on its BLUE subinterface, and the leaf receives the frame on the BLUE transit — landing the packet in VRF BLUE.
+
+Return traffic retraces the path in mirror image: BLUE leaf → Type-5 → service leaf → firewall BLUE zone → RED zone → VRF RED → RED host. Both directions traverse **the same firewall state**, because in each VRF the *only* route to the other tenant points at the firewall.
+
+### 17.4 Operational controls
+
+- Keep each tenant in a distinct firewall zone or subinterface; never share a leg between tenants.
+- Filter both directions: advertise only tenant summaries to the firewall, and accept back only the expected remote-tenant prefixes (or a default).
+- Never RT-import tenants into each other while inspection is mandatory. A direct leak does not merely bypass the firewall — it can create an *asymmetric* path where one direction is inspected and the other is not, which breaks every stateful session.
+- Mind the steering-route lifecycle. With eBGP, the re-originated Type-5s withdraw automatically when the firewall session drops — flows then fail at the ingress leaf with a clean unreachable, and a standby insertion point (if one exists) can take over. With static routes toward the firewall, add object tracking so the statics — and the Type-5s derived from them — disappear when the firewall stops responding.
+- For firewall pairs, use active/standby with session synchronization — or ensure ECMP hashing cannot split a flow's two directions across independent units.
+- Keep the transit interfaces out of host designs: no endpoints, no anycast gateway, no suppression features on those segments.
+
+The design is centralized from the policy perspective, even though endpoints and gateways remain distributed. And when a specific tenant pair is trusted enough to skip inspection, the cross-VRF RT-import mechanics of 18.3 can connect them directly — uninspected by construction, so make that a deliberate, per-pair decision.
 
 ## 18. External connectivity: per-VRF handoff, fusion router, and shared services
 
@@ -1251,7 +1348,7 @@ A VXLAN EVPN fabric isolates tenant VRFs by default; reaching the Internet or WA
 
 1. **Per-VRF routed handoff at a border-leaf pair** — every tenant VRF gets its own eBGP session to the external edge. Recommended, and detailed in 18.1.
 2. **Fusion router** — the border keeps its VRFs, but the external sessions terminate in the edge device's global routing table (18.2).
-3. **Shared Internet VRF** — one services VRF owns external reachability, and selected routes are leaked between it and the tenants at designated border leaves (18.3 — the model the course lab builds).
+3. **Shared Internet VRF** — one services VRF owns external reachability, and selected routes are leaked between it and the tenants at designated border leaves (18.3 — the model my lab builds).
 
 To keep the comparison concrete, this section reuses one worked example throughout:
 
@@ -1323,7 +1420,7 @@ The border leaves still learn the necessary tenant host and prefix routes throug
 | Ethernet1/49.3002 | 3002 | BLUE | `172.31.2.0/31` | `172.31.2.1/31` |
 | Ethernet1/49.3003 | 3003 | GREEN | `172.31.3.0/31` | `172.31.3.1/31` |
 
-These are routed subinterfaces, not Layer 2 VXLAN extensions — no VNI maps to tags 3001–3003; they exist only on the handoff link. The external router or firewall has matching subinterfaces in its corresponding routing contexts.
+These are routed subinterfaces, not Layer 2 VXLAN extensions — no VNI maps to tags 3001–3003; they exist only on the handoff link. The external router or firewall has matching subinterfaces in its corresponding routing contexts. (A firewall here plays the **north–south** role — per-tenant edge policy and NAT. If the same appliance also inspects tenant-to-tenant traffic, that is the separate east–west insertion design of section 17; the roles can share hardware but not a design.)
 
 **Per-VRF eBGP.** With fabric AS 65000 and external edge AS 65100, each border leaf runs one logical eBGP session inside each VRF:
 
@@ -1438,7 +1535,7 @@ This is simpler to configure, but:
 
 Instead of handing each tenant to the outside separately, one shared services VRF — call it **INTERNET** — owns external reachability, and selected routes are leaked between it and the customer tenant VRFs. Continuing the worked example: RED, BLUE and GREEN keep their L3 VNIs `50001–50003`, and the INTERNET VRF gets its own L3 VNI `50900` with RT `65000:50900`. Only the INTERNET VRF speaks eBGP to the outside; the customer tenants never do.
 
-> **Naming note.** The course lab implements a two-tenant version of this model and calls the shared VRF **Tenant-3** — a "tenant" in name only. That naming is misleading in production: the shared VRF is *infrastructure*, not a customer. Give it a role name — `INTERNET`, `SHARED-SVC`, `BORDER` — so it stays visually distinct from customer tenants in configuration and troubleshooting output.
+> **Naming note.** My lab build implements a two-tenant version of this model and names the shared VRF **Tenant-3** — a "tenant" in name only. That naming is misleading in production: the shared VRF is *infrastructure*, not a customer. Give it a role name — `INTERNET`, `SHARED-SVC`, `BORDER` — so it stays visually distinct from customer tenants in configuration and troubleshooting output.
 
 ![Multi-tenant topology for centralized route leaking and shared Internet](/posts/vxlan-evpn-architecture/central-route-leaking.svg)
 
@@ -1451,7 +1548,7 @@ The basic policy is:
 - The INTERNET VRF learns or originates Internet/default reachability — a WAN-facing interface or an external eBGP peer.
 - Each customer tenant — RED, BLUE and GREEN — imports only the routes it needs from INTERNET, normally just the default.
 - INTERNET imports each tenant's summary (`10.10.0.0/16`, `10.20.0.0/16`, `10.30.0.0/16`) for the return path.
-- Route maps and RT policies prevent accidental full-mesh tenant connectivity.
+- Route maps and RT policies prevent accidental full-mesh tenant connectivity — with one residual vector to close: a RED packet following its leaked default arrives *in the INTERNET VRF*, whose table also holds BLUE's summary (imported for return traffic). More-specific beats default, so the border itself can hairpin RED→BLUE unless the edge firewall inspects that path or an explicit filter/PBR rule blocks tenant-to-tenant transit at the border.
 
 **Shared Internet model.** RED, BLUE and GREEN each reach the Internet through the shared VRF while remaining isolated from one another. The border leaf performs the controlled leaking, and a WAN-facing interface or external peer supplies default reachability into INTERNET.
 
@@ -1618,9 +1715,9 @@ Endpoint MAC/IP                -> advertising VTEP (EVPN Type 2)
 Tenant IP prefix               -> routing next hop (EVPN Type 5)
 ```
 
-The underlay only delivers packets between tunnel endpoints. EVPN tells the VTEPs where endpoints, prefixes, and replication members live. VXLAN carries the resulting bridged or routed payload. Distributed anycast gateways keep east-west routing local, while Multi-Site border gateways deliberately break a large network into independent failure and control-plane domains.
+The underlay only delivers packets between tunnel endpoints. EVPN tells the VTEPs where endpoints, prefixes, and replication members live. VXLAN carries the resulting bridged or routed payload. Distributed anycast gateways keep intra-tenant east-west routing local (inter-tenant traffic deliberately hairpins through the section 17 insertion point), while Multi-Site border gateways deliberately break a large network into independent failure and control-plane domains.
 
-![Course summary topology: multi-pod, Multi-Site, multi-tenant, and shared services](/posts/vxlan-evpn-architecture/architecture-summary.svg)
+![Study summary topology: multi-pod, Multi-Site, multi-tenant, and shared services](/posts/vxlan-evpn-architecture/architecture-summary.svg)
 
 That separation of responsibilities is the central idea of VXLAN EVPN architecture: a simple routed fabric underneath, policy-rich tenant overlays above it, and explicit control points wherever scale or failure isolation requires another boundary.
 

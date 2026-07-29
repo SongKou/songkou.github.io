@@ -1,0 +1,359 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1180" viewBox="0 0 1600 1180" role="img" aria-labelledby="title desc">
+  <title id="title">DSCP to switch priority to eight egress queues, including the NVIDIA Cumulus RoCE preset</title>
+  <desc id="desc">The upper section shows eight default DSCP classification buckets mapping to switch priorities zero through seven and then to eight identically numbered base egress queues. The lower section shows the RoCE preset remapping all priorities except three and six to queue zero, while priority three maps to RoCE queue three and priority six maps to strict-priority CNP queue six. A clarification states that CS3 is exactly DSCP 24, not the entire 24 through 31 bucket.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07111f"/>
+      <stop offset="1" stop-color="#0a1728"/>
+    </linearGradient>
+    <linearGradient id="headerGlow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#38bdf8" stop-opacity="0.16"/>
+      <stop offset="0.55" stop-color="#a78bfa" stop-opacity="0.09"/>
+      <stop offset="1" stop-color="#fbbf24" stop-opacity="0.12"/>
+    </linearGradient>
+    <linearGradient id="roceFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#123549"/>
+      <stop offset="1" stop-color="#102b3e"/>
+    </linearGradient>
+    <linearGradient id="cnpFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3a3016"/>
+      <stop offset="1" stop-color="#2a2415"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#000814" flood-opacity="0.32"/>
+    </filter>
+    <marker id="arrowNeutral" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#71839a"/>
+    </marker>
+    <marker id="arrowRoce" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#34d399"/>
+    </marker>
+    <marker id="arrowCnp" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#fbbf24"/>
+    </marker>
+    <style>
+      .title { font: 700 40px Inter, "Segoe UI", Arial, sans-serif; fill: #f4f8fc; }
+      .subtitle { font: 400 20px Inter, "Segoe UI", Arial, sans-serif; fill: #9fb0c5; }
+      .section { font: 700 21px Inter, "Segoe UI", Arial, sans-serif; fill: #e5eef9; letter-spacing: 1.2px; }
+      .chip { font: 600 15px Inter, "Segoe UI", Arial, sans-serif; fill: #dce8f5; }
+      .tile-title { font: 700 20px Inter, "Segoe UI", Arial, sans-serif; fill: #e5eef9; }
+      .tile-sub { font: 500 15px Inter, "Segoe UI", Arial, sans-serif; fill: #9fb0c5; }
+      .tile-note { font: 600 14px Inter, "Segoe UI", Arial, sans-serif; }
+      .mono { font: 600 15px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #b8c8da; letter-spacing: 0.5px; }
+      .sp { font: 700 25px Inter, "Segoe UI", Arial, sans-serif; fill: #e5eef9; }
+      .sp-sub { font: 500 14px Inter, "Segoe UI", Arial, sans-serif; fill: #9fb0c5; }
+      .queue { font: 800 28px Inter, "Segoe UI", Arial, sans-serif; fill: #f4f8fc; }
+      .panel-title { font: 700 22px Inter, "Segoe UI", Arial, sans-serif; fill: #f4f8fc; }
+      .panel-sub { font: 500 16px Inter, "Segoe UI", Arial, sans-serif; fill: #a9bbcf; }
+      .panel-detail { font: 600 16px Inter, "Segoe UI", Arial, sans-serif; fill: #dce8f5; }
+      .callout-title { font: 700 17px Inter, "Segoe UI", Arial, sans-serif; fill: #f4f8fc; }
+      .callout-text { font: 500 16px Inter, "Segoe UI", Arial, sans-serif; fill: #bac9da; }
+      .footer { font: 500 14px Inter, "Segoe UI", Arial, sans-serif; fill: #8193a8; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1180" fill="url(#bg)"/>
+  <rect x="28" y="24" width="1544" height="140" rx="24" fill="url(#headerGlow)" stroke="#1e3855"/>
+
+  <text x="56" y="72" class="title">DSCP → Switch Priority → 8 Egress Queues</text>
+  <text x="56" y="108" class="subtitle">Default trusted-DSCP classification and base identity mapping versus the NVIDIA Cumulus RoCE preset</text>
+
+  <g transform="translate(56 124)">
+    <rect width="268" height="30" rx="15" fill="#102b42" stroke="#2e6687"/>
+    <circle cx="18" cy="15" r="5" fill="#38bdf8"/>
+    <text x="32" y="20" class="chip">Base QoS: SPn → Qn</text>
+  </g>
+  <g transform="translate(338 124)">
+    <rect width="398" height="30" rx="15" fill="#201c3d" stroke="#544f87"/>
+    <circle cx="18" cy="15" r="5" fill="#a78bfa"/>
+    <text x="32" y="20" class="chip">RoCE preset: only Q0 / Q3 / Q6 active</text>
+  </g>
+  <g transform="translate(750 124)">
+    <rect width="392" height="30" rx="15" fill="#332a13" stroke="#6d5820"/>
+    <circle cx="18" cy="15" r="5" fill="#fbbf24"/>
+    <text x="32" y="20" class="chip">Queue number ≠ scheduler rank</text>
+  </g>
+  <g transform="translate(1156 124)">
+    <rect width="388" height="30" rx="15" fill="#102f2b" stroke="#285e54"/>
+    <circle cx="18" cy="15" r="5" fill="#34d399"/>
+    <text x="32" y="20" class="chip">Mappings are configurable</text>
+  </g>
+
+  <text x="56" y="201" class="section">BASE / DEFAULT CLASSIFICATION WHEN L3 DSCP IS TRUSTED</text>
+  <text x="1544" y="201" text-anchor="end" class="tile-sub">SP = DSCP 〉〉 3</text>
+
+  <!-- DSCP classification buckets -->
+  <g filter="url(#shadow)">
+    <g transform="translate(56 218)">
+      <rect width="174" height="126" rx="14" fill="#10213a" stroke="#2b4563"/>
+      <text x="16" y="31" class="tile-title">DSCP 0–7</text>
+      <text x="16" y="57" class="mono">000xxx</text>
+      <text x="16" y="84" class="tile-sub">contains CS0 = 0</text>
+      <text x="16" y="108" class="tile-note" fill="#38bdf8">default = 0</text>
+    </g>
+    <g transform="translate(242 218)">
+      <rect width="174" height="126" rx="14" fill="#10213a" stroke="#2b4563"/>
+      <text x="16" y="31" class="tile-title">DSCP 8–15</text>
+      <text x="16" y="57" class="mono">001xxx</text>
+      <text x="16" y="84" class="tile-sub">contains CS1 = 8</text>
+    </g>
+    <g transform="translate(428 218)">
+      <rect width="174" height="126" rx="14" fill="#10213a" stroke="#2b4563"/>
+      <text x="16" y="31" class="tile-title">DSCP 16–23</text>
+      <text x="16" y="57" class="mono">010xxx</text>
+      <text x="16" y="84" class="tile-sub">contains CS2 = 16</text>
+    </g>
+    <g transform="translate(614 218)">
+      <rect width="174" height="126" rx="14" fill="url(#roceFill)" stroke="#34d399" stroke-width="2"/>
+      <text x="16" y="31" class="tile-title">DSCP 24–31</text>
+      <text x="16" y="57" class="mono">011xxx</text>
+      <text x="16" y="82" class="tile-sub">CS3 = 24 only</text>
+      <text x="16" y="108" class="tile-note" fill="#34d399">RoCE 26 = AF31</text>
+    </g>
+    <g transform="translate(800 218)">
+      <rect width="174" height="126" rx="14" fill="#10213a" stroke="#2b4563"/>
+      <text x="16" y="31" class="tile-title">DSCP 32–39</text>
+      <text x="16" y="57" class="mono">100xxx</text>
+      <text x="16" y="84" class="tile-sub">contains CS4 = 32</text>
+    </g>
+    <g transform="translate(986 218)">
+      <rect width="174" height="126" rx="14" fill="#10213a" stroke="#2b4563"/>
+      <text x="16" y="31" class="tile-title">DSCP 40–47</text>
+      <text x="16" y="57" class="mono">101xxx</text>
+      <text x="16" y="84" class="tile-sub">contains CS5 = 40</text>
+    </g>
+    <g transform="translate(1172 218)">
+      <rect width="174" height="126" rx="14" fill="url(#cnpFill)" stroke="#fbbf24" stroke-width="2"/>
+      <text x="16" y="31" class="tile-title">DSCP 48–55</text>
+      <text x="16" y="57" class="mono">110xxx</text>
+      <text x="16" y="82" class="tile-sub">CS6 = 48</text>
+      <text x="16" y="108" class="tile-note" fill="#fbbf24">CNP default = 48</text>
+    </g>
+    <g transform="translate(1358 218)">
+      <rect width="174" height="126" rx="14" fill="#10213a" stroke="#2b4563"/>
+      <text x="16" y="31" class="tile-title">DSCP 56–63</text>
+      <text x="16" y="57" class="mono">111xxx</text>
+      <text x="16" y="84" class="tile-sub">contains CS7 = 56</text>
+    </g>
+  </g>
+
+  <!-- DSCP to SP arrows -->
+  <g stroke="#71839a" stroke-width="2" fill="none" marker-end="url(#arrowNeutral)">
+    <path d="M143 344 V376"/>
+    <path d="M329 344 V376"/>
+    <path d="M515 344 V376"/>
+    <path d="M701 344 V376" stroke="#34d399" marker-end="url(#arrowRoce)"/>
+    <path d="M887 344 V376"/>
+    <path d="M1073 344 V376"/>
+    <path d="M1259 344 V376" stroke="#fbbf24" marker-end="url(#arrowCnp)"/>
+    <path d="M1445 344 V376"/>
+  </g>
+
+  <!-- Internal switch priorities -->
+  <g filter="url(#shadow)">
+    <g transform="translate(56 382)">
+      <rect width="174" height="72" rx="13" fill="#152944" stroke="#2b4563"/>
+      <text x="87" y="31" text-anchor="middle" class="sp">SP0</text>
+      <text x="87" y="53" text-anchor="middle" class="sp-sub">PCP 0</text>
+    </g>
+    <g transform="translate(242 382)">
+      <rect width="174" height="72" rx="13" fill="#152944" stroke="#2b4563"/>
+      <text x="87" y="31" text-anchor="middle" class="sp">SP1</text>
+      <text x="87" y="53" text-anchor="middle" class="sp-sub">PCP 1</text>
+    </g>
+    <g transform="translate(428 382)">
+      <rect width="174" height="72" rx="13" fill="#152944" stroke="#2b4563"/>
+      <text x="87" y="31" text-anchor="middle" class="sp">SP2</text>
+      <text x="87" y="53" text-anchor="middle" class="sp-sub">PCP 2</text>
+    </g>
+    <g transform="translate(614 382)">
+      <rect width="174" height="72" rx="13" fill="#123549" stroke="#34d399" stroke-width="2"/>
+      <text x="87" y="31" text-anchor="middle" class="sp">SP3</text>
+      <text x="87" y="53" text-anchor="middle" class="sp-sub">PCP 3 · RoCE</text>
+    </g>
+    <g transform="translate(800 382)">
+      <rect width="174" height="72" rx="13" fill="#152944" stroke="#2b4563"/>
+      <text x="87" y="31" text-anchor="middle" class="sp">SP4</text>
+      <text x="87" y="53" text-anchor="middle" class="sp-sub">PCP 4</text>
+    </g>
+    <g transform="translate(986 382)">
+      <rect width="174" height="72" rx="13" fill="#152944" stroke="#2b4563"/>
+      <text x="87" y="31" text-anchor="middle" class="sp">SP5</text>
+      <text x="87" y="53" text-anchor="middle" class="sp-sub">PCP 5</text>
+    </g>
+    <g transform="translate(1172 382)">
+      <rect width="174" height="72" rx="13" fill="#3a3016" stroke="#fbbf24" stroke-width="2"/>
+      <text x="87" y="31" text-anchor="middle" class="sp">SP6</text>
+      <text x="87" y="53" text-anchor="middle" class="sp-sub">PCP 6 · CNP</text>
+    </g>
+    <g transform="translate(1358 382)">
+      <rect width="174" height="72" rx="13" fill="#152944" stroke="#2b4563"/>
+      <text x="87" y="31" text-anchor="middle" class="sp">SP7</text>
+      <text x="87" y="53" text-anchor="middle" class="sp-sub">PCP 7</text>
+    </g>
+  </g>
+
+  <!-- SP to base Q arrows -->
+  <g stroke="#71839a" stroke-width="2" fill="none" marker-end="url(#arrowNeutral)">
+    <path d="M143 454 V484"/>
+    <path d="M329 454 V484"/>
+    <path d="M515 454 V484"/>
+    <path d="M701 454 V484" stroke="#34d399" marker-end="url(#arrowRoce)"/>
+    <path d="M887 454 V484"/>
+    <path d="M1073 454 V484"/>
+    <path d="M1259 454 V484" stroke="#fbbf24" marker-end="url(#arrowCnp)"/>
+    <path d="M1445 454 V484"/>
+  </g>
+
+  <!-- All eight physical/base egress queues -->
+  <g filter="url(#shadow)">
+    <g transform="translate(56 490)">
+      <rect width="174" height="74" rx="13" fill="#152944" stroke="#38bdf8"/>
+      <text x="87" y="34" text-anchor="middle" class="queue">Q0</text>
+      <text x="87" y="57" text-anchor="middle" class="sp-sub">SP0 → Q0</text>
+    </g>
+    <g transform="translate(242 490)">
+      <rect width="174" height="74" rx="13" fill="#152944" stroke="#2b4563"/>
+      <text x="87" y="34" text-anchor="middle" class="queue">Q1</text>
+      <text x="87" y="57" text-anchor="middle" class="sp-sub">SP1 → Q1</text>
+    </g>
+    <g transform="translate(428 490)">
+      <rect width="174" height="74" rx="13" fill="#152944" stroke="#2b4563"/>
+      <text x="87" y="34" text-anchor="middle" class="queue">Q2</text>
+      <text x="87" y="57" text-anchor="middle" class="sp-sub">SP2 → Q2</text>
+    </g>
+    <g transform="translate(614 490)">
+      <rect width="174" height="74" rx="13" fill="#123549" stroke="#34d399" stroke-width="2"/>
+      <text x="87" y="34" text-anchor="middle" class="queue">Q3</text>
+      <text x="87" y="57" text-anchor="middle" class="sp-sub">SP3 → Q3</text>
+    </g>
+    <g transform="translate(800 490)">
+      <rect width="174" height="74" rx="13" fill="#152944" stroke="#2b4563"/>
+      <text x="87" y="34" text-anchor="middle" class="queue">Q4</text>
+      <text x="87" y="57" text-anchor="middle" class="sp-sub">SP4 → Q4</text>
+    </g>
+    <g transform="translate(986 490)">
+      <rect width="174" height="74" rx="13" fill="#152944" stroke="#2b4563"/>
+      <text x="87" y="34" text-anchor="middle" class="queue">Q5</text>
+      <text x="87" y="57" text-anchor="middle" class="sp-sub">SP5 → Q5</text>
+    </g>
+    <g transform="translate(1172 490)">
+      <rect width="174" height="74" rx="13" fill="#3a3016" stroke="#fbbf24" stroke-width="2"/>
+      <text x="87" y="34" text-anchor="middle" class="queue">Q6</text>
+      <text x="87" y="57" text-anchor="middle" class="sp-sub">SP6 → Q6</text>
+    </g>
+    <g transform="translate(1358 490)">
+      <rect width="174" height="74" rx="13" fill="#152944" stroke="#2b4563"/>
+      <text x="87" y="34" text-anchor="middle" class="queue">Q7</text>
+      <text x="87" y="57" text-anchor="middle" class="sp-sub">SP7 → Q7</text>
+    </g>
+  </g>
+
+  <g transform="translate(56 584)">
+    <rect width="1488" height="52" rx="14" fill="#0d1c30" stroke="#243b57"/>
+    <text x="20" y="32" class="panel-detail">Base Cumulus QoS supports all eight egress queues and maps each trusted switch priority to the identically numbered queue.</text>
+    <text x="1468" y="32" text-anchor="end" class="panel-sub">SP0→Q0 · SP1→Q1 · … · SP7→Q7</text>
+  </g>
+
+  <text x="56" y="680" class="section">ROCE PRESET: EIGHT SWITCH PRIORITIES COLLAPSE INTO THREE ACTIVE EGRESS QUEUES</text>
+
+  <!-- RoCE Q0 group -->
+  <g filter="url(#shadow)">
+    <rect x="56" y="700" width="700" height="230" rx="20" fill="#0d1c30" stroke="#2b4563"/>
+    <text x="80" y="734" class="panel-title">Q0 · Default / shared traffic</text>
+    <text x="730" y="734" text-anchor="end" class="panel-sub">DWRR 50% · PFC off</text>
+
+    <g fill="#152944" stroke="#3b526d">
+      <rect x="82" y="754" width="82" height="38" rx="10"/>
+      <rect x="176" y="754" width="82" height="38" rx="10"/>
+      <rect x="270" y="754" width="82" height="38" rx="10"/>
+      <rect x="364" y="754" width="82" height="38" rx="10"/>
+      <rect x="458" y="754" width="82" height="38" rx="10"/>
+      <rect x="552" y="754" width="82" height="38" rx="10"/>
+    </g>
+    <g class="panel-detail" text-anchor="middle">
+      <text x="123" y="780">SP0</text>
+      <text x="217" y="780">SP1</text>
+      <text x="311" y="780">SP2</text>
+      <text x="405" y="780">SP4</text>
+      <text x="499" y="780">SP5</text>
+      <text x="593" y="780">SP7</text>
+    </g>
+    <g stroke="#71839a" stroke-width="2" fill="none">
+      <path d="M123 792 V812"/>
+      <path d="M217 792 V812"/>
+      <path d="M311 792 V812"/>
+      <path d="M405 792 V812"/>
+      <path d="M499 792 V812"/>
+      <path d="M593 792 V812"/>
+      <path d="M123 812 H593"/>
+      <path d="M358 812 V834" marker-end="url(#arrowNeutral)"/>
+    </g>
+    <rect x="244" y="840" width="228" height="54" rx="15" fill="#152944" stroke="#38bdf8"/>
+    <text x="358" y="875" text-anchor="middle" class="queue">Q0</text>
+    <text x="80" y="914" class="panel-sub">All non-RoCE and non-CNP priorities are remapped here.</text>
+  </g>
+
+  <!-- RoCE Q3 group -->
+  <g filter="url(#shadow)">
+    <rect x="780" y="700" width="356" height="230" rx="20" fill="url(#roceFill)" stroke="#34d399" stroke-width="2"/>
+    <text x="804" y="734" class="panel-title">Q3 · RoCE data</text>
+    <rect x="820" y="754" width="98" height="38" rx="10" fill="#153f46" stroke="#34d399"/>
+    <text x="869" y="780" text-anchor="middle" class="panel-detail">SP3</text>
+    <path d="M869 792 V834" stroke="#34d399" stroke-width="2.5" fill="none" marker-end="url(#arrowRoce)"/>
+    <rect x="820" y="840" width="98" height="54" rx="15" fill="#153f46" stroke="#34d399"/>
+    <text x="869" y="875" text-anchor="middle" class="queue">Q3</text>
+    <text x="946" y="778" class="panel-detail">DSCP 26 / AF31</text>
+    <text x="946" y="804" class="panel-sub">PCP 3 · UDP 4791</text>
+    <text x="946" y="856" class="panel-detail">DWRR 50%</text>
+    <text x="946" y="882" class="panel-sub">ECN + PFC on priority 3</text>
+    <text x="804" y="914" class="panel-sub">Payload shares the link by weight.</text>
+  </g>
+
+  <!-- RoCE Q6 group -->
+  <g filter="url(#shadow)">
+    <rect x="1158" y="700" width="386" height="230" rx="20" fill="url(#cnpFill)" stroke="#fbbf24" stroke-width="2"/>
+    <text x="1182" y="734" class="panel-title">Q6 · CNP feedback</text>
+    <rect x="1198" y="754" width="98" height="38" rx="10" fill="#443819" stroke="#fbbf24"/>
+    <text x="1247" y="780" text-anchor="middle" class="panel-detail">SP6</text>
+    <path d="M1247 792 V834" stroke="#fbbf24" stroke-width="2.5" fill="none" marker-end="url(#arrowCnp)"/>
+    <rect x="1198" y="840" width="98" height="54" rx="15" fill="#443819" stroke="#fbbf24"/>
+    <text x="1247" y="875" text-anchor="middle" class="queue">Q6</text>
+    <text x="1322" y="778" class="panel-detail">DSCP 48 / CS6</text>
+    <text x="1322" y="804" class="panel-sub">PCP 6 · CNP</text>
+    <text x="1322" y="856" class="panel-detail" fill="#fbbf24">STRICT PRIORITY</text>
+    <text x="1322" y="882" class="panel-sub">PFC off · low-volume control</text>
+    <text x="1182" y="914" class="panel-sub">Fast feedback; “6” does not imply rank.</text>
+  </g>
+
+  <!-- Scheduler service order -->
+  <g transform="translate(56 950)">
+    <rect width="1488" height="50" rx="14" fill="#101d2d" stroke="#2b4563"/>
+    <rect x="18" y="10" width="190" height="30" rx="15" fill="#3a3016" stroke="#fbbf24"/>
+    <text x="113" y="31" text-anchor="middle" class="chip">Q6 strict: serve first</text>
+    <path d="M226 25 H298" stroke="#fbbf24" stroke-width="2.5" marker-end="url(#arrowCnp)"/>
+    <rect x="316" y="10" width="378" height="30" rx="15" fill="#123549" stroke="#34d399"/>
+    <text x="505" y="31" text-anchor="middle" class="chip">then Q3 + Q0 by DWRR 50 / 50</text>
+    <text x="1468" y="31" text-anchor="end" class="panel-sub">Strict is an explicit scheduler mode—not a property of queue number 6.</text>
+  </g>
+
+  <!-- Clarifications -->
+  <g transform="translate(56 1018)">
+    <rect width="726" height="104" rx="18" fill="#101d2d" stroke="#34d399"/>
+    <circle cx="28" cy="28" r="10" fill="#34d399"/>
+    <text x="50" y="34" class="callout-title">CS3 is one exact codepoint</text>
+    <text x="26" y="66" class="callout-text">CS3 = binary 011000 = decimal 24. The whole 24–31 bucket maps to SP3,</text>
+    <text x="26" y="90" class="callout-text">but DSCP 26 is AF31—not CS3.</text>
+  </g>
+  <g transform="translate(802 1018)">
+    <rect width="742" height="104" rx="18" fill="#101d2d" stroke="#fbbf24"/>
+    <circle cx="28" cy="28" r="10" fill="#fbbf24"/>
+    <text x="50" y="34" class="callout-title">RoCE queue choices are profile defaults</text>
+    <text x="26" y="66" class="callout-text">Trust mode, ACLs, and platform QoS policy can override classification and queues.</text>
+    <text x="26" y="90" class="callout-text">Q7 does not preempt Q6 here; SP7 is remapped to shared Q0.</text>
+  </g>
+
+  <text x="56" y="1155" class="footer">Sources: NVIDIA Cumulus Linux QoS and RoCE default profiles · IANA DSCP Registry · RFC 2474 / RFC 9435</text>
+  <text x="1544" y="1155" text-anchor="end" class="footer">Illustrative profile · verify the live switch configuration before deployment</text>
+</svg>

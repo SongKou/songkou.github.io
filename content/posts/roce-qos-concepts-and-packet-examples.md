@@ -203,6 +203,36 @@ QP 102 ─┼→ DSCP 24 → TC 3 → switch Queue 3
 QP 103 ─┘
 ```
 
+### The full DSCP → switch-priority → queue map, and the RoCE 3-queue preset
+
+The definitions above are abstract; the mapping becomes concrete once you see a real preset end to end. The diagram shows both layers at once — the default trusted-DSCP classification on top, and the NVIDIA Cumulus RoCE preset on the bottom:
+
+![DSCP-to-switch-priority-to-eight-queues map: the default identity mapping where each DSCP bucket resolves to switch priority SPn and then queue Qn, and the RoCE preset that collapses all priorities except 3 and 6 into a shared Q0, sends RoCE data to Q3, and gives CNP a strict-priority Q6](/posts/roce-qos-concepts-and-packet-examples/roce-dscp-eight-queues.svg)
+
+**Top — the default identity mapping.** When a port trusts L3 DSCP, each eight-value DSCP bucket resolves to one internal **switch priority (SP)**. Switch priority is NVIDIA/Cumulus's name for the internal priority level that this post's other sections call a *traffic class* — the platform-internal handle a marking resolves to, which then selects a queue. The default rule is just the top three DSCP bits:
+
+```text
+SP = DSCP >> 3      (DSCP 24–31 → SP3, DSCP 48–55 → SP6, …)
+```
+
+Each switch priority then maps to the identically numbered egress queue — `SP0 → Q0`, `SP1 → Q1`, … `SP7 → Q7`. All eight queues exist and are usable.
+
+**Bottom — the RoCE preset collapses eight priorities into three active queues.** A RoCE profile does not need eight queues; it needs a lossless data class, a fast control class, and one bucket for everything else:
+
+| Queue | Carries | Switch priorities mapped in | Scheduling | PFC / ECN |
+|---|---|---|---|---|
+| **Q0** | default / everything else | SP0, 1, 2, 4, 5, 7 | DWRR ~50% | lossy, no PFC |
+| **Q3** | RoCE data (DSCP 26 / AF31) | SP3 | DWRR ~50% | **ECN + PFC on priority 3** |
+| **Q6** | CNP feedback (DSCP 48 / CS6) | SP6 | **strict priority** | lossy, no PFC |
+
+The scheduler serves **Q6 strict-priority first** — CNP is low-volume and latency-critical, and a delayed congestion signal defeats the whole feedback loop of section 10 — then splits the remainder between **Q3 and Q0 by DWRR**, here 50/50. That is exactly the two-part scheduler of sections 4–5: a strict-priority class on top, `bandwidth remaining percent` sharing beneath it.
+
+Three precision points this picture pins down — each an instance of the post's recurring warning not to read meaning into a number:
+
+- **A queue number is not a scheduler rank.** Q6 is not served ahead of Q3 because 6 > 3; it is served first only because it is *explicitly configured strict priority*. The strict CNP queue's index is itself just convention — this Cumulus preset uses Q6, while the Cisco Nexus example in [section 5](#5-bandwidth-remaining-percent) uses Q7 for the same strict-priority role. And the highest-numbered queue here, Q7, is unused: SP7 is remapped down into the shared Q0. Rank comes from the scheduler configuration, never the queue index.
+- **CS3 is exactly DSCP 24 — one codepoint, not the bucket.** The entire 24–31 range resolves to SP3, but only `011000` = 24 is CS3. The common RoCE data value **DSCP 26 is AF31** — it lands in SP3 / Q3 too, but it is a different codepoint, the same trap flagged in [section 2](#dscp-24-versus-dscp-26-for-roce).
+- **Every arrow here is configurable policy, not silicon.** Trust mode, ACLs, and the platform QoS profile can remap any DSCP, any switch priority, and any queue. This preset is a sensible default, not a hardware law — always verify the live switch configuration before relying on it.
+
 ## 4. DWRR
 
 **DWRR — Deficit Weighted Round Robin** shares available egress bandwidth among queues according to configured weights.

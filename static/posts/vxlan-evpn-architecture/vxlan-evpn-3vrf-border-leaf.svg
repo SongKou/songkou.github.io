@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000" role="img" aria-labelledby="svg-title svg-desc">
+  <title id="svg-title">VXLAN EVPN external connectivity for three VRFs through a border leaf pair</title>
+  <desc id="svg-desc">Three tenant VRFs, each containing twenty Layer 2 VNIs, connect through three Layer 3 VNIs to two border leaves. The border leaves use three per-VRF eBGP routed handoffs to corresponding VRFs on an external edge router or firewall, which then reaches the WAN or Internet.</desc>
+
+  <defs>
+    <filter id="shadow3" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/>
+    </filter>
+    <marker id="arrow3-dark" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#49627e"/>
+    </marker>
+    <marker id="arrow3-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#f87171"/>
+    </marker>
+    <marker id="arrow3-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#60a5fa"/>
+    </marker>
+    <marker id="arrow3-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#34d399"/>
+    </marker>
+    <style>
+      .t3 { font-family: Inter, 'Segoe UI', Arial, sans-serif; }
+      .title3 { font-size: 34px; font-weight: 750; fill: #e5eef9; }
+      .subtitle3 { font-size: 18px; font-weight: 450; fill: #9fb0c5; }
+      .zone-title3 { font-size: 21px; font-weight: 650; fill: #e5eef9; }
+      .node-title3 { font-size: 21px; font-weight: 650; fill: #e5eef9; }
+      .node-text3 { font-size: 17px; font-weight: 450; fill: #9fb0c5; }
+      .small3 { font-size: 15px; font-weight: 450; fill: #9fb0c5; }
+      .label3 { font-size: 16px; font-weight: 500; fill: #9fb0c5; }
+      .note3 { font-size: 18px; font-weight: 650; fill: #e5eef9; }
+      .accent3 { font-size: 16px; font-weight: 700; fill: #fbbf24; }
+      .red3 { fill: #f87171; }
+      .blue3 { fill: #60a5fa; }
+      .green3 { fill: #34d399; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#07111f"/>
+
+  <text x="64" y="64" class="t3 title3">Three VRFs reaching outside through EVPN border leaves</text>
+  <text x="64" y="98" class="t3 subtitle3">60 L2 VNIs stay inside the fabric — external routing happens once per VRF</text>
+
+  <rect x="40" y="130" width="930" height="730" rx="24" fill="#101e31" stroke="#49627e" stroke-width="2"/>
+  <text x="75" y="174" class="t3 zone-title3">VXLAN EVPN fabric</text>
+
+  <rect x="1000" y="130" width="560" height="730" rx="24" fill="#101e31" stroke="#49627e" stroke-width="2"/>
+  <text x="1035" y="174" class="t3 zone-title3">External routing domain</text>
+
+  <!-- Tenant VRFs -->
+  <g filter="url(#shadow3)">
+    <rect x="90" y="215" width="390" height="150" rx="18" fill="#152944" stroke="#f87171" stroke-width="2.5"/>
+    <rect x="90" y="425" width="390" height="150" rx="18" fill="#152944" stroke="#60a5fa" stroke-width="2.5"/>
+    <rect x="90" y="635" width="390" height="150" rx="18" fill="#152944" stroke="#34d399" stroke-width="2.5"/>
+  </g>
+
+  <text x="120" y="253" class="t3 node-title3 red3">VRF RED</text>
+  <text x="120" y="286" class="t3 node-text3">VLANs 101–120 · L2 VNIs 10101–10120</text>
+  <text x="120" y="317" class="t3 node-text3">L3 VNI 50001 · RT 65000:50001</text>
+  <text x="120" y="348" class="t3 node-text3">Summary toward edge: 10.10.0.0/16</text>
+
+  <text x="120" y="463" class="t3 node-title3 blue3">VRF BLUE</text>
+  <text x="120" y="496" class="t3 node-text3">VLANs 201–220 · L2 VNIs 10201–10220</text>
+  <text x="120" y="527" class="t3 node-text3">L3 VNI 50002 · RT 65000:50002</text>
+  <text x="120" y="558" class="t3 node-text3">Summary toward edge: 10.20.0.0/16</text>
+
+  <text x="120" y="673" class="t3 node-title3 green3">VRF GREEN</text>
+  <text x="120" y="706" class="t3 node-text3">VLANs 301–320 · L2 VNIs 10301–10320</text>
+  <text x="120" y="737" class="t3 node-text3">L3 VNI 50003 · RT 65000:50003</text>
+  <text x="120" y="768" class="t3 node-text3">Summary toward edge: 10.30.0.0/16</text>
+
+  <!-- EVPN overlay bus -->
+  <line x1="545" y1="260" x2="545" y2="740" stroke="#49627e" stroke-width="5" stroke-linecap="round"/>
+  <line x1="480" y1="290" x2="545" y2="290" stroke="#f87171" stroke-width="5"/>
+  <line x1="480" y1="500" x2="545" y2="500" stroke="#60a5fa" stroke-width="5"/>
+  <line x1="480" y1="710" x2="545" y2="710" stroke="#34d399" stroke-width="5"/>
+  <text x="566" y="500" text-anchor="middle" class="t3 label3" transform="rotate(-90 566 500)">MP-BGP EVPN + VXLAN L3 VNI</text>
+
+  <!-- Border leaf pair -->
+  <rect x="585" y="215" width="335" height="570" rx="22" fill="none" stroke="#49627e" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="752" y="252" text-anchor="middle" class="t3 node-title3">Border leaf pair</text>
+
+  <line x1="545" y1="350" x2="610" y2="350" stroke="#49627e" stroke-width="4" marker-end="url(#arrow3-dark)"/>
+  <line x1="545" y1="650" x2="610" y2="650" stroke="#49627e" stroke-width="4" marker-end="url(#arrow3-dark)"/>
+
+  <g filter="url(#shadow3)">
+    <rect x="610" y="280" width="300" height="180" rx="16" fill="#152944" stroke="#38bdf8" stroke-width="2.5"/>
+    <rect x="610" y="540" width="300" height="180" rx="16" fill="#152944" stroke="#38bdf8" stroke-width="2.5"/>
+  </g>
+
+  <text x="638" y="318" class="t3 node-title3">BL1</text>
+  <text x="638" y="351" class="t3 node-text3">Unique VTEP, router ID and RDs</text>
+  <text x="638" y="382" class="t3 node-text3">VRFs RED, BLUE and GREEN</text>
+  <text x="638" y="413" class="t3 node-text3">L3 VNIs 50001, 50002, 50003</text>
+  <text x="638" y="444" class="t3 node-text3">EVPN Type-5 route exchange</text>
+
+  <text x="638" y="578" class="t3 node-title3">BL2</text>
+  <text x="638" y="611" class="t3 node-text3">Unique VTEP, router ID and RDs</text>
+  <text x="638" y="642" class="t3 node-text3">VRFs RED, BLUE and GREEN</text>
+  <text x="638" y="673" class="t3 node-text3">L3 VNIs 50001, 50002, 50003</text>
+  <text x="638" y="704" class="t3 node-text3">EVPN Type-5 route exchange</text>
+
+  <!-- External edge VRFs -->
+  <rect x="1035" y="205" width="490" height="510" rx="20" fill="#101e31" stroke="#49627e" stroke-width="2"/>
+  <text x="1280" y="242" text-anchor="middle" class="t3 node-title3">Edge router or firewall</text>
+
+  <rect x="1070" y="270" width="420" height="105" rx="14" fill="#152944" stroke="#f87171" stroke-width="2.5"/>
+  <rect x="1070" y="410" width="420" height="105" rx="14" fill="#152944" stroke="#60a5fa" stroke-width="2.5"/>
+  <rect x="1070" y="550" width="420" height="105" rx="14" fill="#152944" stroke="#34d399" stroke-width="2.5"/>
+
+  <text x="1100" y="306" class="t3 node-title3 red3">External VRF RED</text>
+  <text x="1100" y="337" class="t3 node-text3">Receives 10.10.0.0/16 · sends default</text>
+  <text x="1100" y="368" class="t3 small3">Routed subinterface, dot1q tag 3001</text>
+
+  <text x="1100" y="446" class="t3 node-title3 blue3">External VRF BLUE</text>
+  <text x="1100" y="477" class="t3 node-text3">Receives 10.20.0.0/16 · sends default</text>
+  <text x="1100" y="508" class="t3 small3">Routed subinterface, dot1q tag 3002</text>
+
+  <text x="1100" y="586" class="t3 node-title3 green3">External VRF GREEN</text>
+  <text x="1100" y="617" class="t3 node-text3">Receives 10.30.0.0/16 · sends default</text>
+  <text x="1100" y="648" class="t3 small3">Routed subinterface, dot1q tag 3003</text>
+
+  <!-- Per-VRF eBGP handoffs -->
+  <path d="M 920 330 C 980 330, 1005 322, 1070 322" fill="none" stroke="#f87171" stroke-width="5" marker-start="url(#arrow3-red)" marker-end="url(#arrow3-red)"/>
+  <path d="M 920 500 C 980 500, 1005 462, 1070 462" fill="none" stroke="#60a5fa" stroke-width="5" marker-start="url(#arrow3-blue)" marker-end="url(#arrow3-blue)"/>
+  <path d="M 920 670 C 980 670, 1005 602, 1070 602" fill="none" stroke="#34d399" stroke-width="5" marker-start="url(#arrow3-green)" marker-end="url(#arrow3-green)"/>
+
+  <rect x="985" y="740" width="560" height="65" rx="14" fill="#1f1503" stroke="#fbbf24" stroke-width="2"/>
+  <text x="1265" y="767" text-anchor="middle" class="t3 accent3">Each border-to-edge link: 3 routed subinterfaces</text>
+  <text x="1265" y="791" text-anchor="middle" class="t3 small3">One eBGP session per VRF — not one session per VLAN</text>
+
+  <!-- WAN / Internet -->
+  <line x1="1280" y1="715" x2="1280" y2="740" stroke="#49627e" stroke-width="4" marker-end="url(#arrow3-dark)"/>
+  <rect x="1100" y="825" width="360" height="75" rx="36" fill="#1f1503" stroke="#fbbf24" stroke-width="2" filter="url(#shadow3)"/>
+  <text x="1280" y="873" text-anchor="middle" class="t3 node-title3">WAN / Internet / campus</text>
+  <line x1="1280" y1="805" x2="1280" y2="825" stroke="#49627e" stroke-width="4" marker-end="url(#arrow3-dark)"/>
+
+  <!-- Summary -->
+  <rect x="80" y="895" width="1440" height="70" rx="16" fill="#101e31" stroke="#49627e" stroke-width="2"/>
+  <text x="110" y="924" class="t3 note3">Key result: 60 internal L2 VNIs, but only 3 tenant L3 VNIs and 3 logical eBGP sessions per border–edge link.</text>
+  <text x="110" y="951" class="t3 small3">The matching Route Target keeps RED, BLUE and GREEN defaults and return routes separated.</text>
+
+  <text x="1536" y="985" text-anchor="end" class="t3 small3">VXLAN EVPN Architecture</text>
+</svg>

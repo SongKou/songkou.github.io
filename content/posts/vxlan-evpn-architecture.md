@@ -491,7 +491,7 @@ For per-VNI mappings, NVIDIA documents `vxlan-mcastgrp` in `/etc/network/interfa
 ```text
 auto vni30001
 iface vni30001
-    bridge-access 101
+    bridge-access 401
     vxlan-id 30001
     vxlan-mcastgrp 239.1.1.1
     bridge-learning off
@@ -499,7 +499,7 @@ iface vni30001
 
 auto vni30002
 iface vni30002
-    bridge-access 102
+    bridge-access 402
     vxlan-id 30002
     vxlan-mcastgrp 239.1.1.2
     bridge-learning off
@@ -1245,56 +1245,275 @@ Important details include:
 
 The design is centralized from the policy perspective, even though endpoints and gateways remain distributed.
 
-## 18. Centralized route leaking and shared services
+## 18. External connectivity: per-VRF handoff, fusion router, and shared services
 
-The final course section builds a third tenant VRF that acts as a shared Internet/services domain. It then leaks selected reachability between Tenant-1 and Tenant-3 at a border leaf.
+A VXLAN EVPN fabric isolates tenant VRFs by default; reaching the Internet or WAN is a deliberate design decision, not a side effect. There are three standard options for the external handoff:
+
+1. **Per-VRF routed handoff at a border-leaf pair** — every tenant VRF gets its own eBGP session to the external edge. Recommended, and detailed in 18.1.
+2. **Fusion router** — the border keeps its VRFs, but the external sessions terminate in the edge device's global routing table (18.2).
+3. **Shared Internet VRF** — one services VRF owns external reachability, and selected routes are leaked between it and the tenants at designated border leaves (18.3 — the model the course lab builds).
+
+To keep the comparison concrete, this section reuses one worked example throughout:
+
+- 3 tenant VRFs: RED, BLUE, GREEN
+- 20 VLANs and L2 VNIs in each VRF — 60 L2 VNIs in total
+- A pair of VXLAN EVPN border leaves, BL1 and BL2
+- eBGP from the border leaves to an external edge router or firewall
+
+The headline result up front: you do **not** need 60 external BGP sessions. The external handoff happens at the **VRF level** — 60 L2 VNIs stay inside the fabric, while the border presents only 3 L3 VNIs and 3 eBGP sessions per border-to-edge link.
+
+### 18.1 Option 1: per-VRF eBGP handoff at a border-leaf pair
+
+![Three tenant VRFs, each with twenty L2 VNIs, reach the outside through two border leaves running three L3 VNIs and three per-VRF eBGP handoffs to matching VRFs on the external edge](/posts/vxlan-evpn-architecture/vxlan-evpn-3vrf-border-leaf.svg)
+
+| Tenant | Internal subnets | VLANs | L2 VNIs | L3 VNI | Route Target | External summary |
+|---|---|---|---|---|---|---|
+| RED | Twenty VLANs under `10.10.0.0/16` | 101–120 | `10101–10120` | `50001` | `65000:50001` | `10.10.0.0/16` |
+| BLUE | Twenty VLANs under `10.20.0.0/16` | 201–220 | `10201–10220` | `50002` | `65000:50002` | `10.20.0.0/16` |
+| GREEN | Twenty VLANs under `10.30.0.0/16` | 301–320 | `10301–10320` | `50003` | `65000:50003` | `10.30.0.0/16` |
+
+The numbering follows the conventions used elsewhere in this post: L2 VNI = 10000 + VLAN (section 2.3), and one L3 VNI per tenant VRF in the 5000x family (section 10.2).
+
+Each server leaf that hosts RED networks has the following logical configuration, and the same pattern applies to BLUE and GREEN:
+
+```text
+VRF RED
+  L3 VNI 50001
+  Import/export RT 65000:50001
+  VLAN-to-L2-VNI mappings for locally attached RED networks
+  Anycast gateway on each local RED VLAN
+```
+
+**The border-leaf model.** Each border leaf joins all three tenant VRFs:
+
+```text
+Border leaf BL1
+  Underlay
+    Unique router ID
+    Unique VTEP loopback
+    Routed links to the spines
+    VTEP loopback advertised through the underlay
+
+  EVPN overlay
+    MP-BGP EVPN session to route reflectors or overlay peers
+    VXLAN encapsulation enabled
+    Extended communities exchanged
+
+  VRF RED    — L3 VNI 50001, unique RD, import/export RT 65000:50001
+  VRF BLUE   — L3 VNI 50002, unique RD, import/export RT 65000:50002
+  VRF GREEN  — L3 VNI 50003, unique RD, import/export RT 65000:50003
+```
+
+BL2 uses the same VRFs, L3 VNIs and Route Targets, but its own VTEP IP, router ID, Route Distinguishers, external interface addresses and BGP sessions.
+
+For a normal symmetric-IRB Layer 3 handoff, the border leaves need the three tenant VRFs and three L3 VNIs — **not** all 60 L2 VNIs. The exceptions that do pull L2 VNIs onto the border:
+
+- A Layer 2 handoff to the outside.
+- Servers or service appliances attached directly to the border.
+- A local firewall interface using those VLANs.
+- A network operating system that requires the L2 VNIs to be present.
+
+The border leaves still learn the necessary tenant host and prefix routes through EVPN.
+
+**Physical and logical handoff.** Separate physical interfaces per VRF work, but one physical link carrying three routed IEEE 802.1Q subinterfaces is the common pattern. Between BL1 and Edge1:
+
+| Subinterface | 802.1Q tag | VRF | BL1 address | Edge1 address |
+|---|---|---|---|---|
+| Ethernet1/49.3001 | 3001 | RED | `172.31.1.0/31` | `172.31.1.1/31` |
+| Ethernet1/49.3002 | 3002 | BLUE | `172.31.2.0/31` | `172.31.2.1/31` |
+| Ethernet1/49.3003 | 3003 | GREEN | `172.31.3.0/31` | `172.31.3.1/31` |
+
+These are routed subinterfaces, not Layer 2 VXLAN extensions — no VNI maps to tags 3001–3003; they exist only on the handoff link. The external router or firewall has matching subinterfaces in its corresponding routing contexts.
+
+**Per-VRF eBGP.** With fabric AS 65000 and external edge AS 65100, each border leaf runs one logical eBGP session inside each VRF:
+
+```text
+BGP in VRF RED     neighbor 172.31.1.1  remote-as 65100
+BGP in VRF BLUE    neighbor 172.31.2.1  remote-as 65100
+BGP in VRF GREEN   neighbor 172.31.3.1  remote-as 65100
+```
+
+The edge router mirrors these sessions from its per-tenant routing contexts. The exact syntax differs between NX-OS, EOS, Junos, IOS-XE and FRR, but the logical structure is the same.
+
+**Outside routes into EVPN.** The edge router or firewall normally sends a default route into every tenant VRF. On each border leaf:
+
+1. The default arrives through the IPv4-unicast BGP address family inside the tenant VRF.
+2. Depending on the platform, an explicit advertise statement or export policy selects — or merely filters — the route for EVPN. Some NOSes (NX-OS, EOS with the EVPN export RT configured) export BGP-learned VRF routes automatically; others (IOS-XE `advertise l2vpn evpn`, Junos export policy) require the explicit step.
+3. The border advertises the default as an EVPN Type-5 route ([RFC 9136](https://www.rfc-editor.org/rfc/rfc9136.html)).
+4. The Type-5 route carries the tenant Route Target, L3 VNI, border VTEP next hop and overlay router MAC.
+
+```text
+0.0.0.0/0, RT 65000:50001, L3 VNI 50001, next hop BL1
+0.0.0.0/0, RT 65000:50002, L3 VNI 50002, next hop BL1
+0.0.0.0/0, RT 65000:50003, L3 VNI 50003, next hop BL1
+```
+
+A RED leaf imports only the first default, because its RED IP-VRF imports `65000:50001`. It does not import the BLUE or GREEN defaults — the Route Target is what keeps three coexisting default routes separated.
+
+**Fabric routes toward the outside.** The border leaf imports EVPN tenant routes into the corresponding IP-VRF, and should normally advertise summaries rather than every host route:
+
+```text
+VRF RED:    advertise 10.10.0.0/16
+VRF BLUE:   advertise 10.20.0.0/16
+VRF GREEN:  advertise 10.30.0.0/16
+```
+
+If a VRF's twenty VLAN prefixes are not contiguous, advertise the individual subnet prefixes or several smaller summaries. The route policy per VRF follows this model:
+
+| Direction | Policy |
+|---|---|
+| Edge to EVPN | Default route and approved external prefixes only |
+| EVPN to edge | The tenant summary (for RED, `10.10.0.0/16`) |
+| Block | Host `/32`s and other tenants' routes |
+
+Important controls:
+
+- Do not send an EVPN-learned default route back to the external edge.
+- Use explicit prefix lists or route policies in both directions.
+- Tag routes with BGP communities when useful for loop prevention.
+- Advertise an aggregate only when the border has valid contributing reachability or an intentionally tracked summary route.
+- Avoid placing a full Internet table in every fabric leaf unless the hardware scale has been deliberately validated.
+
+**Outbound packet flow.** RED server `10.10.1.20` sends traffic to an Internet destination:
+
+1. The server sends the packet to its local RED anycast gateway.
+2. The local leaf performs a lookup in VRF RED.
+3. It finds RED's EVPN Type-5 default route through BL1 and/or BL2.
+4. The leaf VXLAN-encapsulates the packet using L3 VNI `50001`.
+5. The outer destination is the selected border-leaf VTEP.
+6. A spine forwards the outer IP packet without looking up the tenant address.
+7. The border leaf receives and decapsulates the VXLAN packet.
+8. L3 VNI `50001` selects VRF RED.
+9. The border performs a native IP lookup and forwards the packet over RED's external routed subinterface.
+10. The external firewall applies security policy and NAT when required.
+
+BLUE follows the same physical infrastructure but uses L3 VNI `50002` and the BLUE routing table; GREEN uses `50003`. The VRFs remain separate along the entire path.
+
+**Return packet flow.** For traffic returning to RED server `10.10.1.20`:
+
+1. The external router performs a lookup in external VRF RED.
+2. It finds `10.10.0.0/16` through BL1 and BL2.
+3. It selects a border and sends a native IP packet over the RED handoff.
+4. The border receives the packet in VRF RED.
+5. The border finds an EVPN Type-2 host route or Type-5 prefix route toward the server's leaf.
+6. It VXLAN-encapsulates the packet using L3 VNI `50001`.
+7. The underlay forwards the packet to the destination leaf VTEP.
+8. The destination leaf decapsulates and forwards the packet to the server.
+
+**Border redundancy.** Both BL1 and BL2 should advertise the default for each VRF while they have valid external reachability, so a RED server leaf can install an ECMP default:
+
+```text
+0.0.0.0/0
+  Next hop: BL1 VTEP
+  Next hop: BL2 VTEP
+```
+
+With two border leaves and two external edge routers, fully connected:
+
+```text
+3 VRFs × 2 border leaves × 2 edge routers = 12 external eBGP sessions
+```
+
+Still not one session per VLAN. Recommended redundancy controls:
+
+- Enable EVPN and BGP multipath where required.
+- Use unique border VTEP next hops and unique RDs.
+- Use BFD or fast BGP failure detection.
+- Make default-route origination conditional on actual external reachability.
+- Withdraw a Type-5 default when a border loses all usable external paths.
+- Test the failure of every external link, border leaf, spine and edge node.
+
+### 18.2 Option 2: fusion router — merge tenants into the edge global table
+
+The border retains its three VRFs, but the external sessions terminate in the edge device's global routing table. An edge used this way is sometimes called a **fusion router**.
+
+This is simpler to configure, but:
+
+- Tenant addresses cannot overlap.
+- The edge may route directly between tenants.
+- Strong firewall or ACL policy is required to restore the isolation the fabric provided.
+- Troubleshooting tenant separation becomes harder.
+
+### 18.3 Option 3: shared Internet VRF with centralized route leaking
+
+Instead of handing each tenant to the outside separately, one shared services VRF — call it **INTERNET** — owns external reachability, and selected routes are leaked between it and the customer tenant VRFs. Continuing the worked example: RED, BLUE and GREEN keep their L3 VNIs `50001–50003`, and the INTERNET VRF gets its own L3 VNI `50900` with RT `65000:50900`. Only the INTERNET VRF speaks eBGP to the outside; the customer tenants never do.
+
+> **Naming note.** The course lab implements a two-tenant version of this model and calls the shared VRF **Tenant-3** — a "tenant" in name only. That naming is misleading in production: the shared VRF is *infrastructure*, not a customer. Give it a role name — `INTERNET`, `SHARED-SVC`, `BORDER` — so it stays visually distinct from customer tenants in configuration and troubleshooting output.
 
 ![Multi-tenant topology for centralized route leaking and shared Internet](/posts/vxlan-evpn-architecture/central-route-leaking.svg)
 
-### 18.1 Why centralize route leaking
+This option can reduce the external BGP-session count when there are hundreds of tenant VRFs — one external handoff serves them all — but route leaking and firewall policy become more complex. With only a handful of tenant VRFs, the per-VRF handoffs of 18.1 are normally cleaner.
 
-If every leaf imports routes between tenant VRFs, policy is distributed throughout the fabric and becomes hard to audit. Centralized route leaking restricts the import/export logic to designated border leaves. Other leaves use EVPN to reach those border nodes.
+**Why centralize the leaking.** If every leaf imports routes between tenant VRFs, policy is distributed throughout the fabric and becomes hard to audit. Centralized route leaking restricts the import/export logic to designated border leaves. Other leaves use EVPN to reach those border nodes.
 
 The basic policy is:
 
-- Tenant-3 learns or originates Internet/default reachability.
-- Tenant-1 imports only the Tenant-3 routes it needs, often a default route.
-- Tenant-3 imports the selected Tenant-1 prefixes required for the return path.
+- The INTERNET VRF learns or originates Internet/default reachability — a WAN-facing interface or an external eBGP peer.
+- Each customer tenant — RED, BLUE and GREEN — imports only the routes it needs from INTERNET, normally just the default.
+- INTERNET imports each tenant's summary (`10.10.0.0/16`, `10.20.0.0/16`, `10.30.0.0/16`) for the return path.
 - Route maps and RT policies prevent accidental full-mesh tenant connectivity.
 
-### 18.2 Shared Internet model
+**Shared Internet model.** RED, BLUE and GREEN each reach the Internet through the shared VRF while remaining isolated from one another. The border leaf performs the controlled leaking, and a WAN-facing interface or external peer supplies default reachability into INTERNET.
 
-The source lab uses Tenant-3 as the shared Internet VRF. Tenant-1 reaches the Internet through Tenant-3 while remaining otherwise isolated. The border leaf performs controlled route leaking, and a WAN-facing interface or external peer supplies default reachability.
+![Shared Internet through a dedicated INTERNET services VRF](/posts/vxlan-evpn-architecture/shared-internet-vrf.svg)
 
-![Shared Internet through a Tenant-3 services VRF](/posts/vxlan-evpn-architecture/shared-internet-vrf.svg)
-
-A conceptual NX-OS policy looks like this:
+On NX-OS, leaking between two *tenant-style* VRFs is done with **cross-VRF route-target imports plus filtering route-maps** — a VRF imports the other VRF's Route Target, and an import map restricts what actually lands in the RIB. Conceptually, with all three customer tenants:
 
 ```text
-route-map T1_IMPORT permit 10
-  match tag 200
+ip prefix-list DEFAULT_ONLY seq 5 permit 0.0.0.0/0
+route-map FROM_INTERNET permit 10
+  match ip address prefix-list DEFAULT_ONLY
 
-route-map T1_EXPORT permit 10
-  match ip address prefix-list T1_PREFIXES
-
-vrf context Tenant-1
+vrf context RED
   address-family ipv4 unicast
-    import vrf advertise-vpn
-    import vrf Tenant-3 map T1_IMPORT
-    export vrf Tenant-3 map T1_EXPORT allow-vpn
+    route-target import 65000:50900 evpn   ! INTERNET's RT — pull its EVPN routes
+    import map FROM_INTERNET               ! ...but install only the default
+
+vrf context BLUE                           ! GREEN follows the same pattern
+  address-family ipv4 unicast
+    route-target import 65000:50900 evpn
+    import map FROM_INTERNET
+
+vrf context INTERNET
+  address-family ipv4 unicast
+    route-target import 65000:50001 evpn   ! RED's summary, for return traffic
+    route-target import 65000:50002 evpn   ! BLUE's summary
+    route-target import 65000:50003 evpn   ! GREEN's summary
+    import map TENANT_SUMMARIES_ONLY
 ```
 
-Exact commands vary by NX-OS release. The policy intent matters more than the particular syntax:
+(NX-OS's `import vrf` / `export vrf` commands serve a different case: they leak only between a tenant VRF and the **default VRF** — `import vrf default map <map> advertise-vpn` / `export vrf default map <map> allow-vpn` — useful when external reachability lives in the global table rather than a services VRF.)
+
+The policy intent matters more than the particular syntax:
 
 - Mark or match exported routes deterministically.
 - Leak the default route only in the intended direction.
 - Leak internal prefixes back toward the services VRF for return traffic.
 - Prevent the imported route from being recursively re-exported and forming a loop.
+- **RED, BLUE and GREEN never import each other's RTs.** All three meet inside INTERNET, so the import maps must also stop one tenant's prefixes from transiting the shared VRF into another tenant — that is the "accidental full-mesh" failure mode.
 - Verify both the local VRF RIB and the EVPN Type 5 advertisements.
 
-### 18.3 Common route-leaking failures
+One structural caveat: because every tenant's summary coexists in the single INTERNET RIB, customer address ranges must be unique — or per-tenant NAT must be applied at the edge before the shared table. Overlapping customer addressing is one more reason to prefer the per-VRF handoffs of Option 1.
+
+### 18.4 Common route-leaking failures
 
 If the route appears in BGP EVPN but not in the tenant RIB, inspect the RT import policy, route-map, next-hop resolution, and route type. If forward traffic works but replies fail, the services VRF or firewall probably lacks a return route. If a default route appears on unintended tenants, the export match is too broad.
+
+### 18.5 Choosing between the options
+
+For a small number of tenant VRFs, use Option 1:
+
+- Two dedicated border leaves.
+- One L3 VNI per VRF.
+- One routed subinterface and one eBGP session per VRF per border-to-edge link.
+- A Type-5 default route from the edge into each tenant VRF.
+- Summarized tenant prefixes from EVPN toward the edge.
+- Matching VRFs or security contexts on the external router/firewall.
+- Explicit policy for route filtering, NAT and inter-VRF communication.
+
+Option 1 preserves tenant isolation end to end, supports overlapping tenant addresses, and keeps firewall and NAT policy per tenant. Option 2 trades that isolation for configuration simplicity. Option 3 earns its complexity only at large tenant counts.
+
+One closing principle applies to all three: allowing every VRF to reach an outside network does **not** automatically let the VRFs reach one another. Inter-VRF traffic remains a separate, explicitly controlled firewall or route-leaking decision (section 17).
 
 ## 19. Practical design checklist
 
@@ -1464,7 +1683,7 @@ If only VLAN 110 fails while the physical Ethernet segment remains up, the per-E
 
 Where A.1–A.5 stayed at the standards abstraction — PEs, Ethernet segments, and the **EVI** — this second telling deliberately drops down to the **VXLAN encoding** of that same EVI, the **L2 VNI**, so you can see how the two connect. (A.6.2 makes the mapping explicit via RFC 8365.)
 
-The example uses vendor-neutral **CE/PE terminology**. A customer-edge switch is dual-homed in all-active mode to `PE1` and `PE2` through one LACP bundle. Both PEs identify the attachment as `ESI 01`; local VLAN 10 maps to L2 VNI 10110. `Remote PE3` participates in the same EVPN service but is **not** attached to `ESI 01`.
+The example uses vendor-neutral **CE/PE terminology**. A customer-edge switch is dual-homed in all-active mode to `PE1` and `PE2` through one LACP bundle. Both PEs identify the attachment as `ESI 01`; local VLAN 110 maps to L2 VNI 10110. `Remote PE3` participates in the same EVPN service but is **not** attached to `ESI 01`.
 
 Keep these route responsibilities separate:
 
@@ -1478,7 +1697,7 @@ Keep these route responsibilities separate:
 
 `PE1` and `PE2` each advertise a Type 4 route containing `ESI 01`, their originating PE address, and an ES-Import Route Target. A route reflector may carry the BGP updates, but only PEs attached to that Ethernet segment import and use them. `Remote PE3` is in the EVPN service but not in `ESI 01`, so it normally does not import these Type 4 routes.
 
-The same-ES PEs then perform DF election for the service. If `PE1` is DF for VLAN 10, it delivers received BUM traffic toward the CE while `PE2` suppresses the duplicate. Type 3, not Type 4, constructs the overlay BUM replication membership. Known unicast can still use either PE in all-active mode. [RFC 7432, Sections 8.1 and 8.5](https://www.rfc-editor.org/rfc/rfc7432.html#section-8.1)
+The same-ES PEs then perform DF election for the service. If `PE1` is DF for VLAN 110, it delivers received BUM traffic toward the CE while `PE2` suppresses the duplicate. Type 3, not Type 4, constructs the overlay BUM replication membership. Known unicast can still use either PE in all-active mode. [RFC 7432, Sections 8.1 and 8.5](https://www.rfc-editor.org/rfc/rfc7432.html#section-8.1)
 
 #### A.6.2 Advertise reachability with Type 1
 
@@ -1501,4 +1720,4 @@ When the **entire CE-to-PE1 attachment** fails:
 3. `PE1` also withdraws its Type 4 route because it is no longer attached to the Ethernet segment.
 4. `PE2` becomes the remaining DF candidate and takes over BUM delivery toward the CE. [RFC 7432, Sections 8.2 and 17.3](https://www.rfc-editor.org/rfc/rfc7432.html#section-8.2)
 
-If only the VLAN 10 service fails while `PE1` remains attached to the Ethernet segment for other services, the failure is narrower: withdraw the affected per-EVI reachability rather than the whole per-ES and Type 4 state. An implementation supporting AC-aware DF election can also remove `PE1` from that service's DF candidate list. [RFC 8584, Section 4](https://www.rfc-editor.org/rfc/rfc8584.html#section-4)
+If only the VLAN 110 service fails while `PE1` remains attached to the Ethernet segment for other services, the failure is narrower: withdraw the affected per-EVI reachability rather than the whole per-ES and Type 4 state. An implementation supporting AC-aware DF election can also remove `PE1` from that service's DF candidate list. [RFC 8584, Section 4](https://www.rfc-editor.org/rfc/rfc8584.html#section-4)

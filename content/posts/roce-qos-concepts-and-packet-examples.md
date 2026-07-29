@@ -785,6 +785,8 @@ Three ties back to earlier sections:
 
 TCP is not part of the RoCEv2 stack — it appears here for contrast, and because the ECN story in section 2 referenced TCP's echo mechanism. TCP provides, in one protocol: reliable delivery, ordered delivery, retransmission, flow control, congestion control, and connection establishment/termination. The minimum header is **20 bytes**; with options it can reach **60 bytes**.
 
+**Is RoCE traffic ever TCP?** No — and this is worth stating plainly, because "RoCE runs over IP" invites the assumption that it could. **RoCEv2 data is always UDP, destination port 4791; it is never TCP.** The reason RoCE avoids TCP is not incidental: the RDMA transport already supplies its own reliability, in-order delivery, and retransmission in RNIC hardware (the BTH packet sequence numbers described below), so layering TCP's byte-stream reliability and congestion control on top would only fight it. UDP is used purely as a *routable envelope* — it adds no reliability, it just gives each flow an IP/port five-tuple for ECMP hashing and L3 routing. (If you genuinely want RDMA carried *over* TCP, that is a different standard — **iWARP** — not RoCE. iWARP trades hardware simplicity for the ability to run on any lossy IP network; RoCEv2 instead demands a lossless or ECN-managed fabric, which is why this entire post exists.) So the only TCP you will see on a RoCE fabric is *coexisting* non-RDMA traffic — management planes, BGP, NVMe/TCP or iSCSI storage, tenant flows — and that is exactly what the default queue (**Q0** in section 3) is there to absorb, held apart from the RoCE data queue and the CNP queue. In short: TCP is on the *wire* next to RoCE, never *inside* it.
+
 ![TCP header field layout with the ECE and CWR congestion-feedback flags highlighted](/posts/roce-qos-concepts-and-packet-examples/tcp-header.svg)
 
 | Field | Size | Purpose |
@@ -828,7 +830,25 @@ This same five-tuple is what ECMP hashing uses to pick a fabric path — for TCP
 | ECE | ECN-Echo — receiver reports it saw a CE mark |
 | CWR | Congestion Window Reduced — sender confirms it slowed down |
 
-The **ECE/CWR pair is TCP's counterpart of the RoCEv2 CNP**: the same CE mark triggers both, but TCP echoes it in-band with header flags while RoCEv2 generates a separate reverse-direction packet (sections 10–11).
+The **ECE/CWR pair is TCP's counterpart of the RoCEv2 CNP** — but "counterpart" means *functionally analogous*, not the same header. A CNP never appears inside a TCP header; these are two independent congestion-feedback designs, in two different transports, that happen to share one trigger. It is easy to misread the analogy as "the UDP-based CNP is echoed in a TCP header," which would make no sense — so it is worth separating the three moving parts.
+
+**The shared trigger lives in the IP header — not in TCP and not in UDP.** The CE (Congestion Experienced) mark is the 2-bit ECN field of the IP header (section 2), set by a *congested switch* when WRED/ECN fires (section 6). Because it sits at L3, the same switch marks a TCP/IP packet and a RoCEv2 UDP/IP packet in the identical two bits. That common IP-layer trigger is the *only* thing the two mechanisms share.
+
+**The feedback path is where they diverge**, because the transports are different:
+
+- **TCP** has spare header bits and an ACK stream always flowing back, so it echoes the signal *in-band, with no extra packet*: the receiver sets **ECE** on the ACKs it was already sending; the sender then halves its congestion window and sets **CWR** on its next segment to confirm "I slowed down."
+- **RoCEv2** rides UDP port 4791, whose header has no flag bits to echo anything — and RDMA is often a one-way write burst with no return traffic to piggyback on. So the destination RNIC (the *notification point*) must **mint a brand-new packet**: a **CNP**, itself a small RoCEv2 packet (a BTH carrying the CNP opcode `0x81`), sent back to the source, which then cuts its rate via DCQCN (sections 10–11). There is no CWR-style confirmation — the sender simply slows.
+
+| Aspect | TCP | RoCEv2 |
+|---|---|---|
+| Transport under IP | TCP | UDP :4791 |
+| Where CE is set | IP-header ECN bits, by a congested switch | **identical** bits, same switch |
+| First to react to CE | the receiver | destination RNIC (notification point) |
+| Feedback vehicle | **ECE flag** on an ACK already going back | a **whole new CNP packet** in reverse |
+| Sender's confirmation | **CWR flag** on next data segment | none — sender just cuts rate (DCQCN) |
+| Extra packets on the wire | **zero** (rides existing ACKs) | **one CNP** per event (rate-limited) |
+
+That last row is the reason the RoCE preset in section 3 gives CNP its own **strict-priority queue**: TCP's feedback is a free bit riding traffic that was going to flow anyway, whereas RoCEv2's feedback is a *real packet* competing for bandwidth — and a congestion signal that arrives late breaks the DCQCN control loop. TCP never needs a dedicated queue for ECE, because ECE is not a packet at all.
 
 **The three-way handshake:**
 

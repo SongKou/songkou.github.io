@@ -798,38 +798,75 @@ Hosts in the same subnet and L2 VNI are bridged. If they are attached to differe
 
 ### 10.2 Inter-subnet forwarding
 
-Hosts in different subnets require routing. VXLAN EVPN supports two IRB models.
+Hosts in different subnets require routing. VXLAN EVPN supports two IRB models, and the cleanest way to compare them is to walk the *same* flow through both. The worked example used throughout this section:
 
-![Asymmetric and symmetric VXLAN EVPN IRB comparison](/posts/vxlan-evpn-architecture/irb-comparison.svg)
+- **Host A:** `10.1.10.11`, VLAN 10, L2 VNI 10010, attached to Leaf 1
+- **Host B:** `10.1.20.22`, VLAN 20, L2 VNI 10020, attached to Leaf 2
+- **Tenant L3 VNI:** 50000 — one per tenant VRF, representing the VRF itself rather than any one subnet
+- Both leaves present the same distributed anycast gateway, so Host A's first routed hop is always its local leaf.
 
 #### Asymmetric IRB
 
-The ingress VTEP performs the Layer 3 lookup, then sends the packet in the destination host's L2 VNI. The egress VTEP only bridges the final frame. Every VTEP that might route between tenant subnets must instantiate all relevant L2 VNIs, even with no local host in those segments.
+Only the **ingress** VTEP performs an IP routing lookup. The packet crosses the fabric in the **destination subnet's L2 VNI**, and the egress VTEP only bridges the final frame.
 
-This is simple to visualize but wastes forwarding resources and scales poorly as the number of tenant segments grows.
+![Asymmetric IRB packet path: Leaf 1 performs the only IP routing lookup and encapsulates in destination L2 VNI 10020; Leaf 2 only bridges the frame to Host B](/posts/vxlan-evpn-architecture/evpn-asymmetric-irb.svg)
+
+1. Host A sends its off-subnet frame to the anycast gateway MAC on Leaf 1.
+2. Leaf 1 performs the only IP lookup of the path and routes directly from VLAN 10 into the VLAN 20 bridge domain.
+3. Leaf 1 rewrites the Ethernet header for Host B and encapsulates the frame in destination **L2 VNI 10020**.
+4. Leaf 2 decapsulates the frame into VLAN 20. It performs no IP routing lookup for this packet.
+5. Leaf 2 bridges the frame locally to Host B.
+
+For the reverse flow, Leaf 2 performs the routing lookup and sends the frame to Leaf 1 in **L2 VNI 10010**. Per RFC 9135, "asymmetric" names the unequal lookup work at the two ends of a single packet's path — the ingress PE routes and bridges while the egress PE only bridges. A visible consequence is that the routing location changes with traffic direction.
 
 More precisely, RFC 9135 describes three ingress lookups for asymmetric IRB: destination-MAC lookup to the IRB interface, IP-VRF lookup, then destination-MAC lookup in the destination bridge table. The egress PE performs one MAC lookup. The ingress VTEP must therefore know the remote host's IP-to-MAC binding and must instantiate the destination subnet's bridge table and IRB interface even when that subnet has no local endpoint. [RFC 9135, Section 4](https://www.rfc-editor.org/rfc/rfc9135.html#section-4)
 
-![Asymmetric IRB packet walk: the ingress VTEP routes into the destination L2 VNI and the egress VTEP only bridges](/posts/vxlan-evpn-architecture/asymmetric-irb-walk.svg)
+The cost is state. Every VTEP that might route between tenant subnets must instantiate all relevant L2 VNIs — in the example, Leaf 1 needs VNI 10020 and Leaf 2 needs VNI 10010 even with no local host in those segments — plus the corresponding IRB interfaces and, per the lookup sequence above, the remote hosts' IP-to-MAC bindings. This is simple to visualize but wastes forwarding resources and scales poorly as the number of tenant segments grows.
 
 #### Symmetric IRB
 
-Both ingress and egress VTEPs perform routing. A tenant VRF has an L3 VNI:
+Both the ingress and egress VTEPs perform an IP routing lookup. The packet crosses the fabric in the **tenant L3 VNI**.
 
-1. The ingress VTEP receives a frame addressed to the anycast gateway MAC.
-2. It performs a tenant-VRF lookup for the destination IP.
-3. It rewrites the inner Layer 2 header for routed overlay forwarding, using the remote VTEP's router MAC as needed.
-4. It encapsulates the packet with the tenant L3 VNI.
-5. The egress VTEP decapsulates it and performs the second VRF lookup.
-6. It resolves the destination host and sends the frame through the local L2 VNI/bridge domain.
+![Symmetric IRB packet path: Leaf 1 routes into tenant L3 VNI 50000, and Leaf 2 routes out of it into VLAN 20 before bridging to Host B](/posts/vxlan-evpn-architecture/evpn-symmetric-irb.svg)
 
-![Symmetric IRB packet walk using an L3 VNI](/posts/vxlan-evpn-architecture/symmetric-irb-walk.svg)
+1. Host A recognizes that Host B is in another subnet and sends the frame to the anycast gateway MAC.
+2. Leaf 1 removes the VLAN 10 bridging context and performs an ingress IP lookup in the tenant VRF.
+3. Leaf 1 encapsulates the packet in tenant **L3 VNI 50000** — with Leaf 2's router MAC as the inner destination MAC — and sends it to Leaf 2.
+4. Leaf 2 decapsulates the packet and performs an egress IP lookup from the L3 VNI into VLAN 20.
+5. Leaf 2 rewrites the Ethernet header and bridges the frame locally to Host B.
+
+The reverse flow uses the same two-sided pattern: Leaf 2 routes into L3 VNI 50000, and Leaf 1 routes out of it. "Symmetric" likewise names the lookup pattern at the two ends of one path — the ingress and egress PEs each route and bridge in mirror image — with the practical consequence that the forwarding pipeline is identical in both directions.
 
 The egress leaf needs only its locally used L2 VNIs plus the tenant L3 VNI. This is the more scalable model and is the design emphasized by the course.
 
 In standards terminology, symmetric IRB forwards between the ingress and egress **IP-VRFs**. With Ethernet NVO encapsulation such as VXLAN, the inner source and destination MAC addresses are router MACs, not the final destination host MAC. This is why the ingress leaf does not need the remote host's ARP entry merely to carry routed traffic across the L3 VNI. The egress leaf resolves the local host after its IP-VRF lookup. [RFC 9135, Section 4](https://www.rfc-editor.org/rfc/rfc9135.html#section-4)
 
-One subtle operational difference is TTL/hop-limit handling. RFC 9135 specifies a decrement at both ingress and egress routing PEs for symmetric IRB, but only at the ingress PE for asymmetric IRB. Packet captures and traceroute interpretation should account for the two routed overlay stages.
+#### Side-by-side comparison
+
+| Characteristic | Symmetric IRB | Asymmetric IRB |
+|---|---|---|
+| IP routing lookups per direction | Two: ingress and egress VTEPs | One: ingress VTEP only |
+| VNI on the fabric | Tenant L3 VNI (50000) | Destination subnet's L2 VNI (10020 or 10010, by direction) |
+| Ingress action | Route from the source subnet into the L3 VNI | Route from the source subnet directly into the destination L2 VNI |
+| Egress action | Route from the L3 VNI into the destination subnet, then bridge | Decapsulate and bridge only |
+| Remote subnets' L2 VNIs on every VTEP | Not required | Required |
+| Remote hosts' IP-to-MAC bindings at ingress | Not required — inner MACs are router MACs | Required — ingress builds the final Ethernet header |
+| TTL / hop limit (RFC 9135) | Decremented at both routing PEs | Decremented at the ingress PE only |
+| Scalability | Preferred for many subnets and distributed fabrics | Degrades as subnet count grows |
+
+The TTL row has a practical consequence: packet captures and traceroute interpretation across a symmetric-IRB fabric should account for two routed overlay stages, not one.
+
+#### BGP EVPN control plane
+
+Both models use BGP EVPN to advertise reachability between VTEPs (section [7.3](#73-important-evpn-route-types)):
+
+- **Route Type 2 — MAC/IP Advertisement:** advertises endpoint MAC and optional IP bindings — for symmetric IRB additionally carrying the L3 VNI in the second label field.
+- **Route Type 3 — Inclusive Multicast Ethernet Tag:** supports BUM replication membership for an L2 VNI.
+- **Route Type 5 — IP Prefix:** advertises IP prefixes through an L3 VNI and is commonly associated with scalable symmetric IRB designs.
+
+The underlay provides IP reachability between VTEP loopbacks. EVPN supplies overlay reachability, while VXLAN carries the encapsulated data-plane traffic.
+
+> **Memory aid** — **Symmetric:** route on both leaves; cross the fabric in the **L3 VNI**. **Asymmetric:** route only on the source-side leaf; cross the fabric in the destination **L2 VNI**.
 
 ## 11. Head-end replication and control-plane suppression
 

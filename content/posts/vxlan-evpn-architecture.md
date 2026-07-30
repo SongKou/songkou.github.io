@@ -176,7 +176,7 @@ The default eBGP behavior requires deliberate overlay policy:
 
 1. **Preserve the VTEP next hop.** When a spine advertises an eBGP EVPN route to another leaf, ordinary eBGP next-hop processing would make the spine the next hop. The overlay route must retain the originating VTEP address. On NX-OS, Cisco documents a route map using `set ip next-hop unchanged` on the spine's outbound EVPN sessions.
 2. **Retain EVPN routes without local VNIs.** A transit spine has no tenant VRFs or import RTs. On NX-OS, `retain route-target all` under `address-family l2vpn evpn` allows it to retain and advertise EVPN routes that have no locally importable RT. [Cisco Nexus 9000 eBGP EVPN procedure](https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/105x/configuration/vxlan/cisco-nexus-9000-series-nx-os-vxlan-configuration-guide-release-105x/m_configuring_vxlan_bgp_evpn.html)
-3. **Make RTs consistent across leaf ASNs.** If automatic RTs are derived as `local-AS:VNI`, unique leaf ASNs produce different RTs for the same VNI. Use explicit fabric-wide RTs or a documented feature such as NX-OS `rewrite-evpn-rt-asn` where supported.
+3. **Make RTs consistent across leaf ASNs.** If automatic RTs are derived as `local-AS:VNI`, unique leaf ASNs produce different RTs for the same VNI. Use explicit fabric-wide RTs or a documented feature such as NX-OS `rewrite-evpn-rt-asn` where supported. Cumulus/FRR instead wildcard-matches auto-derived import RTs (`*:VNI`), so unique-AS eBGP works there without any rewriting — section 7.4 covers both behaviors in detail.
 4. **Handle the AS path intentionally.** Reusing an ASN across multiple leaves or a redundant leaf pair can trigger eBGP loop prevention. Depending on topology and vendor, designs may require `disable-peer-as-check`, `allowas-in`, `as-override`, or a different ASN allocation. These commands solve different problems and should not be substituted blindly.
 5. **Carry extended communities.** EVPN import policy depends on Route Targets, so overlay peers must propagate the required standard and extended communities.
 6. **Multipath for Underlay.** By default BGP will select only best path. Manual enablement of BGP multipath maybe required to enable ECMP between leaf-spine. 
@@ -731,6 +731,309 @@ Two common models appear in deployments:
 
 Type 5 deliberately decouples an IP prefix from a host MAC. It can carry an **overlay index**—a gateway IP address, router MAC, or ESI—that the receiving NVE resolves recursively to an egress VTEP. If the required overlay index cannot be resolved, the prefix cannot be installed for forwarding even if the Type 5 BGP path itself is valid. [RFC 9136, Sections 2-3](https://www.rfc-editor.org/rfc/rfc9136.html#section-3)
 
+### 7.4 Route targets in practice: auto-derivation, the eBGP wrinkle, and reading RTs in show output
+
+Sections 7.2 and 7.3 introduced RTs and route types separately. This section puts them together: which RT each route type actually carries, how platforms derive RTs automatically, and how to read them on a live switch. The worked example reuses the section 15 tenant so every number lines up with the configuration model there:
+
+```text
+Leaf ASN:   65001   (leaf-local — in an eBGP-everywhere fabric each leaf has its own, section 4.1)
+L2 VNI:     10100   (VLAN 100, Tenant-1)
+L3 VNI:     50111   (Tenant-1 IP-VRF)
+VTEP:       10.0.0.11
+Host:       192.168.1.10, MAC 0050.5600.0101
+```
+
+#### Auto-derivation
+
+`route-target both auto` in section 15.4 — and the equivalent default behavior on Cumulus/FRR with `advertise-all-vni` — derives RTs by one simple formula:
+
+```text
+L2 RT = local ASN : L2 VNI    →  65001:10100
+L3 RT = local ASN : L3 VNI    →  65001:50111
+```
+
+The two RTs perform different jobs:
+
+- The **L2 RT** identifies membership in a **bridge domain** — the MAC-VRF for VLAN 100 / L2 VNI 10100.
+- The **L3 RT** identifies membership in the **tenant IP-VRF** — Tenant-1 / L3 VNI 50111.
+
+In symmetric IRB, a single EVPN Type-2 MAC/IP route carries **both**, which is what lets one advertisement populate the remote MAC table *and* the remote tenant routing table:
+
+```text
+Host 192.168.1.10 (Type-2 MAC/IP)
+ ├─ RT 65001:10100  →  belongs to VLAN 100 / L2 VNI 10100 (bridge domain)
+ └─ RT 65001:50111  →  belongs to Tenant-1 / L3 VNI 50111 (IP-VRF)
+```
+
+#### Where the knobs live
+
+On **Nexus**, the full minimal configuration — features, the VLAN-to-VNI mapping, and the two places where auto-derivation is opted in (the L2 side per EVI, the L3 side per VRF — the same blocks as sections 15.7 and 15.4):
+
+```text
+feature nv overlay
+feature bgp
+nv overlay evpn
+
+vlan 100
+  vn-segment 10100
+
+vrf context Tenant-1                ! L3 side (section 15.4)
+  vni 50111
+  rd auto
+  address-family ipv4 unicast
+    route-target both auto
+    route-target both auto evpn
+
+evpn
+  vni 10100 l2                      ! L2 side (section 15.7)
+    rd auto
+    route-target import auto
+    route-target export auto
+```
+
+On **Cumulus Linux**, the equivalent NVUE configuration is shorter — and notice that no RT appears anywhere in it, because auto-derivation is simply the default:
+
+```text
+nv set bridge domain br_default vlan 100 vni 10100
+nv set vrf Tenant-1 evpn vni 50111
+nv set evpn enable on
+nv config apply
+```
+
+(Exact NVUE paths vary slightly by release — some document the enable knob as `nv set evpn state enabled`; `nv config diff` before apply shows what your release renders.)
+
+Generally:
+
+| EVPN route | Relevant RT |
+|---|---|
+| Type 2, MAC-only | L2 RT |
+| Type 2, MAC/IP with symmetric IRB | L2 RT **and** L3 RT |
+| Type 3 IMET | L2 RT |
+| Type 5 IP prefix | L3 RT (tenant VRF) |
+
+#### The eBGP wrinkle: auto-derived RTs embed the local ASN
+
+Because the formula embeds the *local* ASN, an eBGP-everywhere fabric (section 4.1) derives a *different* RT for the same VNI on every leaf:
+
+```text
+Leaf-1 exports:              Leaf-2 exports:
+  L2 RT 65001:10100            L2 RT 65002:10100
+  L3 RT 65001:50111            L3 RT 65002:50111
+
+Cumulus effectively imports against:
+  *:10100
+  *:50111
+```
+
+With strict exact-match importing, nobody would import anybody — and this is where the platforms genuinely differ:
+
+- **Cumulus/FRR has built-in wildcard import for auto-derived RTs.** NVIDIA's documentation states it directly: for eBGP EVPN peering, "Cumulus Linux treats the import RT as `*:VNI`" — the ASN portion is ignored and matching keys on the VNI. Unique-AS eBGP EVPN therefore works with **no RT rewriting and no manual RT configuration at all**.
+- **The wildcard applies only while the import RT is auto-derived.** The moment you configure an import RT manually, matching becomes exact again — a half-manual configuration can quietly break imports that used to work. Some releases accept a wildcard AS portion on a manual import RT (`*:` / `ANY:` forms); verify the syntax on your release before relying on it.
+- **Nexus has no such wildcard.** NX-OS needs the RTs to actually match: either configure explicit fabric-wide RTs, or rewrite the ASN portion at the fabric edge with `rewrite-evpn-rt-asn` on the eBGP EVPN sessions (the section 4.1 options).
+
+#### Reading RTs on a live switch
+
+Two habits make RT troubleshooting fast. First, look in the **BGP EVPN table**, not the ordinary IP routing table — RTs are BGP extended communities and survive only there. Second, expect them only in *detailed* output; summary views list the routes but usually hide the extended communities. The outputs below are representative and slightly abridged.
+
+**Cisco Nexus.** The summary view identifies route types but not RTs:
+
+```text
+N9K-LEAF1# show bgp l2vpn evpn
+
+Route Distinguisher: 10.0.0.11:32867
+*>l[2]:[0]:[0]:[48]:[0050.5600.0101]:[0]:[0.0.0.0]/216
+                      10.0.0.11                         100 32768 i
+*>l[2]:[0]:[0]:[48]:[0050.5600.0101]:[32]:[192.168.1.10]/272
+                      10.0.0.11                         100 32768 i
+*>l[3]:[0]:[32]:[10.0.0.11]/88
+                      10.0.0.11                         100 32768 i
+
+Route Distinguisher: 10.0.0.11:10
+*>l[5]:[0]:[0]:[24]:[10.200.10.0]/224
+                      10.0.0.11                         100 32768 i
+```
+
+(The L2 RD `10.0.0.11:32867` is itself auto-derived: VLAN 100 + 32767.) The per-route-type detail is where the RTs appear. Type-2 first — note the **two** RTs on the MAC/IP route, exactly the symmetric-IRB pattern above:
+
+```text
+N9K-LEAF1# show bgp l2vpn evpn route-type 2
+
+Route Distinguisher: 10.0.0.11:32867
+BGP routing table entry for
+[2]:[0]:[0]:[48]:[0050.5600.0101]:[32]:[192.168.1.10]/272
+
+Paths: (1 available, best #1)
+  Path type: local, path is valid, is best path
+  10.0.0.11
+    Origin IGP, localpref 100, weight 32768
+    Extcommunity:
+      RT:65001:10100
+      RT:65001:50111
+      ENCAP:8
+      Router MAC:0200.0000.0011
+```
+
+Reading the entry: `[2]` is the route type, then the host MAC and IP; `RT:65001:10100` is bridge-domain membership, `RT:65001:50111` is tenant-VRF membership, `ENCAP:8` is the BGP encapsulation extended community for VXLAN, and the Router MAC is the router-MAC extended community symmetric IRB uses for the inner Ethernet header (section 10.2).
+
+Type-3 carries only the L2 RT — it signals VNI membership for BUM replication (section 11) — plus the PMSI attribute naming the replication method:
+
+```text
+N9K-LEAF1# show bgp l2vpn evpn route-type 3
+
+Route Distinguisher: 10.0.0.11:32867
+BGP routing table entry for [3]:[0]:[32]:[10.0.0.11]/88
+
+Paths: (1 available, best #1)
+  Path type: local, path is valid, is best path
+  10.0.0.11
+    Extcommunity:
+      RT:65001:10100
+      ENCAP:8
+    PMSI Tunnel Attribute:
+      Tunnel Type: Ingress Replication
+      Tunnel Identifier: 10.0.0.11
+```
+
+Type-5 carries only the L3 RT — it is a tenant-VRF prefix, with no bridge domain involved:
+
+```text
+N9K-LEAF1# show bgp l2vpn evpn route-type 5
+
+Route Distinguisher: 10.0.0.11:10
+BGP routing table entry for [5]:[0]:[0]:[24]:[10.200.10.0]/224
+
+Paths: (1 available, best #1)
+  Path type: local, path is valid, is best path
+  10.0.0.11
+    Origin IGP, localpref 100, weight 32768
+    Extcommunity:
+      RT:65001:50111
+      ENCAP:8
+      Router MAC:0200.0000.0011
+```
+
+**Cumulus Linux / FRR.** Enter the FRR shell with `sudo vtysh`. The single most useful command — and one Nexus has no direct equivalent of — maps every VNI to its RTs and tenant VRF in one table:
+
+```text
+leaf1# show bgp l2vpn evpn vni
+
+Advertise Gateway Macip: Disabled
+Advertise SVI Macip: Disabled
+Advertise All VNI flag: Enabled
+BUM flooding: Head-end replication
+
+VNI       Type  RD                 Import RT       Export RT       Tenant VRF
+10100     L2    10.0.0.11:3        65001:10100     65001:10100     Tenant-1
+50111     L3    10.0.0.11:5        65001:50111     65001:50111     Tenant-1
+```
+
+A single VNI also has its own detail view — handy for reading the tenant VRF, RTs, and router MAC of the L3 VNI in one shot:
+
+```text
+leaf1# show bgp l2vpn evpn vni 50111
+
+VNI: 50111 (known to the kernel)
+  Type: L3
+  Tenant VRF: Tenant-1
+  RD: 10.0.0.11:5
+  Router-MAC: 02:00:00:00:00:11
+  Import Route Target:
+    65001:50111
+  Export Route Target:
+    65001:50111
+```
+
+The route view shows the same RT pattern as Nexus, with FRR's more compact rendering (`ET:8` is the same VXLAN encapsulation community, `Rmac` the router MAC):
+
+```text
+leaf1# show bgp l2vpn evpn route
+
+Route Distinguisher: 10.0.0.11:3
+
+*> [2]:[0]:[48]:[00:50:56:00:01:01]
+                    10.0.0.11                    32768 i
+                    ET:8 RT:65001:10100 RT:65001:50111
+                    Rmac:02:00:00:00:00:11
+
+*> [2]:[0]:[48]:[00:50:56:00:01:01]:[32]:[192.168.1.10]
+                    10.0.0.11                    32768 i
+                    ET:8 RT:65001:10100 RT:65001:50111
+                    Rmac:02:00:00:00:00:11
+
+*> [3]:[0]:[32]:[10.0.0.11]
+                    10.0.0.11                    32768 i
+                    ET:8 RT:65001:10100
+
+Route Distinguisher: 10.0.0.11:5
+
+*> [5]:[0]:[24]:[10.200.10.0]
+                    10.0.0.11                    32768 i
+                    ET:8 RT:65001:50111
+                    Rmac:02:00:00:00:00:11
+```
+
+Note the MAC-only Type-2 (first entry) next to its MAC/IP sibling — same MAC, and on this platform both carry the two RTs. Detail for one host, filtered by VNI and MAC:
+
+```text
+leaf1# show bgp l2vpn evpn route vni 10100 mac 00:50:56:00:01:01
+
+BGP routing table entry for
+[2]:[0]:[48]:[00:50:56:00:01:01]:[32]:[192.168.1.10]
+
+Paths: (1 available, best #1)
+  Route [2]:[0]:[48]:[00:50:56:00:01:01]:[32]:[192.168.1.10] VNI 10100
+  Local
+    10.0.0.11 from 0.0.0.0
+      Origin IGP, localpref 100, weight 32768
+      Valid, sourced, local, best
+      Extended Community:
+        RT:65001:10100
+        RT:65001:50111
+        ET:8
+        Rmac:02:00:00:00:00:11
+```
+
+Type-3 and Type-5 have their own filtered views:
+
+```text
+leaf1# show bgp l2vpn evpn route type multicast
+
+Route Distinguisher: 10.0.0.11:3
+*> [3]:[0]:[32]:[10.0.0.11]
+                    10.0.0.11                    32768 i
+                    ET:8 RT:65001:10100
+
+leaf1# show bgp l2vpn evpn route type prefix
+
+Route Distinguisher: 10.0.0.11:5
+*> [5]:[0]:[24]:[10.200.10.0]
+                    10.0.0.11                    32768 i
+                    ET:8 RT:65001:50111
+                    Rmac:02:00:00:00:00:11
+```
+
+#### The key pattern
+
+| Route type | Purpose | Typical RTs |
+|---|---|---|
+| Type 2 | Host MAC/IP advertisement | L2 RT — plus the L3 RT with symmetric IRB |
+| Type 3 | VTEP membership / BUM replication | L2 RT |
+| Type 5 | Tenant IP-prefix advertisement | L3 RT |
+
+The quickest troubleshooting commands, per platform:
+
+```text
+Nexus:                                    Cumulus/FRR:
+show bgp l2vpn evpn                       show bgp l2vpn evpn vni
+show bgp l2vpn evpn route-type 2          show bgp l2vpn evpn route
+show bgp l2vpn evpn route-type 3          show bgp l2vpn evpn route type multicast
+show bgp l2vpn evpn route-type 5          show bgp l2vpn evpn route type prefix
+```
+
+The decisive field on both platforms is the extended community `RT:<ASN>:<VNI>` — read the ASN and VNI out of it, and you know which leaf derived it and which bridge domain or tenant VRF it targets.
+
+The output formats above follow the vendors' own documentation: [NVIDIA Cumulus Linux EVPN inter-subnet routing](https://docs.nvidia.com/networking-ethernet-software/cumulus-linux/Network-Virtualization/Ethernet-Virtual-Private-Network-EVPN/Inter-subnet-Routing/) for the FRR views, and the [Cisco Nexus 9000 VXLAN configuration guide](https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/105x/configuration/vxlan/cisco-nexus-9000-series-nx-os-vxlan-configuration-guide-release-105x.pdf) for the NX-OS views, including Type-2 routes carrying multiple RTs.
+
 ## 8. EVPN multihoming in detail
 
 EVPN multihoming connects one customer edge, server bond, switch, firewall, or downstream network to two or more VTEPs without relying on a single physical leaf. This is different from MAC mobility: multihoming makes a MAC legitimately reachable through multiple PEs on the **same Ethernet segment**, whereas mobility means the endpoint moved between different Ethernet segments. [RFC 7432, Section 15](https://www.rfc-editor.org/rfc/rfc7432.html#section-15)
@@ -1180,7 +1483,7 @@ evpn
     route-target export auto
 ```
 
-Automatic RT derivation is convenient inside one ASN. Across multiple autonomous systems or during migration, explicit RTs may be required so every site derives and imports compatible values.
+Automatic RT derivation is convenient inside one ASN. Across multiple autonomous systems or during migration, explicit RTs may be required so every site derives and imports compatible values — section 7.4 walks through what `auto` derives and how Nexus and Cumulus differ on cross-AS matching.
 
 Remember that the RT controls route import, whereas the VNI controls data-plane service identification. Two VNIs do not become one broadcast domain merely because their numbers look related, and two VRFs do not exchange routes unless their import/export policy permits it.
 

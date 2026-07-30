@@ -179,6 +179,58 @@ The default eBGP behavior requires deliberate overlay policy:
 3. **Make RTs consistent across leaf ASNs.** If automatic RTs are derived as `local-AS:VNI`, unique leaf ASNs produce different RTs for the same VNI. Use explicit fabric-wide RTs or a documented feature such as NX-OS `rewrite-evpn-rt-asn` where supported.
 4. **Handle the AS path intentionally.** Reusing an ASN across multiple leaves or a redundant leaf pair can trigger eBGP loop prevention. Depending on topology and vendor, designs may require `disable-peer-as-check`, `allowas-in`, `as-override`, or a different ASN allocation. These commands solve different problems and should not be substituted blindly.
 5. **Carry extended communities.** EVPN import policy depends on Route Targets, so overlay peers must propagate the required standard and extended communities.
+6. **Multipath for Underlay.** By default BGP will select only best path. Manual enablement of BGP multipath maybe required to enable ECMP between leaf-spine. 
+
+
+##### ECMP and BGP multipath on NX-OS
+
+An eBGP-everywhere design does not automatically cause every equal path to be installed. On Cisco Nexus, each switch that should forward across multiple eligible eBGP next hops must allow BGP multipath. For physical leaf-to-spine ECMP and redundant reachability to VTEP loopbacks, this is an **underlay IPv4-unicast** setting:
+
+```text
+router bgp 65101
+  address-family ipv4 unicast
+    maximum-paths 4
+```
+
+Configure it on the leaves so northbound traffic can use all spine uplinks. Configure it on a spine only when that spine can learn the same underlay prefix through multiple leaves and should install those paths. The limit is address-family specific, so an IPv6 underlay requires the corresponding setting under `address-family ipv6 unicast`.
+
+ASN allocation affects multipath eligibility. If all spines use one ASN, otherwise-equal routes learned through them normally have identical AS paths and `maximum-paths` is sufficient. If each spine has a unique ASN, the paths have equal length but different AS sequences. NX-OS generally also needs `bestpath as-path multipath-relax`:
+
+```text
+router bgp 65101
+  router-id 10.0.0.11
+  bestpath as-path multipath-relax
+
+  address-family ipv4 unicast
+    maximum-paths 4
+
+  neighbor 10.1.1.0
+    remote-as 65001
+    address-family ipv4 unicast
+
+  neighbor 10.1.2.0
+    remote-as 65002
+    address-family ipv4 unicast
+```
+
+`multipath-relax` relaxes the requirement for identical AS-path contents; it does not make unequal routes equal. The candidate paths must still satisfy the platform's other multipath rules, including equal AS-path length and compatible local preference, origin, and MED where applicable.
+
+This underlay setting is distinct from multipath under `address-family l2vpn evpn`. EVPN multipath controls whether multiple eligible overlay paths for the same EVPN NLRI can be retained—for example, when a destination is advertised by multiple VTEPs in an EVPN multihoming design. It does not provide ECMP across the physical spine uplinks. In a conventional fabric, one EVPN route can resolve recursively through several underlay next hops:
+
+```text
+EVPN table:      remote MAC/IP -> VTEP 10.255.0.12
+Underlay table:  VTEP 10.255.0.12 -> Spine-1
+                                  -> Spine-2
+```
+
+Consequently, a fabric that needs both underlay ECMP and overlay-path ECMP may configure multipath in both address families, while a conventional single-originating-VTEP design commonly needs only underlay `maximum-paths`. Verify both the BGP control-plane choice and the next hops programmed for forwarding:
+
+```text
+show bgp ipv4 unicast <prefix>
+show forwarding route <prefix>
+```
+
+The first command should show the eligible BGP paths; the second confirms that multiple next hops were installed in hardware.
 
 A representative NX-OS spine pattern is:
 

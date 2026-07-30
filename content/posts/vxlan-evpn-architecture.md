@@ -181,7 +181,35 @@ The default eBGP behavior requires deliberate overlay policy:
 5. **Carry extended communities.** EVPN import policy depends on Route Targets, so overlay peers must propagate the required standard and extended communities.
 6. **Multipath for Underlay.** By default BGP will select only best path. Manual enablement of BGP multipath maybe required to enable ECMP between leaf-spine. 
 
+Sample configuration on spine for nexus: 
 
+```text
+feature bgp
+nv overlay evpn
+
+route-map NEXT-HOP-UNCH permit 10
+  set ip next-hop unchanged
+
+router bgp 65000
+  router-id 10.255.0.1
+
+  address-family l2vpn evpn
+    retain route-target all
+    nexthop route-map NEXT-HOP-UNCH
+
+  neighbor 10.0.0.1 remote-as 65101
+    address-family ipv4 unicast
+    address-family l2vpn evpn
+      send-community both
+      route-map NEXT-HOP-UNCH out
+
+  neighbor 10.0.0.3 remote-as 65102
+    address-family ipv4 unicast
+    address-family l2vpn evpn
+      send-community both
+      route-map NEXT-HOP-UNCH out
+
+```
 ##### ECMP and BGP multipath on NX-OS
 
 An eBGP-everywhere design does not automatically cause every equal path to be installed. On Cisco Nexus, each switch that should forward across multiple eligible eBGP next hops must allow BGP multipath. For physical leaf-to-spine ECMP and redundant reachability to VTEP loopbacks, this is an **underlay IPv4-unicast** setting:

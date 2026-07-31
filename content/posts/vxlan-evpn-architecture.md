@@ -14,13 +14,13 @@ VXLAN EVPN combines a scalable Layer 2 data plane with a standards-based MP-BGP 
 
 VXLAN EVPN is not defined by one document. The architecture is assembled from a data-plane encapsulation, an EVPN control plane, a mapping between EVPN and network-virtualization overlays, and later IRB and prefix-route extensions:
 
-| Document | Role in the architecture |
-|---|---|
-| [RFC 7348 - VXLAN](https://www.rfc-editor.org/rfc/rfc7348.html) | VXLAN frame format, VNI, VTEP behavior, UDP transport, MTU, and basic flood-and-learn operation |
-| [RFC 7432 - EVPN](https://www.rfc-editor.org/rfc/rfc7432.html) | EVPN NLRI, route types 1-4, multihoming, MAC mobility, split horizon, and designated-forwarder procedures |
-| [RFC 8365 - EVPN for NVO](https://www.rfc-editor.org/rfc/rfc8365.html) | Applies EVPN to VXLAN and other IP-overlay encapsulations; defines how VNIs and tunnel attributes are carried |
-| [RFC 9135 - EVPN IRB](https://www.rfc-editor.org/rfc/rfc9135.html) | Symmetric and asymmetric integrated routing and bridging procedures |
-| [RFC 9136 - EVPN IP Prefix](https://www.rfc-editor.org/rfc/rfc9136.html) | Route Type 5 and overlay-index resolution for IP prefixes |
+| Document                                                                 | Role in the architecture                                                                                      |
+|--------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
+| [RFC 7348 - VXLAN](https://www.rfc-editor.org/rfc/rfc7348.html)          | VXLAN frame format, VNI, VTEP behavior, UDP transport, MTU, and basic flood-and-learn operation               |
+| [RFC 7432 - EVPN](https://www.rfc-editor.org/rfc/rfc7432.html)           | EVPN NLRI, route types 1-4, multihoming, MAC mobility, split horizon, and designated-forwarder procedures     |
+| [RFC 8365 - EVPN for NVO](https://www.rfc-editor.org/rfc/rfc8365.html)   | Applies EVPN to VXLAN and other IP-overlay encapsulations; defines how VNIs and tunnel attributes are carried |
+| [RFC 9135 - EVPN IRB](https://www.rfc-editor.org/rfc/rfc9135.html)       | Symmetric and asymmetric integrated routing and bridging procedures                                           |
+| [RFC 9136 - EVPN IP Prefix](https://www.rfc-editor.org/rfc/rfc9136.html) | Route Type 5 and overlay-index resolution for IP prefixes                                                     |
 
 Cisco configuration examples in this article should be read alongside the [current Nexus 9000 VXLAN configuration guide](https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/105x/configuration/vxlan/cisco-nexus-9000-series-nx-os-vxlan-configuration-guide-release-105x.html). Platform, line-card, topology, and release restrictions can be more important than the nominal CLI syntax.
 
@@ -91,12 +91,12 @@ The same function can run in a hypervisor virtual switch. A physical switch that
 
 On a leaf, a local VLAN or bridge domain is mapped to an L2 VNI. The VLAN identifier is locally significant; the VNI is the overlay-wide segment identifier. Although deployments often use an easy-to-read mapping such as VLAN 100 to VNI 10100, the values do not have to be mathematically related.
 
-| Object | Scope | Function |
-|---|---|---|
+| Object             | Scope                                  | Function                                         |
+|--------------------|----------------------------------------|--------------------------------------------------|
 | VLAN/bridge domain | Local to a switch or attachment domain | Connects local interfaces into a Layer 2 segment |
-| L2 VNI | Overlay-wide | Identifies a bridged tenant segment across VTEPs |
-| VRF | Tenant routing domain | Provides an independent Layer 3 routing table |
-| L3 VNI | Overlay-wide, normally one per VRF | Carries routed traffic for symmetric IRB |
+| L2 VNI             | Overlay-wide                           | Identifies a bridged tenant segment across VTEPs |
+| VRF                | Tenant routing domain                  | Provides an independent Layer 3 routing table    |
+| L3 VNI             | Overlay-wide, normally one per VRF     | Carries routed traffic for symmetric IRB         |
 
 ## 3. Underlay design
 
@@ -118,11 +118,11 @@ The underlay should know VTEP loopbacks, not tenant prefixes. Tenant reachabilit
 
 There is no EVPN requirement to use one particular underlay protocol. Common choices are:
 
-| Underlay | Strengths | Design cautions |
-|---|---|---|
-| OSPF or IS-IS | Familiar link-state behavior, fast convergence, clear separation from overlay BGP | Requires address and area/level planning; large fabrics need disciplined summarization and flooding scope |
-| eBGP | Simple failure domains, natural leaf/spine policy boundaries, strong operational visibility | ASN plan, next-hop handling, multipath, and maximum-path settings must be consistent |
-| BGP unnumbered | Minimizes point-to-point IPv4 addressing and works naturally with leaf/spine links | Depends on IPv6 link-local transport and platform support; troubleshooting skills must cover both address families |
+| Underlay       | Strengths                                                                                   | Design cautions                                                                                                    |
+|----------------|---------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| OSPF or IS-IS  | Familiar link-state behavior, fast convergence, clear separation from overlay BGP           | Requires address and area/level planning; large fabrics need disciplined summarization and flooding scope          |
+| eBGP           | Simple failure domains, natural leaf/spine policy boundaries, strong operational visibility | ASN plan, next-hop handling, multipath, and maximum-path settings must be consistent                               |
+| BGP unnumbered | Minimizes point-to-point IPv4 addressing and works naturally with leaf/spine links          | Depends on IPv6 link-local transport and platform support; troubleshooting skills must cover both address families |
 
 Regardless of protocol, verify that every VTEP loopback has equal-cost reachability through the intended spines. A healthy BGP EVPN session does not prove that the data-plane VTEP next hop is reachable at the required MTU.
 
@@ -284,17 +284,17 @@ This is a structural example, not a universal template. Whether sessions use dir
 
 #### Operational comparison
 
-| Consideration | IGP + iBGP EVPN | eBGP everywhere |
-|---|---|---|
-| Protocols | IGP underlay plus BGP overlay | BGP for underlay and overlay |
-| Overlay topology | Route-reflected iBGP | Leaf-to-spine eBGP propagation |
-| VTEP next hop | Naturally preserved through route reflection | Must be explicitly preserved through transit spines |
-| Route Targets | Auto-derived RTs are simple with one ASN | Manual RTs or domain-wide rewrite commonly required |
-| Failure domains | Shared IGP and ASN domains | Natural per-session and per-rack AS boundaries |
-| Policy | Centralized and relatively minimal | Fine-grained at every eBGP boundary |
-| Troubleshooting | Separate IGP and EVPN views | One protocol, but more address families and policy knobs |
-| Scaling | Well suited to many enterprise fabrics | Attractive for very large, automation-driven Clos fabrics |
-| Main risk | RR/IGP design or hidden dependency | Silent drops caused by next-hop, RT, or AS-path policy |
+| Consideration    | IGP + iBGP EVPN                              | eBGP everywhere                                           |
+|------------------|----------------------------------------------|-----------------------------------------------------------|
+| Protocols        | IGP underlay plus BGP overlay                | BGP for underlay and overlay                              |
+| Overlay topology | Route-reflected iBGP                         | Leaf-to-spine eBGP propagation                            |
+| VTEP next hop    | Naturally preserved through route reflection | Must be explicitly preserved through transit spines       |
+| Route Targets    | Auto-derived RTs are simple with one ASN     | Manual RTs or domain-wide rewrite commonly required       |
+| Failure domains  | Shared IGP and ASN domains                   | Natural per-session and per-rack AS boundaries            |
+| Policy           | Centralized and relatively minimal           | Fine-grained at every eBGP boundary                       |
+| Troubleshooting  | Separate IGP and EVPN views                  | One protocol, but more address families and policy knobs  |
+| Scaling          | Well suited to many enterprise fabrics       | Attractive for very large, automation-driven Clos fabrics |
+| Main risk        | RR/IGP design or hidden dependency           | Silent drops caused by next-hop, RT, or AS-path policy    |
 
 #### BGP unnumbered
 
@@ -310,12 +310,12 @@ The scope limit: unnumbered is a *fabric-link* pattern, not a fabric-wide one. V
 
 Platform support is broad enough today that unnumbered no longer restricts vendor choice, though maturity differs:
 
-| Platform | Support | Notes |
-|---|---|---|
-| Cumulus Linux | Native (FRR) | The reference implementation |
-| SONiC | Native (same FRR) | Identical syntax; plan config ownership (config_db vs split mode vs unified FRR management) so `config reload` does not overwrite it |
-| Arista EOS | Yes | Interface eBGP sessions; requires `ipv6 enable` on fabric links and RFC 8950 next-hop encoding in the IPv4 address family |
-| Cisco NX-OS | Yes, recent | RFC 5549 next hops since 9.2(2); full interface peering with link-local auto-discovery only in the 10.x train — the reason classic Nexus designs show numbered /31s or `ip unnumbered loopback0` instead |
+| Platform      | Support           | Notes                                                                                                                                                                                                    |
+|---------------|-------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Cumulus Linux | Native (FRR)      | The reference implementation                                                                                                                                                                             |
+| SONiC         | Native (same FRR) | Identical syntax; plan config ownership (config_db vs split mode vs unified FRR management) so `config reload` does not overwrite it                                                                     |
+| Arista EOS    | Yes               | Interface eBGP sessions; requires `ipv6 enable` on fabric links and RFC 8950 next-hop encoding in the IPv4 address family                                                                                |
+| Cisco NX-OS   | Yes, recent       | RFC 5549 next hops since 9.2(2); full interface peering with link-local auto-discovery only in the 10.x train — the reason classic Nexus designs show numbered /31s or `ip unnumbered loopback0` instead |
 
 Mixed-vendor unnumbered fabrics interoperate, since discovery (ND/RA) and the extended next-hop capability (negotiated in the BGP OPEN) are standards. The characteristic mixed-setup failure is one side missing `ipv6 enable` or not negotiating extended next-hop: the session either never establishes or comes up and installs no IPv4 routes.
 
@@ -482,11 +482,11 @@ Current NX-OS also supports global L2 multicast-group configuration with per-VNI
 
 #### Multicast group-allocation strategy
 
-| Strategy | Benefit | Cost |
-|---|---|---|
-| One group per VNI | Best receiver and failure isolation; VTEPs receive BUM only for that VNI | Highest multicast-group and tree-state consumption |
-| One group per tenant or VNI block | Balances group scale with useful scoping | VTEPs may receive traffic for other VNIs sharing the group and discard it after VXLAN lookup |
-| One group shared broadly | Minimizes multicast group count | Poor flood scoping and potentially large amounts of unwanted BUM delivery |
+| Strategy                          | Benefit                                                                  | Cost                                                                                         |
+|-----------------------------------|--------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
+| One group per VNI                 | Best receiver and failure isolation; VTEPs receive BUM only for that VNI | Highest multicast-group and tree-state consumption                                           |
+| One group per tenant or VNI block | Balances group scale with useful scoping                                 | VTEPs may receive traffic for other VNIs sharing the group and discard it after VXLAN lookup |
+| One group shared broadly          | Minimizes multicast group count                                          | Poor flood scoping and potentially large amounts of unwanted BUM delivery                    |
 
 The correct allocation depends on the maximum supported multicast groups, number of VTEPs per VNI, expected BUM rate, and hardware replication architecture. Document the mapping rather than generating it implicitly with an undocumented formula.
 
@@ -728,13 +728,13 @@ This gives a useful mental model:
 
 RFC 7432 defines EVPN route Types 1 through 4. RFC 9136 later defines the IP Prefix route, Type 5. VXLAN fabrics primarily rely on Types 2, 3, and 5; multihoming additionally uses Types 1 and 4.
 
-| Type | Name | Main VXLAN EVPN purpose |
-|---|---|---|
-| 1 | Ethernet Auto-Discovery | Multihoming aliasing, mass withdrawal, and Ethernet-segment signaling |
-| 2 | MAC/IP Advertisement | Advertises a host MAC and optionally its IP binding |
-| 3 | Inclusive Multicast Ethernet Tag | Signals VTEP membership and builds BUM replication lists |
-| 4 | Ethernet Segment | Discovers VTEPs attached to the same multihomed Ethernet segment and supports DF election |
-| 5 | IP Prefix | Advertises IP prefixes independently of individual host MAC routes |
+| Type | Name                             | Main VXLAN EVPN purpose                                                                   |
+|------|----------------------------------|-------------------------------------------------------------------------------------------|
+| 1    | Ethernet Auto-Discovery          | Multihoming aliasing, mass withdrawal, and Ethernet-segment signaling                     |
+| 2    | MAC/IP Advertisement             | Advertises a host MAC and optionally its IP binding                                       |
+| 3    | Inclusive Multicast Ethernet Tag | Signals VTEP membership and builds BUM replication lists                                  |
+| 4    | Ethernet Segment                 | Discovers VTEPs attached to the same multihomed Ethernet segment and supports DF election |
+| 5    | IP Prefix                        | Advertises IP prefixes independently of individual host MAC routes                        |
 
 #### Type 2: MAC and MAC/IP reachability
 
@@ -832,12 +832,12 @@ nv config apply
 
 Generally:
 
-| EVPN route | Relevant RT |
-|---|---|
-| Type 2, MAC-only | L2 RT |
+| EVPN route                        | Relevant RT         |
+|-----------------------------------|---------------------|
+| Type 2, MAC-only                  | L2 RT               |
 | Type 2, MAC/IP with symmetric IRB | L2 RT **and** L3 RT |
-| Type 3 IMET | L2 RT |
-| Type 5 IP prefix | L3 RT (tenant VRF) |
+| Type 3 IMET                       | L2 RT               |
+| Type 5 IP prefix                  | L3 RT (tenant VRF)  |
 
 #### The eBGP wrinkle: auto-derived RTs embed the local ASN
 
@@ -1042,11 +1042,11 @@ Route Distinguisher: 10.0.0.11:5
 
 #### The key pattern
 
-| Route type | Purpose | Typical RTs |
-|---|---|---|
-| Type 2 | Host MAC/IP advertisement | L2 RT — plus the L3 RT with symmetric IRB |
-| Type 3 | VTEP membership / BUM replication | L2 RT |
-| Type 5 | Tenant IP-prefix advertisement | L3 RT |
+| Route type | Purpose                           | Typical RTs                               |
+|------------|-----------------------------------|-------------------------------------------|
+| Type 2     | Host MAC/IP advertisement         | L2 RT — plus the L3 RT with symmetric IRB |
+| Type 3     | VTEP membership / BUM replication | L2 RT                                     |
+| Type 5     | Tenant IP-prefix advertisement    | L3 RT                                     |
 
 The quickest troubleshooting commands, per platform:
 
@@ -1129,13 +1129,13 @@ Type-1 and type-4 routes exist only when an interface is configured with a **non
 
 The trade-off, in both directions:
 
-| | MLAG / vPC | EVPN-MH (ESI-based) |
-|---|---|---|
-| Route types on the wire | 2, 3, 5 only | 1, 2, 3, 4, 5 |
-| Peer coordination | Dedicated peerlink, shared system MAC, proprietary sync (clagd/vPC) | Control plane only — no peerlink |
-| Multihoming scope | Exactly two switches | Two or more VTEPs per segment |
-| Vendor interop on the pair | Same vendor (proprietary) | Standards-based (RFC 7432) |
-| Failure signaling | Anycast next hop stays valid; underlay reroutes | Type-1 mass withdraw, DF re-election |
+|                            | MLAG / vPC                                                          | EVPN-MH (ESI-based)                  |
+|----------------------------|---------------------------------------------------------------------|--------------------------------------|
+| Route types on the wire    | 2, 3, 5 only                                                        | 1, 2, 3, 4, 5                        |
+| Peer coordination          | Dedicated peerlink, shared system MAC, proprietary sync (clagd/vPC) | Control plane only — no peerlink     |
+| Multihoming scope          | Exactly two switches                                                | Two or more VTEPs per segment        |
+| Vendor interop on the pair | Same vendor (proprietary)                                           | Standards-based (RFC 7432)           |
+| Failure signaling          | Anycast next hop stays valid; underlay reroutes                     | Type-1 mass withdraw, DF re-election |
 
 One nuance if validating an EVPN-MH fabric: even there, **type-4 routes are visible only on the switches sharing the segment** — they carry the ES-Import route target, so an uninvolved leaf imports none, by design. Absence of type-4 on a random leaf proves nothing; check a segment member.
 
@@ -1226,16 +1226,16 @@ In standards terminology, symmetric IRB forwards between the ingress and egress 
 
 #### Side-by-side comparison
 
-| Characteristic | Symmetric IRB | Asymmetric IRB |
-|---|---|---|
-| IP routing lookups per direction | Two: ingress and egress VTEPs | One: ingress VTEP only |
-| VNI on the fabric | Tenant L3 VNI (50000) | Destination subnet's L2 VNI (10020 or 10010, by direction) |
-| Ingress action | Route from the source subnet into the L3 VNI | Route from the source subnet directly into the destination L2 VNI |
-| Egress action | Route from the L3 VNI into the destination subnet, then bridge | Decapsulate and bridge only |
-| Remote subnets' L2 VNIs on every VTEP | Not required | Required |
-| Remote hosts' IP-to-MAC bindings at ingress | Not required — inner MACs are router MACs | Required — ingress builds the final Ethernet header |
-| TTL / hop limit (RFC 9135) | Decremented at both routing PEs | Decremented at the ingress PE only |
-| Scalability | Preferred for many subnets and distributed fabrics | Degrades as subnet count grows |
+| Characteristic                              | Symmetric IRB                                                  | Asymmetric IRB                                                    |
+|---------------------------------------------|----------------------------------------------------------------|-------------------------------------------------------------------|
+| IP routing lookups per direction            | Two: ingress and egress VTEPs                                  | One: ingress VTEP only                                            |
+| VNI on the fabric                           | Tenant L3 VNI (50000)                                          | Destination subnet's L2 VNI (10020 or 10010, by direction)        |
+| Ingress action                              | Route from the source subnet into the L3 VNI                   | Route from the source subnet directly into the destination L2 VNI |
+| Egress action                               | Route from the L3 VNI into the destination subnet, then bridge | Decapsulate and bridge only                                       |
+| Remote subnets' L2 VNIs on every VTEP       | Not required                                                   | Required                                                          |
+| Remote hosts' IP-to-MAC bindings at ingress | Not required — inner MACs are router MACs                      | Required — ingress builds the final Ethernet header               |
+| TTL / hop limit (RFC 9135)                  | Decremented at both routing PEs                                | Decremented at the ingress PE only                                |
+| Scalability                                 | Preferred for many subnets and distributed fabrics             | Degrades as subnet count grows                                    |
 
 The TTL row has a practical consequence: packet captures and traceroute interpretation across a symmetric-IRB fabric should account for two routed overlay stages, not one.
 
@@ -1268,11 +1268,13 @@ ARP suppression, Type 2 host learning, and Type 3 membership work together: know
 
 ## 12. Design choices: pod, multi-pod, fabric, and site
 
-It is worth carefully distinguishing designs that are often casually grouped together.
+It is worth carefully distinguishing designs that are often casually grouped together. Each term is really a statement about how far four things are allowed to stretch: the underlay routing domain, the EVPN control-plane domain, the BUM replication domain, and the numbering plan — ASNs, router IDs, VNIs, RDs, and RTs. Pinning those four down is what turns "we have two data centers" into an actual design, so this section works through the ASN assignment, the RD/RT plan, and the interconnect setup for each model.
 
 ### 12.1 Pod
 
 A pod is a repeated leaf-spine building block. A fabric can grow by adding leaves until spine port capacity or scale limits are reached. Adding another group of spines and leaves creates another pod.
+
+One habit makes every later growth step cheaper: allocate identity resources in per-pod blocks from day one — a loopback range per pod, a point-to-point range per pod, an ASN range per pod if eBGP is used. Router IDs stay unique without coordination, `rd auto` can never collide, and the blocks become natural summarization and filtering boundaries when a second pod — or later a second site — appears.
 
 ### 12.2 Multi-Pod
 
@@ -1288,11 +1290,306 @@ In a multi-pod design, pods are connected—often through a super-spine layer—
 
 This gives simple end-to-end connectivity, but failure and operational domains grow with the fabric. A route or BUM event can propagate throughout all pods. VTEP-to-VTEP underlay reachability must also extend end to end.
 
+#### How pods are interconnected
+
+Physically, each pod's spines uplink to a super-spine tier (two pods can also connect spine-to-spine back to back, but the pattern stops scaling at the third pod). The super-spines carry no tenant state: no VTEPs, no VRFs, no SVIs. Whether they participate in EVPN at all depends on the overlay model below — as iBGP route reflectors they see EVPN NLRI, as eBGP transit they relay it, and in the IP-only interconnect model they never learn it.
+
+Whatever the protocol choice, the pod boundary must satisfy three end-to-end requirements, because a multi-pod fabric is still *one* fabric:
+
+1. **Underlay reachability.** Every VTEP loopback must remain reachable as a host route from every pod, at the full VXLAN MTU (section 3). Inter-pod links are part of the underlay, so they need the same ~50-byte headroom.
+2. **BUM continuity.** With ingress replication, the Type 3 replication list on every VTEP spans all pods, so one broadcast becomes one unicast copy per remote VTEP — and most of those copies cross the inter-pod links. With multicast replication, PIM must run across the inter-pod links, and the RP design should place redundant anycast-RP members in each pod (the section 4.2 pattern) so no pod depends on another for its rendezvous point.
+3. **Control-plane continuity.** EVPN routes must travel between pods with their extended communities intact and the originating VTEP preserved as next hop. There is no re-origination at a pod boundary — the boundary is invisible to EVPN.
+
+#### ASN assignment inside a multi-pod fabric
+
+The section 4.1 decision — iBGP with an IGP, or eBGP everywhere — simply extends one tier upward. Three schemes cover practically all deployments:
+
+**One AS end to end, hierarchical route reflection.** The whole fabric shares one ASN and one IGP; the overlay is iBGP exactly as in Model A, grown a level: pod spines act as route reflectors for their pod's leaves, and the super-spines act as route reflectors for the pod spines. Each RR tier and pod keeps its own cluster ID so reflected routes are not rejected between pods:
+
+```text
+! Super-spine: top-tier RR; the pod spines are its clients
+router bgp 65001
+  cluster-id 0.0.0.100
+  neighbor 10.0.1.1                  ! Pod-1 spine
+    remote-as 65001
+    update-source loopback0
+    address-family l2vpn evpn
+      send-community extended
+      route-reflector-client
+
+! Pod-1 spine: RR for its pod's leaves, client of the super-spines
+router bgp 65001
+  cluster-id 0.0.0.1
+  neighbor 10.0.1.11                 ! Pod-1 leaf (client)
+    remote-as 65001
+    update-source loopback0
+    address-family l2vpn evpn
+      send-community extended
+      route-reflector-client
+  neighbor 10.0.0.101                ! Super-spine (non-client)
+    remote-as 65001
+    update-source loopback0
+    address-family l2vpn evpn
+      send-community extended
+```
+
+Route reflection preserves the next hop, so leaf-to-leaf tunnels cross pods without any policy. Auto-derived RTs stay consistent because the ASN is the same everywhere.
+
+**eBGP everywhere with a transit super-spine AS.** The section 4.1 Model B plan gains one tier: each leaf (or rack) keeps its own ASN, each pod's spine tier gets a pod-scoped ASN, and the super-spine tier gets one transit ASN. A workable allocation from private 2-byte space: super-spines 65000, Pod-1 spines 65010, Pod-2 spines 65020, Pod-1 leaves 65111 upward, Pod-2 leaves 65211 upward. A Pod-2 leaf then receives a Pod-1 host route with:
+
+```text
+AS path: 65020 65000 65010 65111
+          |     |     |     └ Pod-1 leaf (originator)
+          |     |     └ Pod-1 spine tier
+          |     └ super-spine transit AS
+          └ Pod-2 spine tier
+```
+
+Every transit tier — both pod spines *and* super-spines — must repeat the full section 4.1 spine checklist: `retain route-target all`, next-hop unchanged on outbound EVPN sessions, extended communities propagated, and multipath settings on each tier that should spread load. The per-tier ASNs keep ordinary eBGP loop prevention working with no `allowas-in` gymnastics.
+
+![Multi-pod eBGP-everywhere ASN plan](/posts/vxlan-evpn-architecture/multipod-ebgp-everywhere.svg)
+
+**Per-pod AS with an IP-only interconnect.** Each pod runs internally as an independent iBGP + RR domain with its own ASN, and the pods exchange EVPN routes over one multihop eBGP EVPN session between the pod route reflectors, configured with next-hop unchanged so tunnels stay leaf-to-leaf. The interconnect routers carry only IPv4 unicast — they advertise the VTEP loopback blocks between pods and never learn EVPN. This is the EVPN adaptation of classic inter-AS option C, and it suits pods separated by an IP WAN that should not participate in the overlay. [ipSpace, EVPN Designs: Multi-Pod with IP-Only WAN Routers](https://blog.ipspace.net/2025/10/evpn-designs-inter-as-c/)
+
+| Scheme                       | Underlay                                              | Overlay sessions                                            | Auto-RT across pods                                     |
+|------------------------------|-------------------------------------------------------|-------------------------------------------------------------|---------------------------------------------------------|
+| One AS end to end            | One IGP domain spanning pods                          | iBGP, hierarchical RRs (leaves → pod spines → super-spines) | Consistent automatically                                |
+| eBGP everywhere + transit AS | eBGP hop by hop through the super-spine tier          | eBGP EVPN at every tier, next-hop unchanged twice           | Broken by design — section 7.4 options required         |
+| Per-pod AS, IP-only core     | Per-pod routing + eBGP IPv4 exchanging VTEP loopbacks | One multihop eBGP EVPN session between pod RRs              | Broken at the pod boundary — fabric-wide RTs or rewrite |
+
+#### iBGP + RR versus eBGP everywhere: considerations and a packet walk
+
+Section 4.1 weighs Model A against Model B inside one pod. Stretching the fabric across pods does not add new trade-offs so much as multiply the existing ones — every consideration now applies once per tier instead of once:
+
+| Consideration                 | iBGP + RR hierarchy (Model A)                                                                           | eBGP everywhere (Model B)                                                                           |
+|-------------------------------|---------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| Adding a pod                  | New pod RRs become clients of the super-spine RRs — a cluster ID and neighbor statements, no new policy | Allocate a spine ASN and leaf ASNs, then apply the full transit checklist to every new session      |
+| Next hop across pods          | Preserved by route reflection; nothing to configure                                                     | Preserved only if next-hop-unchanged policy exists at **both** transit tiers                        |
+| RT consistency                | Automatic — one ASN everywhere                                                                          | Explicit — fabric-wide RTs, `rewrite-evpn-rt-asn` at each hop, or the FRR wildcard import           |
+| Where routes silently die     | A misconfigured RR hides routes fabric-wide from one point                                              | A missing `retain route-target all` or next-hop route-map on any one tier                           |
+| Failure and policy boundaries | One AS and usually one IGP: shared fate, minimal policy surface                                         | Per-leaf and per-pod AS boundaries, with a policy hook at every session                             |
+| Reading `show bgp` output     | Empty AS path; origin traced via next hop and cluster list                                              | The AS path names the exact leaf, pod, and tier the route crossed                                   |
+| Automation dependency         | Moderate — RR configuration is small and static                                                         | High — identical policy must exist on every session, realistically generated from a source of truth |
+
+**Control-plane walk.** The same Type-2 route — host `192.168.1.10` behind a Pod-1 leaf whose VTEP is `10.0.1.11` — reaching a Pod-2 leaf.
+
+In Model A (fabric AS 65001, hierarchical RRs):
+
+1. The Pod-1 leaf originates the route: next hop `10.0.1.11`, RT auto-derived `65001:10100`.
+2. The Pod-1 spine RRs reflect it to their clients and to the super-spine RRs. Next hop and RT are untouched; the cluster list records the reflection for loop prevention.
+3. The super-spine RRs reflect it down to the Pod-2 spine RRs — still untouched.
+4. Pod-2 leaves import on the RT match and install the route with next hop `10.0.1.11`.
+
+In Model B (eBGP everywhere, ASNs as above):
+
+1. The Pod-1 leaf (AS 65111) advertises to the Pod-1 spines (AS 65010): next hop itself, RT `65111:10100`.
+2. The Pod-1 spine is pure transit: `retain route-target all` keeps the route despite no importable RT, the outbound route-map leaves the next hop at `10.0.1.11`, the AS path grows to `65010 65111`, and with the rewrite design the RT becomes `65010:10100` on ingress.
+3. The super-spines (AS 65000) apply the identical treatment.
+4. The Pod-2 spines (AS 65020) apply it again.
+5. The Pod-2 leaf (AS 65211) rewrites the RT inbound to `65211:10100` — now equal to its own auto-derived import RT — and installs the route with next hop `10.0.1.11` and AS path `65020 65000 65010 65111`.
+
+**Data-plane walk — identical in both models.** Once the route is installed, the models converge completely:
+
+1. A host in Pod 2 sends a frame toward `192.168.1.10`; its leaf finds the EVPN-installed entry pointing at VTEP `10.0.1.11`.
+2. The leaf encapsulates once: outer source its own VTEP loopback, outer destination `10.0.1.11`, VNI 10100.
+3. The underlay forwards the outer packet leaf → Pod-2 spine → super-spine → Pod-1 spine → Pod-1 leaf, ECMP-hashed per flow on the outer UDP source port at every tier.
+4. The Pod-1 leaf decapsulates and delivers the original frame.
+
+The tunnel is one leaf-to-leaf VXLAN encapsulation either way — spines and super-spines route the outer IP packet and never process VXLAN. What differs is the machinery that delivered the route, and therefore the failure modes. In Model A a broken route reflector *hides* reachability: the route never arrives, and the gap is visible as absence in `show bgp l2vpn evpn`. In Model B a forgotten next-hop-unchanged policy *blackholes* it: the spine advertises itself as next hop, attracts VXLAN traffic it has no NVE to decapsulate, and drops it — BGP looks healthy and only the data plane fails. The first design concentrates risk in a few devices; the second spreads a thinner risk across every session.
+
+#### RD and RT design across pods
+
+Because a multi-pod fabric is one EVPN domain, the RD/RT rules are the single-fabric rules — they just have to hold across a bigger device population:
+
+- **RD.** Keep `rd auto` everywhere. Auto-derivation builds the RD from the BGP router ID (section 7.4's `10.0.0.11:32867`), so the real requirement is that router IDs and VTEP loopbacks are unique across *all* pods — which the per-pod loopback blocks from section 12.1 guarantee by construction. Unique per-VTEP RDs also keep every VTEP's path visible through the route reflectors, which multihoming and anycast-gateway advertisements rely on.
+- **RT.** With one fabric-wide ASN, auto-derived `ASN:VNI` values match everywhere and nothing needs configuring. With per-leaf or per-pod ASNs, the section 7.4 wrinkle applies at every AS boundary: either configure explicit fabric-wide RTs per VNI, enable `rewrite-evpn-rt-asn` on each eBGP EVPN session (NX-OS), or rely on the `*:VNI` wildcard import that Cumulus/FRR applies to auto-derived RTs.
+- **VNI.** The VNI space is fabric-global. One allocation authority must own it across all pods — two pods independently assigning VNI 10100 to different tenants is a merged bridge domain, not a conflict warning.
+
+None of this involves translation or re-origination at the pod boundary. That is the essential contrast with Multi-Site: multi-pod scales the *same* domain, it does not create a second one.
+
 ### 12.3 Multi-fabric and Multi-Site
 
 A multi-fabric architecture creates separate fabrics with isolated underlays and overlay control-plane domains. Connectivity between them is explicit and controlled. VXLAN Multi-Site is Cisco's architecture for this model, using border gateways to interconnect independent sites.
 
+Section 13 examines the BGW's roles and forwarding behavior. What belongs *here* is the part that must be decided before any BGW is configured: the ASN plan, what crosses the DCI, the shape of the inter-site BGP sessions, and the RD/RT agreement between sites.
+
+#### ASN assignment across sites
+
+Each site is an independent BGP autonomous system, and each site is free to choose its internal model from section 4.1 — one site can run OSPF with iBGP route reflectors while another runs eBGP everywhere. The BGWs sit in their site's ASN (in an eBGP-everywhere site, the ASN of the BGW tier is what the rest of the world sees), and NX-OS requires the site-external EVPN peering to be **eBGP**: iBGP EVPN peering between border gateways of different sites is not supported, so two sites cannot share an ASN. If route servers are used in the DCI core, they get their own ASN as well. [Cisco, Configure VXLAN EVPN Multi-Site](https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/105x/configuration/vxlan/cisco-nexus-9000-series-nx-os-vxlan-configuration-guide-release-105x/configuring-multisite.pdf)
+
+The Multi-Site **site ID** (`evpn multisite border-gateway <site-id>`, section 15.8) is a separate identifier from the ASN. Keeping a documented mapping — site 11 ↔ AS 65010, site 22 ↔ AS 65020 — costs nothing and removes a whole class of confusion during troubleshooting, because the site ID appears in re-originated RDs and the ASN appears in AS paths and rewritten RTs.
+
+#### Inter-site underlay: what actually crosses the DCI
+
+The DCI underlay is deliberately minimal. Two shapes exist: **back-to-back BGWs** (direct links between the two sites' BGWs — clean for two sites, a full mesh that stops scaling around the third) and a **DCI core** (BGWs from every site connect to shared transit routers, which may also host the route servers).
+
+In both shapes, the sites exchange only the BGW-owned loopbacks, normally over eBGP IPv4 unicast on the physical DCI links:
+
+- The BGW **PIP** — its NVE source loopback.
+- The site's **Multi-Site VIP** — the shared anycast loopback (section 13.3).
+- The BGW's **EVPN peering loopback**, if separate from the PIP.
+
+Internal VTEP loopbacks, spine and RR addresses, and the site's point-to-point ranges never leave the site — that containment *is* the underlay isolation of section 13.2. The practical implementation is a tag-and-filter pattern: tag the loopbacks that are allowed to cross (the `tag 1234` on the VIP in section 15.8 is exactly this hook) and match the tag outbound on the DCI sessions:
+
+```text
+route-map DCI-OUT permit 10
+  match tag 1234                    ! PIP + VIP + peering loopbacks carry this tag
+
+router bgp 65010
+  neighbor 10.99.1.0                ! DCI core, directly connected
+    remote-as 65099
+    address-family ipv4 unicast
+      route-map DCI-OUT out
+```
+
+The MTU obligation does not stop at the site edge: inter-site VXLAN packets are full-sized, so the DCI path needs the same ~50-byte headroom as the fabric links.
+
+#### Inter-site overlay: the BGW EVPN sessions
+
+The site-external EVPN sessions are **multihop eBGP between loopbacks**. With a handful of sites, the BGWs of each site peer full mesh with the BGWs of every other site; beyond that, each BGW peers with redundant **route servers** in the DCI core instead, so the per-BGW session count stays constant no matter how many sites are added. A representative BGW-side session:
+
+```text
+router bgp 65010
+  router-id 10.1.0.11
+
+  neighbor 10.99.0.1                ! route-server (or remote BGW) loopback
+    remote-as 65099
+    update-source loopback0
+    ebgp-multihop 5
+    peer-type fabric-external
+    address-family l2vpn evpn
+      send-community
+      send-community extended
+      rewrite-evpn-rt-asn
+```
+
+`peer-type fabric-external` is the Cisco-specific marker that tells the BGW this session crosses the site boundary, activating the Multi-Site re-origination machinery. It belongs only on the BGW's site-external sessions; Cisco documents it as a BGW knob, so it is not configured on route servers and not used toward non-Cisco devices.
+
+When a route crosses a BGW in either direction, the BGW does not simply relay it — it re-originates it:
+
+- **Next hop** becomes the local site's Multi-Site VIP. Site-internal routes are advertised outward with the VIP as next hop, and remote-site routes are advertised inward the same way, so leaves tunnel to their local BGWs and never learn a remote VTEP address.
+- **RD** changes on current NX-OS. Since release 9.3(5), a BGW tracks two RDs per VRF or L2 VNI: re-originated routes carry a **secondary RD of `site-id:VNI`**, identical on all BGWs of the site, while routes the BGW originates itself keep its unique primary RD. Earlier releases used a next-hop-rewrite model that passed the original RD through — one more reason to read behavior from your release's guide rather than from older write-ups.
+- **AS path** grows with each ASN crossed, so ordinary eBGP loop prevention protects the inter-site topology.
+- **Route targets** are rewritten only if `rewrite-evpn-rt-asn` is configured — covered next.
+
+A route server carries none of this machinery. It is the section 4.1 transit-spine role relocated into the DCI: an EVPN control-plane relay with no NVE interface and no tenant state, which therefore needs `retain route-target all` (it imports nothing itself) and must pass the BGW next hops through unchanged:
+
+```text
+route-map NEXT-HOP-UNCH permit 10
+  set ip next-hop unchanged
+
+router bgp 65099
+  address-family l2vpn evpn
+    retain route-target all
+
+  neighbor 10.1.0.11                ! Site A BGW
+    remote-as 65010
+    update-source loopback0
+    ebgp-multihop 5
+    address-family l2vpn evpn
+      send-community
+      send-community extended
+      route-map NEXT-HOP-UNCH out
+      rewrite-evpn-rt-asn
+```
+
+#### RD and RT design across sites
+
+Inside each site, nothing changes: `rd auto` and per-site RT plans as usual. The design work is at the boundary.
+
+**RD.** The dual-RD behavior above makes the cross-site RD plan almost automatic: because re-originated routes carry `site-id:VNI`, globally unique site IDs (already mandatory, section 13.8) guarantee that two sites can never emit colliding re-originated routes. The identifiers that still need global uniqueness by plan are the BGW loopbacks and router IDs, since they share the DCI underlay. One planning consequence: a site ID wider than 2 bytes cannot auto-generate the secondary RD — give it an explicit 2-byte value (`rd dual id <id>` under `router bgp`), or disable dual RDs (`no rd dual`), which falls back to per-BGW unique RDs on re-originated routes.
+
+**RT.** Sites have different ASNs, so auto-derived RTs (`site-ASN:VNI`, section 7.4) can never match across sites. Two clean designs exist:
+
+| Design                          | How it works                                                                                                                                                                          | Where it fits                                                                          |
+|---------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
+| Auto-RT + `rewrite-evpn-rt-asn` | Every device keeps `route-target both auto`. Each site-external EVPN session rewrites the ASN portion of *incoming* RTs to the local ASN — a route arrives appearing locally derived. | All-Cisco BGW/route-server designs; the default in NDFC-managed fabrics                |
+| Explicit global RTs             | Each stretched VNI gets a hand-assigned RT (a reserved ASN + the VNI, for example `65535:10100`) configured identically in every site; no rewriting anywhere.                         | Mixed-vendor interconnects, or when the RT plan should be visible in the configuration |
+
+`rewrite-evpn-rt-asn` acts on received updates and rewrites an RT's ASN portion only when it matches the *sending peer's* ASN, which is what makes the chain compose: with the site A → route server → site B example below, each hop rewrites exactly one step, and unrelated RTs (an explicit global RT, for instance) pass through untouched. Both ends of every site-external session need the command for both directions to work. A site that runs eBGP everywhere internally simply continues the same chain on its fabric sessions — the section 7.4 wrinkle and its fixes apply inside that site exactly as before.
+
+![Multi-Site RT rewrite chain with an eBGP-everywhere site](/posts/vxlan-evpn-architecture/multisite-ebgp-everywhere.svg)
+
+The figure traces that composed chain through the worked plan below, with Site A exploded into its eBGP-everywhere variant — leaf AS 65012, spine AS 65011, BGW AS 65010. The RT is rewritten four times, once at each receiving eBGP hop: at the spine and the BGW inside Site A, then at the route server and BGW-B on the site-external legs. Site B — one AS inside — needs no rewriting at all. Externally nothing changes: the rest of the world still sees Site A as AS 65010, because the BGW tier's ASN is the site's ASN. The internal legs are the *only* difference between the two internal models — the BGW re-origination (VIP next hop, `site-id:VNI` secondary RD) and the section 14 forwarding walks are identical whichever way each site is built.
+
+Two planning rules round this out. First, only *stretched* VNIs need any cross-site RT agreement at all — a local-only VNI keeps its site-local RTs and is simply never configured on the BGWs (the selective-advertisement boundary of section 13.6). Second, keep VNI numbering identical in all sites: with either RT design above, the VNI is the only globally significant service identifier left. Recent NX-OS releases document an asymmetric-VNI mapping option for Multi-Site, but treat that as a migration exception to plan around, not a default.
+
+#### A worked two-site numbering plan
+
+Pulling the pieces together, using the section 15 tenant so the numbers line up:
+
+```text
+                     Site A                 Site B
+Site ID:             11                     22
+Fabric AS:           65010 (iBGP + RR)      65020 (iBGP + RR)
+BGW PIPs:            10.1.0.11, .12         10.2.0.11, .12
+Multi-Site VIP:      10.10.10.10            10.20.20.20
+Route servers:       AS 65099, loopbacks 10.99.0.1 / 10.99.0.2
+
+Stretched L2 VNI 10100 — one Type-2 route travelling A → B
+(auto-RT + rewrite-evpn-rt-asn on every site-external session):
+
+  Leaf in A exports                RT 65010:10100, RD 10.1.0.21:32867
+  BGW-A re-originates              next hop 10.10.10.10, RD 11:10100
+  Route server rewrites inbound    RT 65099:10100
+  BGW-B rewrites inbound           RT 65020:10100  → matches B's auto-derived import
+  BGW-B re-originates inward       next hop 10.20.20.20
+```
+
+![Multi-Site numbering and session plan](/posts/vxlan-evpn-architecture/multisite-numbering-plan.svg)
+
+A Site B leaf therefore installs the host behind its local BGW VIP, with an RT that looks locally derived — every field readable back to a design decision. The chain of rewrites and re-originations is exactly what `show bgp l2vpn evpn` displays at each step, which makes this design pleasantly debuggable: the section 7.4 habit of reading `RT:<ASN>:<VNI>` out of the extended communities identifies *which site's* view of the route you are looking at. A packet-level walk of the same path is in section 14, and the failure modes are in section 16. [The Network Times, VXLAN EVPN Multi-Site](https://nwktimes.blogspot.com/2019/08/vxlan-evpn-multi-site.html)
+
+#### Multi-Site control-plane and data-plane walk
+
+The section 12.2 walks showed multi-pod as one domain end to end. The same exercise across sites shows the opposite: every leg is a separate domain, and the identifiers change at each boundary. The route first — host `192.168.1.10` in Site A becoming reachable from Site B:
+
+1. **Leaf `10.1.0.21` (Site A) originates** the Type-2 route: RD `10.1.0.21:32867` (primary, auto-derived), RT `65010:10100`, next hop `10.1.0.21`. The Site A route reflectors deliver it to every site VTEP, including both BGWs.
+2. **BGW-A1 and BGW-A2 re-originate it site-external.** VNI 10100 is configured under their NVE, so it is eligible to cross (section 13.6). Both BGWs advertise the same re-originated route on their fabric-external sessions: next hop now `10.10.10.10` (VIP-A), RD now the shared secondary `11:10100`, AS path `65010`.
+3. **The route servers relay it.** `retain route-target all` keeps the route without importing it, the outbound route-map leaves the next hop at `10.10.10.10`, and the inbound `rewrite-evpn-rt-asn` has made the RT `65099:10100`. BGW-B1 and BGW-B2 receive it with AS path `65099 65010`.
+4. **BGW-B1 and BGW-B2 import and re-originate it site-internal.** Their inbound rewrite makes the RT `65020:10100` — a match for their auto-derived import — and the route is re-advertised into Site B with next hop `10.20.20.20` (VIP-B), again under a site-scoped secondary RD rather than anything carried from Site A.
+5. **Site B leaves install it.** Leaf `10.2.0.21` imports on `65020:10100` and programs `192.168.1.10` behind `10.20.20.20`.
+
+Notice what never happened: no Site B device learned `10.1.0.21`, and no Site A router ID, internal RD, or VTEP prefix crossed the DCI unchanged. The underlay isolation of section 13.2 shows up here as a control-plane property before any packet moves.
+
+The packet next — a Site B host sending to `192.168.1.10`. Where the multi-pod data-plane walk had one tunnel, Multi-Site uses three, each built from a different table:
+
+1. Leaf `10.2.0.21` matches the EVPN entry and encapsulates: outer `10.2.0.21 → 10.20.20.20`, VNI 10100. The VIP is anycast, so underlay ECMP delivers the packet to whichever Site B BGW is nearest.
+2. That BGW decapsulates, looks the destination up again in VNI 10100, and finds the route from control-plane step 3: next hop `10.10.10.10`. It re-encapsulates — sourced from its Multi-Site VIP, the `multisite border-gateway interface` loopback of section 15.8 — and the DCI underlay carries `10.20.20.20 → 10.10.10.10` to one of the Site A BGWs.
+3. That BGW decapsulates, finds the site-internal route with next hop `10.1.0.21`, and re-encapsulates a third time, sourced from its fabric-facing NVE loopback: destination `10.1.0.21`, still VNI 10100.
+4. Leaf `10.1.0.21` decapsulates and delivers the original frame to the host.
+
+Return traffic walks the same three segments in reverse and may transit the *other* BGW at each site — the VIPs are anycast and bridging keeps no per-flow state, so per-direction asymmetry between a site's BGWs is normal. The designated-forwarder election of section 13.4 exists for BUM only; known unicast, as here, never consults it.
+
+**The same walk in an eBGP-everywhere site.** Rebuild Site A internally as the section 12.2 Model B — leaf AS 65012, spine tier AS 65011, BGW tier AS 65010, the same ASNs as the RT rewrite-chain figure earlier in this section:
+
+![Both directions of the walk inside an eBGP-everywhere site](/posts/vxlan-evpn-architecture/multisite-walk-ebgp-site.svg)
+
+Only the site-internal legs of the control-plane walk change:
+
+1. Leaf `10.1.0.21` (AS 65012) originates the same NLRI — RD `10.1.0.21:32867`, next hop `10.1.0.21` — but its auto-derived RT is now `65012:10100`, and the route reaches the spines over eBGP rather than through route reflectors.
+2. The spine tier (AS 65011) plays the section 4.1 transit role: `retain route-target all` keeps the route, the outbound route-map leaves the next hop at `10.1.0.21`, the AS path grows, and the inbound rewrite makes the RT `65011:10100`.
+3. The BGWs (AS 65010) rewrite once more to `65010:10100` and import. From here the walk is identical to steps 2–5 of the main walk — re-origination behind VIP-A, secondary RD `11:10100` — except that the AS path advertised into the DCI is now `65010 65011 65012`, so BGW-B receives `65099 65010 65011 65012`: the site's internal tiers become visible in the path.
+4. The inbound direction adds one requirement worth noticing. When the BGWs re-originate a remote-site route inward with next hop `10.10.10.10` (VIP-A), that VIP next hop must survive the eBGP trip down through the spine tier to the leaves — the same next-hop-unchanged policy that protects leaf VTEPs in section 12.2 now also protects the BGW VIP. The RT chain runs downhill the same way, `65010 → 65011 → 65012`, until it equals the leaf's auto-derived import.
+
+The data-plane walk does not change by a single byte: the leaf still encapsulates toward its local VIP and the BGWs still stitch the three tunnels — the site-internal BGP model is invisible to packets. It only decides which machinery delivers the routes, and therefore which of the section 12.2 failure modes apply inside each site. Section 14 extends these walks to inter-site routing and BUM replication.
+
+### 12.4 Multi-pod versus Multi-Site at the boundary
+
 ![Comparison of multi-pod and multi-fabric designs](/posts/vxlan-evpn-architecture/multipod-vs-multisite.svg)
+
+The two models differ less in topology than in what happens to identifiers and state at the seam:
+
+| Boundary property | Multi-Pod                                               | Multi-Site                                                                |
+|-------------------|---------------------------------------------------------|---------------------------------------------------------------------------|
+| Underlay          | One reachability domain; every VTEP loopback everywhere | Isolated per site; only BGW PIP/VIP loopbacks cross the DCI               |
+| Overlay sessions  | One EVPN domain (RR hierarchy or eBGP transit tiers)    | eBGP EVPN only between BGWs or route servers                              |
+| ASN plan          | One fabric plan: single AS, or per-pod/per-leaf ASNs    | Independent AS per site; eBGP mandatory between sites                     |
+| RD                | Per-VTEP `rd auto`, unique fabric-wide                  | Per-VTEP inside a site; re-originated as `site-id:VNI` at the BGW         |
+| RT                | One fabric-wide plan (auto, or section 7.4 options)     | Per-site plans plus explicit global RTs or `rewrite-evpn-rt-asn`          |
+| EVPN next hop     | Originating VTEP, end to end                            | Rewritten to the Multi-Site VIP at each site boundary                     |
+| BUM               | One replication domain spanning all pods                | Replicated per site; the DF BGW sends one controlled copy per remote site |
+| Blast radius      | Fabric-wide                                             | Contained per site                                                        |
 
 Choose multi-pod when the operational simplicity of one domain outweighs the larger blast radius. Choose Multi-Site when isolation, independent change control, and selective inter-site extension are more important.
 
@@ -1583,15 +1880,15 @@ show forwarding route vrf <vrf-name>
 
 Interpret the evidence by control-plane object:
 
-| Symptom | Route/state to inspect | Typical root causes |
-|---|---|---|
-| Remote host MAC missing | Type 2 MAC route, MAC-VRF import RT | Local host never learned, export RT mismatch, BGP path rejected, unresolved VTEP next hop |
-| MAC exists but ARP suppression misses | Type 2 MAC/IP route, suppression cache | Type 2 carries no IP, silent host, SVI/suppression mismatch, TCAM/platform limitation |
-| BUM reaches no remote VTEPs | Type 3 IMET and NVE replication list | VNI not active, RT mismatch, missing PMSI tunnel information, multicast RPF failure |
-| Multihomed next hop is not load-balanced | Type 1 per-EVI and Type 2/ESI state | ESI mismatch, A-D route absent, single-active mode, aliasing unsupported or filtered |
-| Duplicate BUM at multihomed device | Type 4, DF state, split-horizon state | Inconsistent ESI, DF disagreement, missing ES-import policy, transient convergence |
-| Prefix is visible but not installed | Type 5 plus overlay-index recursion | Missing RT-2/RT-1 dependency, unresolved BGP next hop, wrong IP-VRF RT, unsupported model |
-| Inter-site route stops at BGW | Re-originated EVPN route, PIP/VIP, tracking | VNI not extended, DCI policy, site-ID inconsistency, fabric/DCI tracking withdrawal |
+| Symptom                                  | Route/state to inspect                      | Typical root causes                                                                       |
+|------------------------------------------|---------------------------------------------|-------------------------------------------------------------------------------------------|
+| Remote host MAC missing                  | Type 2 MAC route, MAC-VRF import RT         | Local host never learned, export RT mismatch, BGP path rejected, unresolved VTEP next hop |
+| MAC exists but ARP suppression misses    | Type 2 MAC/IP route, suppression cache      | Type 2 carries no IP, silent host, SVI/suppression mismatch, TCAM/platform limitation     |
+| BUM reaches no remote VTEPs              | Type 3 IMET and NVE replication list        | VNI not active, RT mismatch, missing PMSI tunnel information, multicast RPF failure       |
+| Multihomed next hop is not load-balanced | Type 1 per-EVI and Type 2/ESI state         | ESI mismatch, A-D route absent, single-active mode, aliasing unsupported or filtered      |
+| Duplicate BUM at multihomed device       | Type 4, DF state, split-horizon state       | Inconsistent ESI, DF disagreement, missing ES-import policy, transient convergence        |
+| Prefix is visible but not installed      | Type 5 plus overlay-index recursion         | Missing RT-2/RT-1 dependency, unresolved BGP next hop, wrong IP-VRF RT, unsupported model |
+| Inter-site route stops at BGW            | Re-originated EVPN route, PIP/VIP, tracking | VNI not extended, DCI policy, site-ID inconsistency, fabric/DCI tracking withdrawal       |
 
 A disciplined troubleshooting order is:
 
@@ -1746,11 +2043,11 @@ The headline result up front: you do **not** need 60 external BGP sessions. The 
 
 ![Three tenant VRFs, each with twenty L2 VNIs, reach the outside through two border leaves running three L3 VNIs and three per-VRF eBGP handoffs to matching VRFs on the external edge](/posts/vxlan-evpn-architecture/vxlan-evpn-3vrf-border-leaf.svg)
 
-| Tenant | Internal subnets | VLANs | L2 VNIs | L3 VNI | Route Target | External summary |
-|---|---|---|---|---|---|---|
-| RED | Twenty VLANs under `10.10.0.0/16` | 101–120 | `10101–10120` | `50001` | `65000:50001` | `10.10.0.0/16` |
-| BLUE | Twenty VLANs under `10.20.0.0/16` | 201–220 | `10201–10220` | `50002` | `65000:50002` | `10.20.0.0/16` |
-| GREEN | Twenty VLANs under `10.30.0.0/16` | 301–320 | `10301–10320` | `50003` | `65000:50003` | `10.30.0.0/16` |
+| Tenant | Internal subnets                  | VLANs   | L2 VNIs       | L3 VNI  | Route Target  | External summary |
+|--------|-----------------------------------|---------|---------------|---------|---------------|------------------|
+| RED    | Twenty VLANs under `10.10.0.0/16` | 101–120 | `10101–10120` | `50001` | `65000:50001` | `10.10.0.0/16`   |
+| BLUE   | Twenty VLANs under `10.20.0.0/16` | 201–220 | `10201–10220` | `50002` | `65000:50002` | `10.20.0.0/16`   |
+| GREEN  | Twenty VLANs under `10.30.0.0/16` | 301–320 | `10301–10320` | `50003` | `65000:50003` | `10.30.0.0/16`   |
 
 The numbering follows the conventions used elsewhere in this post: L2 VNI = 10000 + VLAN (section 2.3), and one L3 VNI per tenant VRF in the 5000x family (section 10.2).
 
@@ -1797,11 +2094,11 @@ The border leaves still learn the necessary tenant host and prefix routes throug
 
 **Physical and logical handoff.** Separate physical interfaces per VRF work, but one physical link carrying three routed IEEE 802.1Q subinterfaces is the common pattern. Between BL1 and Edge1:
 
-| Subinterface | 802.1Q tag | VRF | BL1 address | Edge1 address |
-|---|---|---|---|---|
-| Ethernet1/49.3001 | 3001 | RED | `172.31.1.0/31` | `172.31.1.1/31` |
-| Ethernet1/49.3002 | 3002 | BLUE | `172.31.2.0/31` | `172.31.2.1/31` |
-| Ethernet1/49.3003 | 3003 | GREEN | `172.31.3.0/31` | `172.31.3.1/31` |
+| Subinterface      | 802.1Q tag | VRF   | BL1 address     | Edge1 address   |
+|-------------------|------------|-------|-----------------|-----------------|
+| Ethernet1/49.3001 | 3001       | RED   | `172.31.1.0/31` | `172.31.1.1/31` |
+| Ethernet1/49.3002 | 3002       | BLUE  | `172.31.2.0/31` | `172.31.2.1/31` |
+| Ethernet1/49.3003 | 3003       | GREEN | `172.31.3.0/31` | `172.31.3.1/31` |
 
 These are routed subinterfaces, not Layer 2 VXLAN extensions — no VNI maps to tags 3001–3003; they exist only on the handoff link. The external router or firewall has matching subinterfaces in its corresponding routing contexts. (A firewall here plays the **north–south** role — per-tenant edge policy and NAT. If the same appliance also inspects tenant-to-tenant traffic, that is the separate east–west insertion design of section 17; the roles can share hardware but not a design.)
 
@@ -1840,11 +2137,11 @@ VRF GREEN:  advertise 10.30.0.0/16
 
 If a VRF's twenty VLAN prefixes are not contiguous, advertise the individual subnet prefixes or several smaller summaries. The route policy per VRF follows this model:
 
-| Direction | Policy |
-|---|---|
+| Direction    | Policy                                            |
+|--------------|---------------------------------------------------|
 | Edge to EVPN | Default route and approved external prefixes only |
-| EVPN to edge | The tenant summary (for RED, `10.10.0.0/16`) |
-| Block | Host `/32`s and other tenants' routes |
+| EVPN to edge | The tenant summary (for RED, `10.10.0.0/16`)      |
+| Block        | Host `/32`s and other tenants' routes             |
 
 Important controls:
 
@@ -2151,13 +2448,13 @@ If only VLAN 110 fails while the physical Ethernet segment remains up, the per-E
 
 ### A.5 Route responsibility summary
 
-| Question | Route or state that answers it |
-|---|---|
-| Which leaves belong to this Ethernet segment, and which is DF? | **Type 4** ES route |
-| How can remote PEs rapidly invalidate reachability to the whole segment? | **Type 1 per-ES** A-D route |
-| Which leaves can reach this ESI in that EVI for aliasing? | **Type 1 per-EVI** A-D route |
-| Where was MAC A learned? | **Type 2** MAC/IP route carrying the ESI |
-| Which PEs receive overlay BUM copies? | **Type 3** Inclusive Multicast route |
+| Question                                                                 | Route or state that answers it           |
+|--------------------------------------------------------------------------|------------------------------------------|
+| Which leaves belong to this Ethernet segment, and which is DF?           | **Type 4** ES route                      |
+| How can remote PEs rapidly invalidate reachability to the whole segment? | **Type 1 per-ES** A-D route              |
+| Which leaves can reach this ESI in that EVI for aliasing?                | **Type 1 per-EVI** A-D route             |
+| Where was MAC A learned?                                                 | **Type 2** MAC/IP route carrying the ESI |
+| Which PEs receive overlay BUM copies?                                    | **Type 3** Inclusive Multicast route     |
 
 ### A.6 Alternative three-step CE/PE example
 

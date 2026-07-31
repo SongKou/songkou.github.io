@@ -2,6 +2,42 @@
 // imported last by main.scss, so the theme's SCSS variables are in scope here.
 
 // ---------------------------------------------------------------------------
+// Markdown tables — m10c ships no table styling at all, so without this they
+// render border-less and unpadded.
+// ---------------------------------------------------------------------------
+.post-content {
+  table {
+    // display:block keeps wide tables scrollable inside the narrow content
+    // column instead of overflowing the page horizontally.
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    margin: 1.5em 0;
+    border-collapse: collapse;
+    font-size: 0.92em;
+    line-height: 1.5;
+  }
+
+  th,
+  td {
+    border: 1px solid rgba($light-color, 0.35);
+    padding: 0.5em 0.8em;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    background: $darkest-color;
+    color: $lightest-color;
+    font-weight: 700;
+  }
+
+  tbody tr:nth-child(even) td {
+    background: rgba($darkest-color, 0.45);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Post index / table of contents — rendered by layouts/shortcodes/toc.html
 // ---------------------------------------------------------------------------
 .post-toc {

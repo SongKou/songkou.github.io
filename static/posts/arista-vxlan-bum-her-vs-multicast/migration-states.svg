@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="570" viewBox="0 0 1440 570" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="1440" height="570" fill="#ffffff"/>
+  <text x="40" y="42" font-size="20" font-weight="bold" fill="#2C2C2A">Migration states - control-plane sessions before, during, and after</text>
+  <text x="40" y="66" font-size="13" fill="#5F5E5A">The physical topology and the VXLAN data plane are identical in all three states - only the BGP sessions change</text>
+
+  <!-- ================= BEFORE ================= -->
+  <g>
+    <rect x="40" y="100" width="430" height="380" rx="12" fill="#FCFBF8" stroke="#D3D1C7" stroke-width="1"/>
+    <text x="255" y="128" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">BEFORE - AS 65000 everywhere</text>
+    <line x1="147" y1="198" x2="115" y2="340" stroke="#378ADD" stroke-width="1.6"/>
+    <line x1="147" y1="198" x2="254" y2="340" stroke="#378ADD" stroke-width="1.6"/>
+    <line x1="147" y1="198" x2="393" y2="340" stroke="#378ADD" stroke-width="1.6"/>
+    <line x1="362" y1="198" x2="115" y2="340" stroke="#378ADD" stroke-width="1.6"/>
+    <line x1="362" y1="198" x2="254" y2="340" stroke="#378ADD" stroke-width="1.6"/>
+    <line x1="362" y1="198" x2="393" y2="340" stroke="#378ADD" stroke-width="1.6"/>
+    <line x1="225" y1="174" x2="285" y2="174" stroke="#378ADD" stroke-width="1.4" stroke-dasharray="5 4"/>
+    <line x1="173" y1="364" x2="197" y2="364" stroke="#D85A30" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <rect x="70" y="150" width="155" height="48" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.2"/>
+    <text x="147" y="170" font-size="13.5" font-weight="bold" fill="#0C447C" text-anchor="middle">Spine1 (RR)</text>
+    <text x="147" y="188" font-size="10.5" fill="#185FA5" text-anchor="middle">AS 65000</text>
+    <rect x="285" y="150" width="155" height="48" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.2"/>
+    <text x="362" y="170" font-size="13.5" font-weight="bold" fill="#0C447C" text-anchor="middle">Spine2 (RR)</text>
+    <text x="362" y="188" font-size="10.5" fill="#185FA5" text-anchor="middle">AS 65000</text>
+    <rect x="58" y="340" width="115" height="48" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="115" y="360" font-size="13" font-weight="bold" fill="#085041" text-anchor="middle">Leaf1</text>
+    <text x="115" y="378" font-size="10.5" fill="#0F6E56" text-anchor="middle">AS 65000</text>
+    <rect x="197" y="340" width="115" height="48" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="254" y="360" font-size="13" font-weight="bold" fill="#085041" text-anchor="middle">Leaf2</text>
+    <text x="254" y="378" font-size="10.5" fill="#0F6E56" text-anchor="middle">AS 65000</text>
+    <rect x="336" y="340" width="115" height="48" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="393" y="360" font-size="13" font-weight="bold" fill="#085041" text-anchor="middle">Leaf3</text>
+    <text x="393" y="378" font-size="10.5" fill="#0F6E56" text-anchor="middle">AS 65000</text>
+    <text x="255" y="430" font-size="11" fill="#5F5E5A" text-anchor="middle">All leaf sessions are iBGP to the spine RRs;</text>
+    <text x="255" y="446" font-size="11" fill="#5F5E5A" text-anchor="middle">the spines also hold an iBGP session with each other</text>
+  </g>
+
+  <!-- ================= INTERIM ================= -->
+  <g>
+    <rect x="510" y="100" width="430" height="380" rx="12" fill="#FCFBF8" stroke="#D3D1C7" stroke-width="1"/>
+    <text x="725" y="128" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">INTERIM - per-leaf cutover</text>
+    <line x1="617" y1="198" x2="585" y2="340" stroke="#B03A2E" stroke-width="1.8"/>
+    <line x1="617" y1="198" x2="724" y2="340" stroke="#378ADD" stroke-width="1.6"/>
+    <line x1="617" y1="198" x2="863" y2="340" stroke="#378ADD" stroke-width="1.6"/>
+    <line x1="832" y1="198" x2="585" y2="340" stroke="#B03A2E" stroke-width="1.8"/>
+    <line x1="832" y1="198" x2="724" y2="340" stroke="#378ADD" stroke-width="1.6"/>
+    <line x1="832" y1="198" x2="863" y2="340" stroke="#378ADD" stroke-width="1.6"/>
+    <line x1="695" y1="174" x2="755" y2="174" stroke="#378ADD" stroke-width="1.4" stroke-dasharray="5 4"/>
+    <line x1="643" y1="364" x2="667" y2="364" stroke="#D85A30" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <text x="540" y="265" font-size="11" font-weight="bold" fill="#B03A2E">eBGP</text>
+    <text x="872" y="265" font-size="11" font-weight="bold" fill="#378ADD">iBGP</text>
+    <rect x="540" y="150" width="155" height="48" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.2"/>
+    <text x="617" y="170" font-size="13.5" font-weight="bold" fill="#0C447C" text-anchor="middle">Spine1 (RR)</text>
+    <text x="617" y="188" font-size="10.5" fill="#185FA5" text-anchor="middle">AS 65000</text>
+    <rect x="755" y="150" width="155" height="48" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.2"/>
+    <text x="832" y="170" font-size="13.5" font-weight="bold" fill="#0C447C" text-anchor="middle">Spine2 (RR)</text>
+    <text x="832" y="188" font-size="10.5" fill="#185FA5" text-anchor="middle">AS 65000</text>
+    <rect x="528" y="340" width="115" height="48" rx="8" fill="#E1F5EE" stroke="#B03A2E" stroke-width="2"/>
+    <text x="585" y="360" font-size="13" font-weight="bold" fill="#085041" text-anchor="middle">Leaf1</text>
+    <text x="585" y="378" font-size="10.5" font-weight="bold" fill="#B03A2E" text-anchor="middle">AS 65101</text>
+    <rect x="667" y="340" width="115" height="48" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="724" y="360" font-size="13" font-weight="bold" fill="#085041" text-anchor="middle">Leaf2</text>
+    <text x="724" y="378" font-size="10.5" fill="#0F6E56" text-anchor="middle">AS 65000</text>
+    <rect x="806" y="340" width="115" height="48" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="863" y="360" font-size="13" font-weight="bold" fill="#085041" text-anchor="middle">Leaf3</text>
+    <text x="863" y="378" font-size="10.5" fill="#0F6E56" text-anchor="middle">AS 65000</text>
+    <text x="585" y="402" font-size="10" font-weight="bold" fill="#B03A2E" text-anchor="middle">migrated</text>
+    <text x="724" y="402" font-size="10" fill="#5F5E5A" text-anchor="middle">not yet</text>
+    <text x="863" y="402" font-size="10" fill="#5F5E5A" text-anchor="middle">not yet</text>
+    <text x="725" y="430" font-size="11" fill="#5F5E5A" text-anchor="middle">Leaf1 rebuilt in AS 65101 - the spines act as RR for the</text>
+    <text x="725" y="446" font-size="11" fill="#5F5E5A" text-anchor="middle">iBGP leaves and as eBGP transit for the migrated one, at once</text>
+  </g>
+
+  <!-- ================= AFTER ================= -->
+  <g>
+    <rect x="980" y="100" width="430" height="380" rx="12" fill="#FCFBF8" stroke="#D3D1C7" stroke-width="1"/>
+    <text x="1195" y="128" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">AFTER - per-tier ASNs</text>
+    <line x1="1087" y1="198" x2="1055" y2="340" stroke="#B03A2E" stroke-width="1.8"/>
+    <line x1="1087" y1="198" x2="1194" y2="340" stroke="#B03A2E" stroke-width="1.8"/>
+    <line x1="1087" y1="198" x2="1333" y2="340" stroke="#B03A2E" stroke-width="1.8"/>
+    <line x1="1302" y1="198" x2="1055" y2="340" stroke="#B03A2E" stroke-width="1.8"/>
+    <line x1="1302" y1="198" x2="1194" y2="340" stroke="#B03A2E" stroke-width="1.8"/>
+    <line x1="1302" y1="198" x2="1333" y2="340" stroke="#B03A2E" stroke-width="1.8"/>
+    <line x1="1113" y1="364" x2="1137" y2="364" stroke="#D85A30" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <rect x="1010" y="150" width="155" height="48" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.2"/>
+    <text x="1087" y="170" font-size="13.5" font-weight="bold" fill="#0C447C" text-anchor="middle">Spine1</text>
+    <text x="1087" y="188" font-size="10.5" fill="#185FA5" text-anchor="middle">AS 65000 (keeps)</text>
+    <rect x="1225" y="150" width="155" height="48" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.2"/>
+    <text x="1302" y="170" font-size="13.5" font-weight="bold" fill="#0C447C" text-anchor="middle">Spine2</text>
+    <text x="1302" y="188" font-size="10.5" fill="#185FA5" text-anchor="middle">AS 65000 (keeps)</text>
+    <rect x="998" y="340" width="115" height="48" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="1055" y="360" font-size="13" font-weight="bold" fill="#085041" text-anchor="middle">Leaf1</text>
+    <text x="1055" y="378" font-size="10.5" font-weight="bold" fill="#B03A2E" text-anchor="middle">AS 65101</text>
+    <rect x="1137" y="340" width="115" height="48" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="1194" y="360" font-size="13" font-weight="bold" fill="#085041" text-anchor="middle">Leaf2</text>
+    <text x="1194" y="378" font-size="10.5" font-weight="bold" fill="#B03A2E" text-anchor="middle">AS 65101</text>
+    <rect x="1276" y="340" width="115" height="48" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="1333" y="360" font-size="13" font-weight="bold" fill="#085041" text-anchor="middle">Leaf3</text>
+    <text x="1333" y="378" font-size="10.5" font-weight="bold" fill="#B03A2E" text-anchor="middle">AS 65102</text>
+    <text x="1195" y="430" font-size="11" fill="#5F5E5A" text-anchor="middle">All leaf sessions eBGP; the spine-spine iBGP session</text>
+    <text x="1195" y="446" font-size="11" fill="#5F5E5A" text-anchor="middle">is removed in Phase 6</text>
+  </g>
+
+  <!-- Legend -->
+  <g font-size="11.5" fill="#444441">
+    <line x1="60" y1="525" x2="100" y2="525" stroke="#378ADD" stroke-width="1.8"/>
+    <text x="108" y="529">iBGP session</text>
+    <line x1="230" y1="525" x2="270" y2="525" stroke="#B03A2E" stroke-width="1.8"/>
+    <text x="278" y="529">eBGP session</text>
+    <line x1="400" y1="525" x2="440" y2="525" stroke="#D85A30" stroke-width="1.8" stroke-dasharray="5 4"/>
+    <text x="448" y="529">MLAG peer link</text>
+    <text x="620" y="529" fill="#5F5E5A">Spines keep AS 65000 throughout  &#183;  Border1 follows in Phase 4 (65000 &#8594; 65100)  &#183;  red AS = changed</text>
+  </g>
+</svg>

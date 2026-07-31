@@ -10,14 +10,14 @@ A VXLAN fabric has to answer one question before any host can talk: **how does B
 
 This lab builds the same Arista fabric four times, once per combination:
 
-| Section | Flood mode | Control plane | Result in this lab |
-|---|---|---|---|
-| 2 | HER (static flood list) | Flood-and-learn | Works |
-| 3 | Multicast underlay (PIM-SM) | Flood-and-learn | Config correct, data plane unsupported on vEOS-lab |
-| 4 | HER (dynamic flood list) | BGP EVPN (Type-3 IMET) | Works |
-| 4.1 | Multicast underlay | BGP EVPN (IMET + PMSI) | Config correct, same vEOS-lab limitation |
+| Section | Flood mode                  | Control plane          | Result in this lab                                 |
+|---------|-----------------------------|------------------------|----------------------------------------------------|
+| 2       | HER (static flood list)     | Flood-and-learn        | Works                                              |
+| 3       | Multicast underlay (PIM-SM) | Flood-and-learn        | Config correct, data plane unsupported on vEOS-lab |
+| 4       | HER (dynamic flood list)    | BGP EVPN (Type-3 IMET) | Works                                              |
+| 4.1     | Multicast underlay          | BGP EVPN (IMET + PMSI) | Config correct, same vEOS-lab limitation           |
 
-All four sections above only get traffic between hosts in the **same** VLAN. Section 5 covers inter-VLAN routing (IRB) — the asymmetric and symmetric models, the two prerequisites that break it silently, and the MLAG-specific configuration it needs. Section 6 closes with the theory the lab keeps bumping into: HER vs multicast trade-offs, IGMP snooping, the differences between IGMPv1/v2/v3, and when an IGMP querier is required.
+All four sections above only get traffic between hosts in the **same** VLAN. Section 5 covers inter-VLAN routing (IRB) — the asymmetric and symmetric models, the two prerequisites that break it silently, and the MLAG-specific configuration it needs. Section 6 then uses the finished fabric as the starting point of a second lab: a new iBGP EVPN site and a DCI route server are attached, and the original fabric is live-migrated from iBGP EVPN to eBGP everywhere, leaf by leaf, with packet walks for the before, interim, and final states. Section 7 closes with the theory the lab keeps bumping into: HER vs multicast trade-offs, IGMP snooping, the differences between IGMPv1/v2/v3, and when an IGMP querier is required.
 
 ## 1. Lab setup and introduction
 
@@ -68,49 +68,49 @@ The same topology as text:
 
 Loopbacks (all /32, all in OSPF area 0):
 
-| Device | Loopback0 (router-id, BGP peering) | Loopback1 (VTEP source) |
-|---|---|---|
-| Border | 10.255.255.1 | — |
-| Spine1 | 10.255.255.11 | — |
-| Spine2 | 10.255.255.12 | — |
-| Leaf1 | 10.255.255.21 | **10.255.255.112 (shared with Leaf2)** |
-| Leaf2 | 10.255.255.22 | **10.255.255.112 (shared with Leaf1)** |
-| Leaf3 | 10.255.255.23 | 10.255.255.113 |
+| Device | Loopback0 (router-id, BGP peering) | Loopback1 (VTEP source)                |
+|--------|------------------------------------|----------------------------------------|
+| Border | 10.255.255.1                       | —                                      |
+| Spine1 | 10.255.255.11                      | —                                      |
+| Spine2 | 10.255.255.12                      | —                                      |
+| Leaf1  | 10.255.255.21                      | **10.255.255.112 (shared with Leaf2)** |
+| Leaf2  | 10.255.255.22                      | **10.255.255.112 (shared with Leaf1)** |
+| Leaf3  | 10.255.255.23                      | 10.255.255.113                         |
 
 The MLAG pair shares one VTEP address on `Loopback1`. Arista requires MLAG peers to present a **single anycast VTEP IP** so that remote VTEPs see one logical endpoint and the spines load-balance to whichever peer is alive. `Loopback0` stays unique per device for router-ids and (later) BGP peering.
 
 Point-to-point links (all /31; convention: **spine side = .0, leaf/border side = .1**):
 
-| Link | Subnet | Side A | Side B |
-|---|---|---|---|
+| Link            | Subnet        | Side A          | Side B          |
+|-----------------|---------------|-----------------|-----------------|
 | Border – Spine1 | 10.0.101.0/31 | Spine1 Et5 = .0 | Border Et5 = .1 |
 | Border – Spine2 | 10.0.102.0/31 | Spine2 Et4 = .0 | Border Et4 = .1 |
-| Spine1 – Leaf1 | 10.0.11.0/31 | Spine1 Et1 = .0 | Leaf1 Et1 = .1 |
-| Spine1 – Leaf2 | 10.0.12.0/31 | Spine1 Et2 = .0 | Leaf2 Et2 = .1 |
-| Spine1 – Leaf3 | 10.0.13.0/31 | Spine1 Et4 = .0 | Leaf3 Et4 = .1 |
-| Spine2 – Leaf1 | 10.0.21.0/31 | Spine2 Et2 = .0 | Leaf1 Et2 = .1 |
-| Spine2 – Leaf2 | 10.0.22.0/31 | Spine2 Et1 = .0 | Leaf2 Et1 = .1 |
-| Spine2 – Leaf3 | 10.0.23.0/31 | Spine2 Et3 = .0 | Leaf3 Et3 = .1 |
+| Spine1 – Leaf1  | 10.0.11.0/31  | Spine1 Et1 = .0 | Leaf1 Et1 = .1  |
+| Spine1 – Leaf2  | 10.0.12.0/31  | Spine1 Et2 = .0 | Leaf2 Et2 = .1  |
+| Spine1 – Leaf3  | 10.0.13.0/31  | Spine1 Et4 = .0 | Leaf3 Et4 = .1  |
+| Spine2 – Leaf1  | 10.0.21.0/31  | Spine2 Et2 = .0 | Leaf1 Et2 = .1  |
+| Spine2 – Leaf2  | 10.0.22.0/31  | Spine2 Et1 = .0 | Leaf2 Et1 = .1  |
+| Spine2 – Leaf3  | 10.0.23.0/31  | Spine2 Et3 = .0 | Leaf3 Et3 = .1  |
 
 Overlay plan (identical on every leaf):
 
-| VLAN | VNI | Anycast SVI | Multicast group (sections 3 / 4.1) | Attached hosts |
-|---|---|---|---|---|
-| 10 | 1010 | 192.168.10.1/24 | 239.1.1.10 | VPC1 (Leaf1 Et3) |
-| 20 | 1020 | 192.168.20.1/24 | 239.1.1.20 | Switch (MLAG Po20), VPC2 (Leaf3 Et1) |
-| 30 | 1030 | 192.168.30.1/24 | 239.1.1.30 | VPC3 (Leaf3 Et2) |
+| VLAN | VNI  | Anycast SVI     | Multicast group (sections 3 / 4.1) | Attached hosts                       |
+|------|------|-----------------|------------------------------------|--------------------------------------|
+| 10   | 1010 | 192.168.10.1/24 | 239.1.1.10                         | VPC1 (Leaf1 Et3)                     |
+| 20   | 1020 | 192.168.20.1/24 | 239.1.1.20                         | Switch (MLAG Po20), VPC2 (Leaf3 Et1) |
+| 30   | 1030 | 192.168.30.1/24 | 239.1.1.30                         | VPC3 (Leaf3 Et2)                     |
 
 Shared values:
 
-| Item | Value |
-|---|---|
-| Anycast gateway MAC | 00:1c:73:00:00:01 |
-| MLAG domain | ekou_test |
-| MLAG peer VLAN / SVI | VLAN 4094, 169.254.1.1/30 (Leaf1) and 169.254.1.2/30 (Leaf2) |
-| MLAG peer-link | Port-Channel100 (Et8 on both peers) |
-| VXLAN UDP port | 4789 |
-| BGP AS (sections 4 / 4.1) | 65000 (iBGP, spines as route reflectors) |
-| Host IPs | VPC1 .10.100, Switch/Linux2 .20.100, VPC2 .20.200, VPC3 .30.103 |
+| Item                      | Value                                                           |
+|---------------------------|-----------------------------------------------------------------|
+| Anycast gateway MAC       | 00:1c:73:00:00:01                                               |
+| MLAG domain               | ekou_test                                                       |
+| MLAG peer VLAN / SVI      | VLAN 4094, 169.254.1.1/30 (Leaf1) and 169.254.1.2/30 (Leaf2)    |
+| MLAG peer-link            | Port-Channel100 (Et8 on both peers)                             |
+| VXLAN UDP port            | 4789                                                            |
+| BGP AS (sections 4 / 4.1) | 65000 (iBGP, spines as route reflectors)                        |
+| Host IPs                  | VPC1 .10.100, Switch/Linux2 .20.100, VPC2 .20.200, VPC3 .30.103 |
 
 VLAN 20 is the interesting one: it is stretched between the MLAG logical VTEP and Leaf3, so any BUM scheme has to carry its ARP/broadcast across the fabric before `Switch` and VPC2 can exchange a single ping.
 
@@ -1286,16 +1286,16 @@ Arista implements both models from the IETF EVPN IRB draft, and the [EOS Integra
 
 **Symmetric IRB** — "the ingress VTEP routes the traffic between the local subnet and the IP-VRF, which both VTEPs are a member of; the egress VTEP then routes the frame from the IP-VRF to the destination subnet." That IP-VRF has its own transit **L3 VNI**.
 
-| | Asymmetric IRB | Symmetric IRB |
-|---|---|---|
-| Routing happens | ingress VTEP only | both ingress and egress VTEP |
-| VNI used in flight | the **destination** VLAN's L2 VNI | a dedicated **L3 VNI** (IP-VRF transit) |
-| Every leaf must host | **all** tenant VLANs, VNIs and anycast SVIs | only its **locally attached** subnets |
-| Every leaf must learn | all tenant MACs **and** ARP bindings, everywhere | local hosts + remote prefixes |
-| Tenant VRF required | no — works in the default VRF | yes |
-| Control plane | works with flood-and-learn **or** EVPN | **EVPN only** |
-| Scales | poorly — state grows with the whole tenant | well — state grows with what you actually host |
-| Good for | small fabrics, labs, "every VLAN is everywhere" | production multi-tenant fabrics |
+|                       | Asymmetric IRB                                   | Symmetric IRB                                  |
+|-----------------------|--------------------------------------------------|------------------------------------------------|
+| Routing happens       | ingress VTEP only                                | both ingress and egress VTEP                   |
+| VNI used in flight    | the **destination** VLAN's L2 VNI                | a dedicated **L3 VNI** (IP-VRF transit)        |
+| Every leaf must host  | **all** tenant VLANs, VNIs and anycast SVIs      | only its **locally attached** subnets          |
+| Every leaf must learn | all tenant MACs **and** ARP bindings, everywhere | local hosts + remote prefixes                  |
+| Tenant VRF required   | no — works in the default VRF                    | yes                                            |
+| Control plane         | works with flood-and-learn **or** EVPN           | **EVPN only**                                  |
+| Scales                | poorly — state grows with the whole tenant       | well — state grows with what you actually host |
+| Good for              | small fabrics, labs, "every VLAN is everywhere"  | production multi-tenant fabrics                |
 
 Arista's wording on the asymmetric requirement is worth quoting because it is the constraint people trip over: "the VTEP needs to be member of all the tenant's subnets/VNI and have an associated SVI with anycast IP for all the subnets, and this will be required on all VTEPs participating in the routing functionality for the tenant."
 
@@ -1392,10 +1392,10 @@ show ip route 10.255.255.110       ! on a spine: ECMP to all three leaves
 Updated addressing table for this section:
 
 | Device | Loopback0 (router-id) | Loopback1 primary (VTEP) | Loopback1 secondary (vVTEP) |
-|---|---|---|---|
-| Leaf1 | 10.255.255.21 | 10.255.255.112 (shared) | 10.255.255.110 |
-| Leaf2 | 10.255.255.22 | 10.255.255.112 (shared) | 10.255.255.110 |
-| Leaf3 | 10.255.255.23 | 10.255.255.113 | 10.255.255.110 |
+|--------|-----------------------|--------------------------|-----------------------------|
+| Leaf1  | 10.255.255.21         | 10.255.255.112 (shared)  | 10.255.255.110              |
+| Leaf2  | 10.255.255.22         | 10.255.255.112 (shared)  | 10.255.255.110              |
+| Leaf3  | 10.255.255.23         | 10.255.255.113           | 10.255.255.110              |
 
 ### 5.4 MLAG: the shared router MAC
 
@@ -1890,11 +1890,11 @@ vpc1> ping 192.168.20.200
 
 VPCS sends with TTL 64. It arrived at 62, so the packet was **routed twice** — once at the ingress VTEP and once at the egress VTEP. That is the definition of symmetric.
 
-| Path | Routing hops | TTL at destination |
-|---|---|---|
-| Bridged, same subnet | 0 | unchanged |
-| Asymmetric IRB | 1 (ingress only) | 63 |
-| Symmetric IRB | 2 (ingress + egress) | **62** |
+| Path                 | Routing hops         | TTL at destination |
+|----------------------|----------------------|--------------------|
+| Bridged, same subnet | 0                    | unchanged          |
+| Asymmetric IRB       | 1 (ingress only)     | 63                 |
+| Symmetric IRB        | 2 (ingress + egress) | **62**             |
 
 Spines never affect this count. They route the *outer* VXLAN header, so the inner packet's TTL passes through untouched no matter how many spine hops the fabric has. The same-subnet case is a useful control: a ping across the stretched VLAN 20 arrives with its TTL completely unchanged, because that path is pure bridging.
 
@@ -1940,14 +1940,14 @@ Asymmetric IRB **cannot** survive this — the ingress VTEP must route into VLAN
 
 Summary of what each check shows:
 
-| Check | Asymmetric | Symmetric |
-|---|---|---|
-| TTL at destination | 63 | 62 |
-| `show vxlan vni` | L2 VNIs only | L2 VNIs + VRF VNI |
-| `show interfaces Vxlan1` | no VRF mapping | `Static VRF to VNI mapping` present |
-| EVPN Type-5 routes | none | present, with L3 VNI + Router MAC |
-| VNI on the wire, inter-subnet | destination L2 VNI | L3 VNI |
-| Survives deleting the destination SVI | no | yes |
+| Check                                 | Asymmetric         | Symmetric                           |
+|---------------------------------------|--------------------|-------------------------------------|
+| TTL at destination                    | 63                 | 62                                  |
+| `show vxlan vni`                      | L2 VNIs only       | L2 VNIs + VRF VNI                   |
+| `show interfaces Vxlan1`              | no VRF mapping     | `Static VRF to VNI mapping` present |
+| EVPN Type-5 routes                    | none               | present, with L3 VNI + Router MAC   |
+| VNI on the wire, inter-subnet         | destination L2 VNI | L3 VNI                              |
+| Survives deleting the destination SVI | no                 | yes                                 |
 
 ### 5.8 Which model should you use
 
@@ -1961,25 +1961,4964 @@ The one case that still justifies asymmetric is a genuinely small, single-tenant
 
 One honest caveat about reproducing section 5.6 in EVE-NG: VXLAN routing on vEOS-lab is not something Arista publishes a support matrix for. Community labs and the netlab project's EVPN platform matrix report both asymmetric and symmetric IRB working on virtual EOS images, and unlike the multicast data plane in section 3 there is no known blocker. Some `show vxlan config-sanity` platform-dependent rows may report VXLAN routing as "not enabled" on a software image even when it is forwarding correctly, so trust the ping and the route table over that row. On real hardware there are platform prerequisites the virtual image does not have — R and R2 series need `hardware tcam profile vxlan-routing`, and Trident2 and some Tomahawk platforms need `channel-group recirculation` — so check the VXLAN configuration guide for your exact model before deploying this.
 
-## 6. Summary: HER vs multicast, IGMP snooping, versions, and queriers
+## 6. Migration lab: iBGP EVPN to eBGP everywhere, with a second site attached
 
-### 6.1 HER vs multicast underlay
+Everything up to here runs as one fabric with one AS: 65000 everywhere, spines as route reflectors, OSPF underlay — Model A from the [architecture post's section 4.1](/posts/vxlan-evpn-architecture/#41-ibgp-overlay-with-an-igp-underlay-versus-ebgp-everywhere). This section converts that fabric to Model B — eBGP everywhere — **live**, one leaf at a time.
+
+To make the exercise honest, the fabric first stops being alone. A second, smaller fabric running its own iBGP EVPN is attached through a DCI route server, VLANs 10 and 20 are stretched across, and only then does the migration start — so every step has to preserve not just intra-fabric traffic but a working inter-site overlay. The end state is the eBGP-everywhere site of the architecture post's [section 12.3](/posts/vxlan-evpn-architecture/#123-multi-fabric-and-multi-site): per-leaf ASNs, a spine transit AS, a border with its own ASN, a route server in the middle, and an iBGP site on the far side that never notices any of it.
+
+One honest scope note before building: this is the **generic, single-overlay-domain** version of a two-site design. vEOS-lab has no VXLAN stitching or Cisco-style border-gateway re-origination, so the borders here are EVPN *control-plane* transit hops, VXLAN tunnels run end to end between leaf VTEPs, and the VTEP loopbacks therefore must cross the DCI. The [architecture post's section 13](/posts/vxlan-evpn-architecture/#13-vxlan-multi-site-architecture) covers what a true Multi-Site BGW adds on top (VIP next-hop rewrite, site-scoped RDs, per-site BUM domains); everything else in this lab — the ASN plan, the session shapes, the next-hop discipline — is the same design.
+
+### 6.1 Background and design
+
+#### What is being simulated
+
+The scenario is the common enterprise one: a production fabric built years ago as iBGP + RR needs to become eBGP everywhere (per-rack ASNs, one routing protocol, per-session policy hooks), and it cannot be rebuilt from scratch because it is carrying traffic — including traffic to a second site. The migration follows a simple contract, which the packet walks in 6.2 then verify state by state:
+
+> **VTEP IPs, VNIs, RTs, and the VXLAN data plane never change. Only the control plane that distributes the routes changes, one drained leaf at a time.**
+
+![Before, interim, and after states of the iBGP to eBGP migration](/posts/arista-vxlan-bum-her-vs-multicast/migration-states.svg)
+
+The spines are the pivot: during the interim they act as route reflectors for the not-yet-migrated iBGP leaves **and** as eBGP transit for the migrated ones, at the same time. Since iBGP-learned routes are always advertised to eBGP peers and vice versa, the two populations exchange EVPN routes through the whole migration with no redistribution anywhere.
+
+#### ASN design and assignment
+
+| Device                | Before | After                 | Why                                                                                                      |
+|-----------------------|--------|-----------------------|----------------------------------------------------------------------------------------------------------|
+| Spine1, Spine2        | 65000  | **65000 (unchanged)** | Spines keep the legacy fabric AS and become the transit tier — no spine renumber, no flag day            |
+| Leaf1, Leaf2          | 65000  | **65101** (shared)    | One ASN per MLAG pair — Arista best practice; both members share the anycast VTEP, so they share the ASN |
+| Leaf3                 | 65000  | **65102**             | Standalone leaf, own ASN                                                                                 |
+| Border1               | 65000  | **65100**             | Migrates last; its ASN is what the rest of the world sees as "site A" after the cutover                  |
+| DCI                   | 65099  | 65099                 | EVPN route server between the sites; pure control-plane transit, no VXLAN                                |
+| Border2, SP31, Leaf31 | 65030  | 65030                 | Site B is one AS inside, iBGP with SP31 as RR — and stays that way forever                               |
+
+Two properties of this plan are worth noticing. First, the migration never renumbers the spines or the DCI, so the blast radius of every step is exactly one device. Second, the AS path becomes self-documenting: after migration, a site A host route arrives at Border2 as `65099 65100 65000 65101` — route server, border tier, spine tier, leaf — the same readable chain as the architecture post's worked example.
+
+#### IP addressing design and assignment
+
+Site A keeps every address it already has (section 1.1). The new devices extend the same conventions — loopbacks /32, point-to-point links /31, "spine side = .0" — with site B and the DCI in their own easily-recognized blocks:
+
+Loopbacks:
+
+| Device  | Loopback0 (router-id, BGP peering) | Loopback1 (VTEP source) |
+|---------|------------------------------------|-------------------------|
+| Border1 | 10.255.255.1 (existing)            | — (not a VTEP)          |
+| DCI     | 10.255.99.1                        | —                       |
+| Border2 | 10.255.31.1                        | —                       |
+| SP31    | 10.255.31.11                       | —                       |
+| Leaf31  | 10.255.31.21                       | 10.255.31.113           |
+
+New point-to-point /31s (DCI/spine side = .0, border/leaf side = .1):
+
+| Link           | Subnet         | Side A        | Side B           |
+|----------------|----------------|---------------|------------------|
+| Border1 – DCI  | 10.0.103.0/31  | DCI Et3 = .0  | Border1 Et3 = .1 |
+| DCI – Border2  | 10.0.104.0/31  | DCI Et2 = .0  | Border2 Et2 = .1 |
+| Border2 – SP31 | 10.31.101.0/31 | SP31 Et1 = .0 | Border2 Et1 = .1 |
+| SP31 – Leaf31  | 10.31.11.0/31  | SP31 Et3 = .0 | Leaf31 Et3 = .1  |
+
+Overlay in site B — a deliberate subset of site A's, with the **same VNIs and the same static route-targets**:
+
+| VLAN | VNI                      | Anycast SVI (same MAC 00:1c:73:00:00:01) | Route-target | Site B host                                              |
+|------|--------------------------|------------------------------------------|--------------|----------------------------------------------------------|
+| 10   | 1010                     | 192.168.10.1/24                          | 1:10         | R_VPC1 = 192.168.10.150                                  |
+| 20   | 1020                     | 192.168.20.1/24                          | 1:20         | R_VPC2 = 192.168.20.150                                  |
+| —    | 50000 (L3, VRF TENANT_A) | —                                        | 1:50000      | routed reachability to VLAN 30, which is *not* stretched |
+
+This lab's static RTs turn out to be the single luckiest early decision in the whole post. They are the architecture post's "explicit global RTs" option: because `1:10` does not embed an ASN, the two sites import each other's routes with zero rewriting — and, as 6.3 shows, the migration cannot break route import by changing ASNs either.
+
+#### Topology with addressing and ASNs
+
+![Two-site migration lab topology with IP addressing and before/after ASN assignment](/posts/arista-vxlan-bum-her-vs-multicast/multisite-migration-topology.svg)
+
+Site A's internal /31s, MLAG, hosts, and overlay definitions are unchanged from section 1.1. `Border` from the earlier sections is renamed **Border1** and promoted from pure underlay router (and erstwhile multicast RP) to site A's border: it joins the EVPN overlay as an RR client of the spines and speaks eBGP to the DCI. If you kept the section 3/4.1 multicast config on it, remove PIM first — its RP days are over.
+
+### 6.2 Initial state: bring-up and packet walks
+
+#### Bring-up configuration
+
+Five devices need configuration to reach the initial state (all-iBGP sites, DCI in the middle). Everything below is additive — nothing on Leaf1/Leaf2/Leaf3 changes yet.
+
+**Spine1 and Spine2** — one new RR client each, Border1:
+
+```text
+router bgp 65000
+   neighbor 10.255.255.1 peer group EVPN-RRC
+```
+
+**Border1** — the DCI-facing interface, an EVPN session into its own fabric (iBGP, as an RR client), an eBGP underlay + overlay toward the DCI, and mutual redistribution so each side's VTEP loopbacks reach the other side. `next-hop-unchanged` appears here for the first time — Border1 re-advertises leaf routes to the DCI, and without that knob it would rewrite their next hop to itself, a router with no VTEP:
+
+```text
+interface Ethernet3
+   no switchport
+   ip address 10.0.103.1/31
+!
+router ospf 1
+   redistribute bgp
+!
+router bgp 65000
+   router-id 10.255.255.1
+   no bgp default ipv4-unicast
+   !
+   neighbor EVPN peer group                  ! site-internal overlay, iBGP to both spines
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN send-community extended
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   !
+   neighbor 10.0.103.0 remote-as 65099       ! DCI, underlay (directly connected /31)
+   !
+   neighbor 10.255.99.1 remote-as 65099      ! DCI, overlay (loopback-to-loopback)
+   neighbor 10.255.99.1 update-source Loopback0
+   neighbor 10.255.99.1 ebgp-multihop 3
+   neighbor 10.255.99.1 send-community extended
+   !
+   address-family ipv4
+      neighbor 10.0.103.0 activate
+      network 10.255.255.1/32
+      redistribute ospf                      ! site A loopbacks (incl. VTEPs .112/.113) -> DCI
+   !
+   address-family evpn
+      neighbor EVPN activate
+      neighbor 10.255.99.1 activate
+      neighbor 10.255.99.1 next-hop-unchanged
+```
+
+**DCI** — the route server. It carries EVPN between the borders and IPv4 between the underlays, and forwards the inter-site VXLAN packets — but it has no `interface Vxlan1`, no VRFs, and imports nothing. On EOS no extra knob is needed for that: unlike NX-OS (which needs `retain route-target all` on RT-less transit nodes), EOS keeps and propagates EVPN routes it has no local import for. What it *does* need, on both sessions, is `next-hop-unchanged`:
+
+```text
+interface Ethernet2
+   no switchport
+   ip address 10.0.104.0/31
+!
+interface Ethernet3
+   no switchport
+   ip address 10.0.103.0/31
+!
+interface Loopback0
+   ip address 10.255.99.1/32
+!
+ip routing
+!
+router bgp 65099
+   router-id 10.255.99.1
+   no bgp default ipv4-unicast
+   !
+   neighbor 10.0.103.1 remote-as 65000       ! Border1, underlay
+   neighbor 10.0.104.1 remote-as 65030       ! Border2, underlay
+   !
+   neighbor 10.255.255.1 remote-as 65000     ! Border1, overlay
+   neighbor 10.255.255.1 update-source Loopback0
+   neighbor 10.255.255.1 ebgp-multihop 3
+   neighbor 10.255.255.1 send-community extended
+   neighbor 10.255.31.1 remote-as 65030      ! Border2, overlay
+   neighbor 10.255.31.1 update-source Loopback0
+   neighbor 10.255.31.1 ebgp-multihop 3
+   neighbor 10.255.31.1 send-community extended
+   !
+   address-family ipv4
+      neighbor 10.0.103.1 activate
+      neighbor 10.0.104.1 activate
+      network 10.255.99.1/32
+   !
+   address-family evpn
+      neighbor 10.255.255.1 activate
+      neighbor 10.255.255.1 next-hop-unchanged
+      neighbor 10.255.31.1 activate
+      neighbor 10.255.31.1 next-hop-unchanged
+```
+
+**Border2** — Border1's mirror image in site B: OSPF + iBGP inward, eBGP to the DCI outward, same redistribution, same `next-hop-unchanged`:
+
+```text
+interface Ethernet1
+   no switchport
+   ip address 10.31.101.1/31
+   ip ospf network point-to-point
+   ip ospf area 0.0.0.0
+!
+interface Ethernet2
+   no switchport
+   ip address 10.0.104.1/31
+!
+interface Loopback0
+   ip address 10.255.31.1/32
+   ip ospf area 0.0.0.0
+!
+ip routing
+!
+router ospf 1
+   router-id 10.255.31.1
+   max-lsa 12000
+   redistribute bgp
+!
+router bgp 65030
+   router-id 10.255.31.1
+   no bgp default ipv4-unicast
+   !
+   neighbor EVPN peer group                  ! site-internal overlay, iBGP to SP31 (RR)
+   neighbor EVPN remote-as 65030
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN send-community extended
+   neighbor 10.255.31.11 peer group EVPN
+   !
+   neighbor 10.0.104.0 remote-as 65099       ! DCI, underlay
+   !
+   neighbor 10.255.99.1 remote-as 65099      ! DCI, overlay
+   neighbor 10.255.99.1 update-source Loopback0
+   neighbor 10.255.99.1 ebgp-multihop 3
+   neighbor 10.255.99.1 send-community extended
+   !
+   address-family ipv4
+      neighbor 10.0.104.0 activate
+      network 10.255.31.1/32
+      redistribute ospf                      ! site B loopbacks (incl. VTEP .31.113) -> DCI
+   !
+   address-family evpn
+      neighbor EVPN activate
+      neighbor 10.255.99.1 activate
+      neighbor 10.255.99.1 next-hop-unchanged
+```
+
+**SP31** — site B's one spine, configured exactly like Spine1 in section 4, scaled down to two clients:
+
+```text
+interface Ethernet1
+   no switchport
+   ip address 10.31.101.0/31
+   ip ospf network point-to-point
+   ip ospf area 0.0.0.0
+!
+interface Ethernet3
+   no switchport
+   ip address 10.31.11.0/31
+   ip ospf network point-to-point
+   ip ospf area 0.0.0.0
+!
+interface Loopback0
+   ip address 10.255.31.11/32
+   ip ospf area 0.0.0.0
+!
+ip routing
+!
+router ospf 1
+   router-id 10.255.31.11
+   max-lsa 12000
+!
+router bgp 65030
+   router-id 10.255.31.11
+   no bgp default ipv4-unicast
+   !
+   neighbor EVPN-RRC peer group
+   neighbor EVPN-RRC remote-as 65030
+   neighbor EVPN-RRC update-source Loopback0
+   neighbor EVPN-RRC send-community extended
+   neighbor EVPN-RRC route-reflector-client
+   neighbor 10.255.31.1 peer group EVPN-RRC
+   neighbor 10.255.31.21 peer group EVPN-RRC
+   !
+   address-family evpn
+      neighbor EVPN-RRC activate
+```
+
+**Leaf31** — a complete standalone VTEP in the section 4 + 5.6 pattern: VLANs 10 and 20, anycast gateways, symmetric IRB in `TENANT_A`, static RTs identical to site A's. VLAN 30 is deliberately absent — R_VPC2 still reaches VPC3 routed, through the L3 VNI, which is exactly the point of symmetric IRB:
+
+```text
+vlan 10,20
+!
+ip virtual-router mac-address 00:1c:73:00:00:01
+!
+vrf instance TENANT_A
+!
+ip routing
+ip routing vrf TENANT_A
+!
+interface Ethernet1
+   switchport access vlan 10
+!
+interface Ethernet2
+   switchport access vlan 20
+!
+interface Ethernet3
+   no switchport
+   ip address 10.31.11.1/31
+   ip ospf network point-to-point
+   ip ospf area 0.0.0.0
+!
+interface Loopback0
+   ip address 10.255.31.21/32
+   ip ospf area 0.0.0.0
+!
+interface Loopback1
+   ip address 10.255.31.113/32
+   ip ospf area 0.0.0.0
+!
+interface Vlan10
+   vrf TENANT_A
+   ip address virtual 192.168.10.1/24
+   no autostate
+!
+interface Vlan20
+   vrf TENANT_A
+   ip address virtual 192.168.20.1/24
+   no autostate
+!
+interface Vxlan1
+   vxlan source-interface Loopback1
+   vxlan udp-port 4789
+   vxlan vlan 10 vni 1010
+   vxlan vlan 20 vni 1020
+   vxlan vrf TENANT_A vni 50000
+!
+router ospf 1
+   router-id 10.255.31.21
+   max-lsa 12000
+!
+router bgp 65030
+   router-id 10.255.31.21
+   no bgp default ipv4-unicast
+   !
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65030
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN send-community extended
+   neighbor 10.255.31.11 peer group EVPN
+   !
+   vlan 10
+      rd 10.255.31.21:10
+      route-target both 1:10
+      redistribute learned
+   vlan 20
+      rd 10.255.31.21:20
+      route-target both 1:20
+      redistribute learned
+   !
+   vrf TENANT_A
+      rd 10.255.31.21:50000
+      route-target import evpn 1:50000
+      route-target export evpn 1:50000
+      redistribute connected
+   !
+   address-family evpn
+      neighbor EVPN activate
+```
+
+The hosts: `R_VPC1` gets 192.168.10.150/24 with gateway 192.168.10.1, `R_VPC2` gets 192.168.20.150/24 with gateway 192.168.20.1.
+
+Bring-up order and checks — underlay first, overlay second, data plane last:
+
+```text
+show ip bgp summary                    ! on DCI: both underlay sessions Established
+show ip route 10.255.31.113            ! on Leaf1: site B VTEP present as OSPF external via Border1
+show ip route 10.255.255.112           ! on Leaf31: site A anycast VTEP present via Border2
+show bgp evpn summary                  ! on DCI and both borders: overlay sessions Established
+show bgp evpn route-type imet          ! on Leaf1: Leaf31's IMET (10.255.31.113) present
+show vxlan vtep                        ! on Leaf1: flood list now includes 10.255.31.113
+show vxlan address-table               ! after first pings: R_VPC1/R_VPC2 MACs behind 10.255.31.113
+```
+
+Then prove the overlay end to end from the site B side: R_VPC1 → VPC1 (192.168.10.10) is stretched-VLAN bridging across the DCI; R_VPC1 → VPC2, VPC3, and Linux2 (192.168.20.20, 192.168.30.30, 192.168.20.100) are routed through L3 VNI 50000 — including into VLAN 30, which site B does not carry at all. One production note this lab dodges: vEOS-lab tolerates the default MTU for these small pings, but a real DCI path needs the same ~50-byte VXLAN headroom as the fabric links.
+
+#### Verification captures: the initial state, as built
+
+The captures below are from the actual bring-up, kept in full — this is the baseline every migration phase later diffs against, and half their value is being able to come back and compare field by field. One addressing note for reading them: in the current build of the lab the VPCS hosts answer at **192.168.10.10 (VPC1), 192.168.20.20 (VPC2), and 192.168.30.30 (VPC3)** — the section 1–5 captures were taken when they sat at .10.100/.20.200/.30.103 — while Switch/Linux2 keeps 192.168.20.100. The topology diagram above uses the current addresses.
+
+**R_VPC1** — address it, save, and test outward: gateway, same-VLAN across the DCI, routed across the DCI:
+
+```text
+Press '?' to get help.
+
+VPCS> ip 192.168.10.150/24 192.168.10.1
+Checking for duplicate address...
+VPCS : 192.168.10.150 255.255.255.0 gateway 192.168.10.1
+
+VPCS>
+VPCS>
+VPCS>
+VPCS> save
+Saving startup configuration to startup.vpc
+.  done
+
+VPCS> ping 192.168.10.1
+
+84 bytes from 192.168.10.1 icmp_seq=1 ttl=64 time=6.709 ms
+84 bytes from 192.168.10.1 icmp_seq=2 ttl=64 time=2.623 ms
+84 bytes from 192.168.10.1 icmp_seq=3 ttl=64 time=2.454 ms
+^C
+VPCS> ping 192.168.10.10
+
+84 bytes from 192.168.10.10 icmp_seq=1 ttl=64 time=213.990 ms
+84 bytes from 192.168.10.10 icmp_seq=2 ttl=64 time=87.502 ms
+84 bytes from 192.168.10.10 icmp_seq=3 ttl=64 time=50.367 ms
+^C
+VPCS> set pcname r_vpc1_v10
+
+r_vpc1_v10> save
+Saving startup configuration to startup.vpc
+.  done
+
+r_vpc1_v10> ping 192.168.20.20
+
+84 bytes from 192.168.20.20 icmp_seq=1 ttl=62 time=649.400 ms
+84 bytes from 192.168.20.20 icmp_seq=2 ttl=62 time=316.464 ms
+84 bytes from 192.168.20.20 icmp_seq=3 ttl=62 time=46.882 ms
+^C
+r_vpc1_v10> ping 192.168.30.30
+
+84 bytes from 192.168.30.30 icmp_seq=1 ttl=62 time=216.531 ms
+84 bytes from 192.168.30.30 icmp_seq=2 ttl=62 time=147.704 ms
+84 bytes from 192.168.30.30 icmp_seq=3 ttl=62 time=20.053 ms
+^C
+r_vpc1_v10> ping 192.168.20.100
+
+84 bytes from 192.168.20.100 icmp_seq=1 ttl=253 time=87.011 ms
+84 bytes from 192.168.20.100 icmp_seq=2 ttl=253 time=127.444 ms
+^C
+r_vpc1_v10>
+```
+
+A second round from the same R_VPC1 console, repeating the reachability set:
+
+```text
+VPCS> ip 192.168.10.150/24 192.168.10.1
+Checking for duplicate address...
+VPCS : 192.168.10.150 255.255.255.0 gateway 192.168.10.1
+
+VPCS>
+VPCS>
+VPCS>
+VPCS> save
+Saving startup configuration to startup.vpc
+.  done
+
+VPCS> ping 192.168.10.1
+
+84 bytes from 192.168.10.1 icmp_seq=1 ttl=64 time=6.709 ms
+84 bytes from 192.168.10.1 icmp_seq=2 ttl=64 time=2.623 ms
+84 bytes from 192.168.10.1 icmp_seq=3 ttl=64 time=2.454 ms
+^C
+
+r_vpc1_v10> ping 192.168.20.100
+
+192.168.20.100 icmp_seq=1 timeout
+84 bytes from 192.168.20.100 icmp_seq=2 ttl=253 time=838.770 ms
+84 bytes from 192.168.20.100 icmp_seq=3 ttl=253 time=38.979 ms
+^C
+r_vpc1_v10> ping 192.168.20.20
+
+84 bytes from 192.168.20.20 icmp_seq=1 ttl=62 time=533.911 ms
+84 bytes from 192.168.20.20 icmp_seq=2 ttl=62 time=119.618 ms
+^C
+r_vpc1_v10> ping 192.168.10.10
+
+84 bytes from 192.168.10.10 icmp_seq=1 ttl=64 time=119.114 ms
+^C
+r_vpc1_v10> ping 192.168.30.30
+
+192.168.30.30 icmp_seq=1 timeout
+192.168.30.30 icmp_seq=2 timeout
+84 bytes from 192.168.30.30 icmp_seq=3 ttl=62 time=119.909 ms
+84 bytes from 192.168.30.30 icmp_seq=4 ttl=62 time=389.629 ms
+84 bytes from 192.168.30.30 icmp_seq=5 ttl=62 time=71.838 ms
+
+r_vpc1_v10>
+```
+
+The TTLs tell the whole forwarding story on their own. `ttl=64` to 192.168.10.10: same VLAN, bridged end to end across the DCI — VPCS starts at 64 and no router touched it. `ttl=62` to .20.20 and .30.30: exactly two routed hops (ingress leaf SVI, egress leaf) — symmetric IRB through L3 VNI 50000, including into VLAN 30 which Leaf31 does not even carry. `ttl=253` to Linux2: an IOS-based host starting at 255, again two routed hops away. The first-packet timeouts are ARP glean and route-programming warm-up on first contact — normal, and gone on the retry.
+
+**Leaf31** — one iBGP session to its RR, and the full EVPN view of both sites:
+
+```text
+Leaf31(config)#show bgp summary
+BGP summary information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Neighbor              AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------ ----------- ------------- ----------------------- -------------- ---------- ----------
+10.255.31.11       65030 Established   L2VPN EVPN              Negotiated             21         21
+```
+
+```text
+Leaf31(config)#show bgp evpn route-type mac-ip
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 -                     -       -       0       i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 -                     -       -       0       i
+ * >      RD: 10.255.31.21:20 mac-ip 0050.7966.6811
+                                 -                     -       -       0       i
+ * >      RD: 10.255.31.21:20 mac-ip 0050.7966.6811 192.168.20.150
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+```
+
+Read this table against walk 1 and every claim in it is visible. Every site A route carries AS path `65099 65000` — the DCI and site A ASNs, exactly as predicted — and a next hop of **10.255.255.112 or .113**, the real leaf VTEPs: three eBGP hops away and the next hop is still untouched, which is `next-hop-unchanged` doing its job on Border1, the DCI, and Border2's inbound iBGP default. The MLAG pair shows up as the same MAC advertised twice under RDs `...21:*` and `...22:*` with one shared next hop. And `Or-ID: 10.255.31.1` is SP31's reflection bookkeeping — the route entered site B at Border2 and was reflected, not re-originated.
+
+```text
+Leaf31(config)#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+```
+
+The Type-5 table is why R_VPC1 can ping into VLAN 30: `192.168.30.0/24` arrives from three site A VTEPs even though Leaf31 has no VLAN 30 — routed reachability through the L3 VNI, no stretched bridge domain required.
+
+```text
+Leaf31(config)#show bgp evpn route-type imet
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:10 imet 10.255.31.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1
+```
+
+The IMET view is the HER flood machinery: Leaf31's own Type-3s for VNIs 1010/1020, and the site A VTEPs advertising all three VNIs. The `:30` rows sit in the BGP table like everything else, but with no VNI 1030 configured on Leaf31 only 1010 and 1020 program flood-list entries — BUM for the two stretched VLANs crosses the DCI, VLAN 30's does not.
+
+```text
+Leaf31#show bgp evpn route-type mac-ip detail
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+BGP routing table entry for mac-ip 0050.7966.6802, Route Distinguisher: 10.255.255.21:10
+ Paths: 1 available
+  65099 65000
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11
+      Extended Community: Route-Target-AS:1:10 TunnelEncap:tunnelTypeVxlan
+      VNI: 1010 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6802, Route Distinguisher: 10.255.255.22:10
+ Paths: 1 available
+  65099 65000
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11
+      Extended Community: Route-Target-AS:1:10 TunnelEncap:tunnelTypeVxlan
+      VNI: 1010 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.21:10
+ Paths: 1 available
+  65099 65000
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac0
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.22:10
+ Paths: 1 available
+  65099 65000
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac0
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6807, Route Distinguisher: 10.255.255.23:20
+ Paths: 1 available
+  65099 65000
+    10.255.255.113 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11
+      Extended Community: Route-Target-AS:1:20 TunnelEncap:tunnelTypeVxlan
+      VNI: 1020 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6807 192.168.20.20, Route Distinguisher: 10.255.255.23:20
+ Paths: 1 available
+  65099 65000
+    10.255.255.113 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11
+      Extended Community: Route-Target-AS:1:20 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac1
+      VNI: 1020 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.680b, Route Distinguisher: 10.255.255.23:30
+ Paths: 1 available
+  65099 65000
+    10.255.255.113 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11
+      Extended Community: Route-Target-AS:1:30 TunnelEncap:tunnelTypeVxlan
+      VNI: 1030 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.680b 192.168.30.30, Route Distinguisher: 10.255.255.23:30
+ Paths: 1 available
+  65099 65000
+    10.255.255.113 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11
+      Extended Community: Route-Target-AS:1:30 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac1
+      VNI: 1030 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6810, Route Distinguisher: 10.255.31.21:10
+ Paths: 1 available
+  Local
+    - from - (0.0.0.0)
+      Origin IGP, metric -, localpref -, weight 0, tag 0, valid, local, best
+      Extended Community: Route-Target-AS:1:10 TunnelEncap:tunnelTypeVxlan
+      VNI: 1010 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6810 192.168.10.150, Route Distinguisher: 10.255.31.21:10
+ Paths: 1 available
+  Local
+    - from - (0.0.0.0)
+      Origin IGP, metric -, localpref -, weight 0, tag 0, valid, local, best
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 5000.0008.0000, Route Distinguisher: 10.255.255.21:20
+ Paths: 1 available
+  65099 65000
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11
+      Extended Community: Route-Target-AS:1:20 TunnelEncap:tunnelTypeVxlan
+      VNI: 1020 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 5000.0008.0000, Route Distinguisher: 10.255.255.22:20
+ Paths: 1 available
+  65099 65000
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11
+      Extended Community: Route-Target-AS:1:20 TunnelEncap:tunnelTypeVxlan
+      VNI: 1020 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 5000.0008.0001, Route Distinguisher: 10.255.255.21:20
+ Paths: 1 available
+  65099 65000
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11
+      Extended Community: Route-Target-AS:1:20 TunnelEncap:tunnelTypeVxlan
+      VNI: 1020 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 5000.0008.0001, Route Distinguisher: 10.255.255.22:20
+ Paths: 1 available
+  65099 65000
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11
+      Extended Community: Route-Target-AS:1:20 TunnelEncap:tunnelTypeVxlan
+      VNI: 1020 ESI: 0000:0000:0000:0000:0000
+```
+
+The detail view is the architecture-post section 7.4 story on a live Arista switch: MAC-only Type-2s carry one RT (`1:10` — the bridge domain), MAC/IP Type-2s carry **two** (`1:10` and `1:50000` — bridge domain plus tenant VRF), alongside `TunnelEncap:tunnelTypeVxlan`, the router-MAC community, and both VNIs (`VNI: 1010 L3 VNI: 50000`). Those are the fields the migration must not disturb — and the RTs are the static ASN-free values that make Phase 1 a verification instead of a project. One contrast worth pinning here: in the *other* cross-site RT design — auto-derived `ASN:VNI` RTs plus `rewrite-evpn-rt-asn`, the NX-OS-idiomatic pattern — this RT would be rewritten at every eBGP hop and arrive looking locally derived; the [architecture post's section 12.3](/posts/vxlan-evpn-architecture/#123-multi-fabric-and-multi-site) traces that variant hop by hop. This lab's RTs contain no ASN and are configured identically in both sites, so they cross the DCI byte-identical while only the AS path grows — same architecture, the "explicit global RTs" option. For the record: explicit RD/RT is EOS's long-standing model and the only one this lab's 4.33.1.1F image supports, but newer EOS does add auto-derivation (automatic RDs in 4.33.2F for MPLS VPN and 4.34.1F for L2/L3 EVPN, with ASN:VNI-style auto RTs alongside) — a fabric built on those auto values inherits the same ASN coupling, and the same Phase 1 pinning duty, as NX-OS and FRR. EOS still has no `rewrite-evpn-rt-asn` equivalent, so across sites the explicit shared RT remains the Arista answer either way.
+
+**SP31** — the site B route reflector's view:
+
+```text
+SP31#show bgp summary
+BGP summary information for VRF default
+Router identifier 10.255.31.11, local AS number 65030
+Neighbor              AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------ ----------- ------------- ----------------------- -------------- ---------- ----------
+10.255.31.1        65030 Established   L2VPN EVPN              Negotiated             33         33
+10.255.31.21       65030 Established   L2VPN EVPN              Negotiated              8          8
+```
+
+```text
+SP31# show bgp evpn route-type mac-ip
+BGP routing table information for VRF default
+Router identifier 10.255.31.11, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       i
+ * >      RD: 10.255.31.21:20 mac-ip 0050.7966.6811
+                                 10.255.31.113         -       100     0       i
+ * >      RD: 10.255.31.21:20 mac-ip 0050.7966.6811 192.168.20.150
+                                 10.255.31.113         -       100     0       i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65099 65000 i
+```
+
+```text
+SP31#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.31.11, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65099 65000 i
+```
+
+```text
+SP31#show bgp evpn route-type imet
+BGP routing table information for VRF default
+Router identifier 10.255.31.11, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       i
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i
+```
+
+```text
+SP31#show bgp evpn route-type mac-ip detail
+BGP routing table information for VRF default
+Router identifier 10.255.31.11, local AS number 65030
+BGP routing table entry for mac-ip 0050.7966.6802, Route Distinguisher: 10.255.255.21:10
+ Paths: 1 available
+  65099 65000 (Received from a RR-client)
+    10.255.255.112 from 10.255.31.1 (10.255.31.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:10 TunnelEncap:tunnelTypeVxlan
+      VNI: 1010 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6802, Route Distinguisher: 10.255.255.22:10
+ Paths: 1 available
+  65099 65000 (Received from a RR-client)
+    10.255.255.112 from 10.255.31.1 (10.255.31.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:10 TunnelEncap:tunnelTypeVxlan
+      VNI: 1010 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.21:10
+ Paths: 1 available
+  65099 65000 (Received from a RR-client)
+    10.255.255.112 from 10.255.31.1 (10.255.31.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac0
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.22:10
+ Paths: 1 available
+  65099 65000 (Received from a RR-client)
+    10.255.255.112 from 10.255.31.1 (10.255.31.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac0
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6807, Route Distinguisher: 10.255.255.23:20
+ Paths: 1 available
+  65099 65000 (Received from a RR-client)
+    10.255.255.113 from 10.255.31.1 (10.255.31.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:20 TunnelEncap:tunnelTypeVxlan
+      VNI: 1020 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6807 192.168.20.20, Route Distinguisher: 10.255.255.23:20
+ Paths: 1 available
+  65099 65000 (Received from a RR-client)
+    10.255.255.113 from 10.255.31.1 (10.255.31.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:20 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac1
+      VNI: 1020 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.680b, Route Distinguisher: 10.255.255.23:30
+ Paths: 1 available
+  65099 65000 (Received from a RR-client)
+    10.255.255.113 from 10.255.31.1 (10.255.31.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:30 TunnelEncap:tunnelTypeVxlan
+      VNI: 1030 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.680b 192.168.30.30, Route Distinguisher: 10.255.255.23:30
+ Paths: 1 available
+  65099 65000 (Received from a RR-client)
+    10.255.255.113 from 10.255.31.1 (10.255.31.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:30 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac1
+      VNI: 1030 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6810, Route Distinguisher: 10.255.31.21:10
+ Paths: 1 available
+  Local (Received from a RR-client)
+    10.255.31.113 from 10.255.31.21 (10.255.31.21)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:10 TunnelEncap:tunnelTypeVxlan
+      VNI: 1010 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6810 192.168.10.150, Route Distinguisher: 10.255.31.21:10
+ Paths: 1 available
+  Local (Received from a RR-client)
+    10.255.31.113 from 10.255.31.21 (10.255.31.21)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac8
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 5000.0008.0000, Route Distinguisher: 10.255.255.21:20
+ Paths: 1 available
+  65099 65000 (Received from a RR-client)
+    10.255.255.112 from 10.255.31.1 (10.255.31.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:20 TunnelEncap:tunnelTypeVxlan
+      VNI: 1020 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 5000.0008.0000, Route Distinguisher: 10.255.255.22:20
+ Paths: 1 available
+  65099 65000 (Received from a RR-client)
+    10.255.255.112 from 10.255.31.1 (10.255.31.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:20 TunnelEncap:tunnelTypeVxlan
+      VNI: 1020 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 5000.0008.0001, Route Distinguisher: 10.255.255.21:20
+ Paths: 1 available
+  65099 65000 (Received from a RR-client)
+    10.255.255.112 from 10.255.31.1 (10.255.31.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:20 TunnelEncap:tunnelTypeVxlan
+      VNI: 1020 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 5000.0008.0001, Route Distinguisher: 10.255.255.22:20
+ Paths: 1 available
+  65099 65000 (Received from a RR-client)
+    10.255.255.112 from 10.255.31.1 (10.255.31.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Extended Community: Route-Target-AS:1:20 TunnelEncap:tunnelTypeVxlan
+      VNI: 1020 ESI: 0000:0000:0000:0000:0000
+```
+
+Two SP31-only details: `(Received from a RR-client)` on every entry — the reflector serving its two clients — and the session counters up top: 33 NLRI from Border2 (the entire remote site plus re-advertisements) against 8 from Leaf31. Site B's whole view of site A funnels through one iBGP session.
+
+**Border2** — three sessions doing three different jobs, and the underlay contract made visible:
+
+```text
+Border2#show bgp summary
+BGP summary information for VRF default
+Router identifier 10.255.31.1, local AS number 65030
+Neighbor              AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------ ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.104.0         65099 Established   IPv4 Unicast            Negotiated             15         15
+10.255.31.11       65030 Established   L2VPN EVPN              Negotiated              6          6
+10.255.99.1        65099 Established   L2VPN EVPN              Negotiated             29         29
+```
+
+```text
+Border2#show bgp evpn route-type mac-ip
+BGP routing table information for VRF default
+Router identifier 10.255.31.1, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       i Or-ID: 10.255.31.21 C-LST: 10.2
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       i Or-ID: 10.255.31.21 C-LST: 10.2
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65099 65000 i
+```
+
+```text
+Border2#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.31.1, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       i Or-ID: 10.255.31.21 C-LST: 10.2
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       i Or-ID: 10.255.31.21 C-LST: 10.2
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65099 65000 i
+```
+
+```text
+Border2#show bgp evpn route-type imet
+BGP routing table information for VRF default
+Router identifier 10.255.31.1, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       i Or-ID: 10.255.31.21 C-LST: 10.2
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       i Or-ID: 10.255.31.21 C-LST: 10.2
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i
+```
+
+```text
+Border2#show ip bgp
+BGP routing table information for VRF default
+Router identifier 10.255.31.1, local AS number 65030
+Route status codes: s - suppressed contributor, * - valid, > - active, E - ECMP head, e - ECMP
+                    S - Stale, c - Contributing to ECMP, b - backup, L - labeled-unicast
+                    % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+RPKI Origin Validation codes: V - valid, I - invalid, U - unknown
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  AIGP       LocPref Weight  Path
+ * >      10.0.11.0/31           10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.0.12.0/31           10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.0.13.0/31           10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.0.21.0/31           10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.0.22.0/31           10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.0.23.0/31           10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.31.11.0/31          10.31.101.0           -       -          -       0       i
+ * >      10.255.31.1/32         -                     -       -          -       0       i
+ * >      10.255.31.11/32        10.31.101.0           -       -          -       0       i
+ * >      10.255.31.21/32        10.31.101.0           -       -          -       0       i
+ * >      10.255.31.113/32       10.31.101.0           -       -          -       0       i
+ * >      10.255.99.1/32         10.0.104.0            0       -          100     0       65099 i
+ * >      10.255.255.1/32        10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.255.255.11/32       10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.255.255.12/32       10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.255.255.21/32       10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.255.255.22/32       10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.255.255.23/32       10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.255.255.112/32      10.0.104.0            0       -          100     0       65099 65000 i
+ * >      10.255.255.113/32      10.0.104.0            0       -          100     0       65099 65000 i
+```
+
+The `show ip bgp` table is the inter-site underlay in its entirety: loopbacks and /31s, nothing else — no tenant prefixes, no host routes. Site A's VTEPs (10.255.255.112/.113) arrive with AS path `65099 65000` via the DCI, and site B's own loopbacks are the locally originated `i` entries that Border2 sends the other way. This is the "what actually crosses the DCI" list from 6.1, printed by the router itself.
+
+**DCI** — the route server, holding both sites' EVPN routes with one-hop AS paths and no VXLAN anywhere:
+
+```text
+DCI(config)#show bgp summary
+BGP summary information for VRF default
+Router identifier 10.255.99.1, local AS number 65099
+Neighbor              AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------ ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.103.1         65000 Established   IPv4 Unicast            Negotiated             14         14
+10.0.104.1         65030 Established   IPv4 Unicast            Negotiated              5          5
+10.255.31.1        65030 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.1       65000 Established   L2VPN EVPN              Negotiated             29         29
+```
+
+```text
+DCI(config)#show bgp evpn route-type mac-ip
+BGP routing table information for VRF default
+Router identifier 10.255.99.1, local AS number 65099
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65000 i
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65000 i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65000 i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65000 i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65030 i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65030 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 i
+```
+
+```text
+DCI(config)#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.99.1, local AS number 65099
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65030 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65030 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65000 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65000 i
+```
+
+```text
+DCI(config)#show bgp evpn route-type imet
+BGP routing table information for VRF default
+Router identifier 10.255.99.1, local AS number 65099
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65030 i
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65030 i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+```
+
+On the DCI every path is exactly one AS deep — `65000 i` from site A, `65030 i` from site B — because this is where the two sites meet; the DCI prepends its own 65099 only on the way out, which is why the same routes show `65099 65000` once they land in site B. Next hops are already the leaf VTEPs here, confirming Border1 passed them through unchanged. And note what this device does *not* have: no `interface Vxlan1`, no VRFs, no import RTs — it holds and relays all 29+6 EVPN routes purely as a control-plane speaker, the EOS behavior that replaces the `retain route-target all` knob other platforms need.
+
+These captures are the walk-1 state, proven. When Phase 3 starts converting leaves, the fields to watch in these same commands are exactly two: the AS path (which will grow) and the next hop (which must never change).
+
+#### Walk 1 — the all-iBGP starting state
+
+How VPC1 (192.168.10.10, behind the MLAG VTEP) becomes reachable from Leaf31, hop by hop:
+
+1. **Leaf1 learns VPC1's MAC** on Et3 and `redistribute learned` turns it into a Type-2 route: RD `10.255.255.21:10`, RT `1:10`, next hop **10.255.255.112** — the shared anycast VTEP. Its MLAG peer advertises the same reachability under its own RD (`10.255.255.22:10`), same next hop.
+2. **The spines reflect it** to their other clients — Leaf3 and Border1. iBGP touches nothing: next hop, RT, and the empty AS path all survive.
+3. **Border1 re-advertises it to the DCI** over eBGP. The AS path grows to `65000`; `next-hop-unchanged` keeps the next hop at 10.255.255.112 — without it, Border1 would substitute its own loopback and every inter-site tunnel would aim at a router with no VTEP.
+4. **The DCI relays it to Border2**, prepending 65099 and preserving the next hop. AS path so far: `65099 65000`.
+5. **Border2 advertises it into site B** over iBGP. An eBGP-learned route keeps its next hop when advertised into iBGP by default — the one direction where doing nothing is the right configuration. SP31 reflects it to Leaf31.
+6. **Leaf31 imports on RT `1:10`** — identical by design in both sites — and installs VPC1 behind 10.255.255.112, AS path `65099 65000`.
+
+The RD minted on Leaf1 arrives at Leaf31 untouched, and so does the next hop: there is no re-origination anywhere on this path. That is the defining difference from a Cisco Multi-Site BGW, which would have rewritten the next hop to a site VIP and re-originated under a site-scoped RD at each border — the [architecture post's section 12.3](/posts/vxlan-evpn-architecture/#123-multi-fabric-and-multi-site) walks that design, including its control-plane and data-plane counterparts to this one.
+
+Data plane, R_VPC1 → VPC1: **one** VXLAN tunnel, `10.255.31.113 → 10.255.255.112`, routed Leaf31 → SP31 → Border2 → DCI → Border1 → either spine → either MLAG peer, decapsulated at the pair. BUM works the same way: Leaf31's Type-3 IMET put 10.255.31.113 into every site A flood list, so the very first ARP broadcast crosses the DCI as a HER unicast copy.
+
+#### Walk 2 — the interim state (Leaf1 migrated, Leaf2 not yet)
+
+Freeze the migration halfway — Leaf1 rebuilt in AS 65101, everything else still iBGP — and look at what the fabric is actually doing:
+
+1. **Two populations share the spines.** Leaf2, Leaf3, and Border1 still peer iBGP with the RR function; Leaf1 now runs eBGP to the spines for both underlay and overlay. iBGP-learned routes flow to eBGP peers and vice versa by ordinary BGP rules, so the populations see each other with no redistribution.
+2. **VPC1's route now arrives with an AS path.** Leaf1 advertises it over eBGP (path `65101`, next hop still 10.255.255.112 thanks to the spine's `next-hop-unchanged`); the spines pass it to iBGP clients unchanged. Leaf3 and Border1 therefore hold the MAC twice: Leaf2's iBGP copy (empty path, RD `...22:10`) and Leaf1's eBGP copy (path `65101`, RD `...21:10`) — both pointing at the same VTEP.
+3. **The underlay changes shape under the anycast VTEP — in the direction Cisco instincts get wrong.** EOS gives *all* BGP routes a default administrative distance of **200** — there is no 20/200 eBGP/iBGP split as on Cisco — so OSPF at 110 keeps outranking the new eBGP underlay in the spines' RIB. While Leaf1 still runs OSPF, nothing moves: the spines keep two-way OSPF ECMP to 10.255.255.112. The moment Leaf1 drops OSPF, the spines' best remaining route is Leaf2's OSPF advertisement, and *all* traffic to the MLAG VTEP funnels through the **unmigrated** member until Leaf2 completes its own window — only when the last OSPF advertisement of .112 disappears do the two eBGP paths (same ASN 65101) install and restore the split via BGP multipath. On a Cisco fabric the same migration behaves as the mirror image: NX-OS gives eBGP distance **20**, so the funnel forms *immediately* when the migrated leaf's eBGP underlay session comes up — beating OSPF while OSPF is still running — and it pulls all traffic through the **migrated** member instead, until its MLAG peer follows. Same transient, opposite member, different trigger: on EOS it starts when OSPF is *removed*, on NX-OS when eBGP comes *up*. Either way, expect it; don't debug it — keep the window between MLAG members short, and watch it live with `show ip route 10.255.255.112` on a spine at each stage.
+4. **Site B notices nothing.** Border2 and Leaf31 see site A routes with path `65099 65000` (from unmigrated leaves) or `65099 65000 65101` (from Leaf1). Both import on `1:10` as always; next hops and tunnels are unchanged.
+
+This is the state the whole migration design optimizes for: mixed control planes, one data plane, no flag day.
+
+#### Walk 3 — the final state
+
+All of site A migrated: leaves 65101/65102, spines 65000, Border1 65100. The same Type-2 route now crosses four eBGP hops, and the AS path becomes a map of the design:
+
+1. Leaf1 (65101) → spines (65000): path `65101`, next hop 10.255.255.112, preserved by the spines' `next-hop-unchanged`.
+2. Spines → Border1 (65100): path `65000 65101` — the spines are now transit between two eBGP neighbors, exactly the section 4.1 Model B role.
+3. Border1 → DCI (65099): path `65100 65000 65101`, next hop still untouched.
+4. DCI → Border2: path **`65099 65100 65000 65101`** — route server, border tier, spine tier, originating leaf, readable straight off `show bgp evpn`.
+5. Border2 → SP31 → Leaf31: iBGP as always; Leaf31 imports on `1:10` exactly as in walk 1.
+
+Three consecutive transit tiers — spines, Border1, DCI — each preserve the next hop now, and a missing `next-hop-unchanged` at *any* of them blackholes cross-site traffic into that device. That is why the runbook's verification step checks next hops before undraining anything.
+
+Data plane: byte-for-byte identical to walk 1. Same tunnel, same VTEPs, same flood lists, same MTU. The only externally visible change of the entire migration is the AS path — which is the migration contract from 6.1, demonstrated.
+
+### 6.3 The migration runbook
+
+The sequencing below is the generic iBGP→eBGP procedure adapted to this lab's addressing; the gotchas are identical on other vendors, only CLI differs. Execute from pre-staged, rendered configs — not typed live.
+
+#### Phase 0 — preparation (no config changes)
+
+Snapshot state on every device that will change (Leaf1/2/3, Border1) plus one witness that must not (Leaf31), for later diffing:
+
+```text
+show bgp evpn summary
+show bgp evpn route-type mac-ip | no-more
+show bgp evpn route-type imet | no-more
+show vxlan vtep
+show vxlan address-table
+show mlag detail
+show ip route summary
+```
+
+Also from Phase 0: confirm every uplink is a routed /31 (they are — section 2.1), identify single-attached hosts (VPC1 on Leaf1, VPC2/VPC3 on Leaf3 — each takes a brief hit when its leaf drains; the MLAG-attached `Switch` does not), and pre-stage every config block in this section.
+
+#### Phase 1 — pin RDs and RTs (this lab already did; verify it)
+
+In the generic runbook this is the single most important step: a fabric whose route-targets embed the ASN (auto-derived `65000:1010` style, the default on NX-OS and FRR, and common in EOS configs generated from `<ASN>:<VNI>` templates) must freeze those *current* values as static configuration fabric-wide **before** any ASN changes — a no-op while still on iBGP — because the moment a leaf's ASN changes, regenerated RTs stop matching and route import silently dies with every session happily Established.
+
+This lab dodged the trap on day one: sections 4 and 5.6 configured static RTs that contain no ASN at all (`1:10`, `1:20`, `1:30`, `1:50000`) and explicit RDs (`loopback:service`). ASN changes cannot move them. What remains is to prove that on every leaf, and re-prove it after every phase:
+
+```text
+show bgp evpn instance      ! per VLAN and VRF: RD and import/export RTs, exactly the configured values
+```
+
+The pinned values, side by side — a site A leaf against the site B leaf. Read the two blocks vertically: the **RDs** are unique per device (`loopback:service`), while the **RTs** are identical everywhere (`1:service`):
+
+```text
+Leaf1:
+
+interface Loopback0
+   ip address 10.255.255.21/32
+   ip ospf area 0.0.0.0
+!
+interface Loopback1
+   ip address 10.255.255.112/32
+   ip ospf area 0.0.0.0
+!
+
+router bgp 65000
+   router-id 10.255.255.21
+   no bgp default ipv4-unicast
+   maximum-paths 4 ecmp 4
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN send-community extended
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   !
+   vlan 10
+      rd 10.255.255.21:10
+      route-target both 1:10
+      redistribute learned
+   !
+   vlan 20
+      rd 10.255.255.21:20
+      route-target both 1:20
+      redistribute learned
+   !
+   vlan 30
+      rd 10.255.255.21:30
+      route-target both 1:30
+      redistribute learned
+   !
+   address-family evpn
+      neighbor EVPN activate
+   !
+   vrf TENANT_A
+      rd 10.255.255.21:50000
+      route-target import evpn 1:50000
+      route-target export evpn 1:50000
+      redistribute connected
+!
+
+Leaf31:
+
+interface Loopback0
+   ip address 10.255.31.21/32
+   ip ospf area 0.0.0.0
+!
+interface Loopback1
+   ip address 10.255.31.113/32
+   ip ospf area 0.0.0.0
+!
+
+router bgp 65030
+   router-id 10.255.31.21
+   no bgp default ipv4-unicast
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65030
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN send-community extended
+   neighbor 10.255.31.11 peer group EVPN
+   !
+   vlan 10
+      rd 10.255.31.21:10
+      route-target both 1:10
+      redistribute learned
+   !
+   vlan 20
+      rd 10.255.31.21:20
+      route-target both 1:20
+      redistribute learned
+   !
+   address-family evpn
+      neighbor EVPN activate
+   !
+   vrf TENANT_A
+      rd 10.255.31.21:50000
+      route-target import evpn 1:50000
+      route-target export evpn 1:50000
+      redistribute connected
+!
+```
+
+**Why plan RDs and RTs by hand?** Auto-derivation is convenient exactly once — at day-one provisioning — and it pays for that convenience by welding your control-plane identifiers to values that were never chosen as identifiers: the local ASN, a vendor formula, an internal index. Planning them deliberately keeps the control plane under *your* control, and the two conventions this lab uses are the ones worth copying:
+
+- **RD = `loopback:service`**, not `ASN:service`. The loopback half guarantees per-VTEP uniqueness — which the MLAG pair silently depends on, since remote leaves must hold *both* members' advertisements as distinct routes (visible as the paired `...21:*` / `...22:*` entries in every capture above) — and it contains nothing that renumbering touches. That is exactly why the RDs in this migration never move while ASNs change underneath them.
+- **RT = a scheme that reads as policy**, whether this lab's `1:VLAN` / `1:L3VNI` or an organization-defined `tenant-id:VNI`. An operator can parse `1:20` in `show bgp evpn` output as "VLAN 20's bridge domain" with no lookup table — worth real minutes in an outage — and because no ASN is embedded, import policy is decoupled from the AS plan: the same values match across both sites (the 6.2 captures) and across the ASN renumbering (this migration).
+
+This migration is that argument made concrete. Because the RD/RT plan was right on day one, the most dangerous phase of the whole procedure collapsed into a read-only verification — no fabric-wide re-pinning window, no silent import-mismatch risk, no downtime spent on identifiers. RD/RT design debt is invisible until the day you renumber ASNs, attach a second site, or trip over a vendor's auto-derivation — and this section is what it looks like to have paid that debt off in advance.
+
+Run the Phase 0 route-type snapshots once more after checking — this pair of outputs is the "zero churn expected" baseline every later step diffs against.
+
+#### Phase 2 — prepare the spines (hitless)
+
+Add the eBGP machinery *alongside* the untouched RR config. Nothing peers with it yet, so this changes nothing — but every knob here is load-bearing later. Spine1 shown; Spine2 identical except `network 10.255.255.12/32`:
+
+```text
+peer-filter LEAF-ASNS
+   10 match as-range 65100-65199 result accept
+router bgp 65000
+   ! existing EVPN-RRC route-reflector config stays untouched
+   !
+   ! --- overlay eBGP toward migrated leaves and (later) Border1 ---
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   ! --- underlay eBGP peer group (members added per migrated leaf) ---
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      network 10.255.255.11/32               ! own loopback -> migrated leaves reach the RR/overlay address
+      redistribute ospf                      ! interim only: unmigrated-leaf loopbacks -> eBGP population
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   maximum-paths 64 ecmp 64
+   bgp bestpath as-path multipath-relax
+   !
+   graceful-restart restart-time 300
+   graceful-restart-helper
+!
+
+router ospf 1
+   redistribute bgp                          ! interim only: migrated-leaf loopbacks -> iBGP population
+```
+
+Why each knob exists:
+
+- `next-hop-unchanged` under `address-family evpn` — **mandatory**. eBGP rewrites the next hop by default; if the VTEP address does not survive the spine, VXLAN tunnels point at the spine and traffic blackholes. Walk 3 depends on this three times over.
+- `ebgp-multihop 3` + `update-source Loopback0` — overlay sessions run loopback-to-loopback, exactly like the iBGP ones they replace.
+- `bgp listen range` + `peer-filter` — the spine accepts overlay sessions from any fabric loopback presenting an AS in 65100–65199, so no new overlay neighbor statement is ever configured; the range deliberately includes 65100 so Border1's Phase 4 cutover rides the same mechanism. One precedence rule to respect: a statically configured neighbor for the same address **shadows the listen range** — which is why every Phase 3 window starts by retiring that leaf's old `EVPN-RRC` entry. Skip it and the spine rejects the new session with `BAD_AS_NUMBER`; the real log is in 3.2.
+- `multipath-relax` — with unique leaf ASNs, equal-cost paths carry different AS paths; without this the fabric silently loses ECMP.
+- The two `redistribute` lines are the interim underlay bridge, and they are this lab's addition to the generic procedure: once a migrated leaf drops OSPF, it can only learn *unmigrated* VTEP loopbacks if the spine leaks OSPF into BGP — and the unmigrated population can only reach the *migrated* leaf's loopbacks if the spine leaks BGP back into OSPF. Mutual redistribution on two spines is normally a looping hazard; here it is transient, /32-only in practice, and removed in Phase 6 — in production, tag and filter it.
+- `graceful-restart` helpers keep route churn survivable if a BGP process restarts mid-migration.
+
+#### Phase 3 — migrate the leaves, one at a time
+
+Order: **Leaf1 → verify → Leaf2 → verify → Leaf3.** Never both MLAG members in one window — the pair is what keeps VLAN 20 alive while one member is down. VPC1 (single-attached to Leaf1) takes a hit during Leaf1's window; plan for it.
+
+**3.1 — Drain the leaf.** EOS maintenance mode applies BGP graceful-shutdown (GSHUT + depreference) and bleeds traffic onto the MLAG peer and the other leaves before anything is touched. EOS ships a built-in unit named `System` that already covers every BGP instance and every interface, so nothing needs defining — entering maintenance is one verb:
+
+```text
+configure
+maintenance
+   unit System
+      quiesce
+```
+
+Watch it drain, and proceed only when uplink and MLAG counters are near zero:
+
+```text
+show maintenance
+show interfaces counters rates | nz
+show mlag detail                 ! peer active and carrying the pair's traffic
+```
+
+**3.2 — Rebuild BGP under the new ASN.** Changing the ASN means removing the BGP instance, so the whole target block goes in as one atomic transaction. Leaf1 shown in full — the pinned service configuration at the bottom is *verbatim* from sections 4 and 5.6, which is the entire point of Phase 1:
+
+First, the per-leaf spine touch — one visit to each spine, two changes: **retire the leaf's old iBGP RR-client entry, then pre-add its underlay sessions.** The retirement is not optional cleanup; it is what lets the new session form at all. A statically configured neighbor always shadows the `bgp listen range` for its address, so until the old entry is gone the spine keeps expecting AS 65000 from this loopback and rejects the new OPEN:
+
+```text
+! Spine1
+router bgp 65000
+   no neighbor 10.255.255.21 peer group EVPN-RRC   ! retire the old iBGP client entry - it shadows the listen range
+   neighbor 10.0.11.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.11.1 remote-as 65101
+! Spine2
+router bgp 65000
+   no neighbor 10.255.255.21 peer group EVPN-RRC
+   neighbor 10.0.21.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.21.1 remote-as 65101
+```
+
+With the spines prepared, rebuild the leaf:
+
+```text
+configure session migrate-leaf1
+no router bgp 65000
+router bgp 65101
+   router-id 10.255.255.21
+   no bgp default ipv4-unicast
+   maximum-paths 4 ecmp 4
+   bgp bestpath as-path multipath-relax
+   graceful-restart restart-time 300
+   !
+   neighbor UNDERLAY peer group
+   neighbor UNDERLAY remote-as 65000
+   neighbor UNDERLAY send-community
+   neighbor 10.0.11.0 peer group UNDERLAY       ! Et1 -> Spine1
+   neighbor 10.0.21.0 peer group UNDERLAY       ! Et2 -> Spine2
+   !
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN ebgp-multihop 3
+   neighbor EVPN send-community extended
+   neighbor 10.255.255.11 peer group EVPN       ! Spine1 Lo0
+   neighbor 10.255.255.12 peer group EVPN       ! Spine2 Lo0
+   !
+   address-family ipv4
+      neighbor UNDERLAY activate
+      network 10.255.255.21/32                  ! router-id loopback
+      network 10.255.255.112/32                 ! anycast VTEP loopback (shared with Leaf2)
+   !
+   address-family evpn
+      neighbor EVPN activate
+   !
+   ! === pinned service config, verbatim from sections 4 and 5.6 ===
+   vlan 10
+      rd 10.255.255.21:10
+      route-target both 1:10
+      redistribute learned
+   vlan 20
+      rd 10.255.255.21:20
+      route-target both 1:20
+      redistribute learned
+   vlan 30
+      rd 10.255.255.21:30
+      route-target both 1:30
+      redistribute learned
+   !
+   vrf TENANT_A
+      rd 10.255.255.21:50000
+      route-target import evpn 1:50000
+      route-target export evpn 1:50000
+      redistribute connected
+commit
+```
+
+The spines still run OSPF for the unmigrated leaves — ships in the night. With the spine visit already done, everything establishes on the leaf's `commit`: the underlay sessions against the static `UNDERLAY-EBGP` entries, and the overlay sessions as dynamic listen-range peers — they appear in the spines' `show bgp evpn summary` with AS 65101 and no neighbor statement behind them.
+
+One EOS-specific reading note before removing OSPF, because Cisco instincts mislead here: **EOS gives all BGP routes administrative distance 200 by default** (there is no 20/200 eBGP/iBGP split), so while OSPF is still running at 110, `show ip route` keeps showing OSPF routes and the eBGP copies sit unused in the BGP table. "BGP has taken over" is therefore checked in the BGP **table**, and the RIB flips only at the moment OSPF is removed:
+
+```text
+show ip bgp summary
+show ip bgp 10.255.255.11/32       ! spine loopbacks present in the BGP table (RIB still prefers OSPF, 110 vs 200)
+show ip bgp 10.255.255.113/32      ! unmigrated Leaf3's VTEP - arriving via the spines' interim redistribution
+no router ospf 1
+show ip route 10.255.255.11/32     ! now B E [200/0] - BGP owns this leaf's underlay
+```
+
+**The interim state, captured live.** Everything below was taken at exactly this point of the first run — Leaf1 rebuilt in AS 65101, Leaf2 and Leaf3 still iBGP — which makes it walk 2 recorded from four vantage points: a site B host, the migrated leaf, the pivot spine, and an unmigrated leaf. First the host view, taken from R_VPC1 across the DCI while the fabric was mid-migration:
+
+```text
+r_vpc1_v10> ping 192.168.10.10
+
+84 bytes from 192.168.10.10 icmp_seq=1 ttl=64 time=67.711 ms
+84 bytes from 192.168.10.10 icmp_seq=2 ttl=64 time=31.124 ms
+^C
+r_vpc1_v10> ping 192.168.20.20
+
+84 bytes from 192.168.20.20 icmp_seq=1 ttl=62 time=770.605 ms
+84 bytes from 192.168.20.20 icmp_seq=2 ttl=62 time=267.421 ms
+84 bytes from 192.168.20.20 icmp_seq=3 ttl=62 time=106.410 ms
+84 bytes from 192.168.20.20 icmp_seq=4 ttl=62 time=108.058 ms
+84 bytes from 192.168.20.20 icmp_seq=5 ttl=62 time=231.724 ms
+
+r_vpc1_v10> ping 192.168.10.100
+
+host (192.168.10.100) not reachable
+
+r_vpc1_v10> ping 192.168.20.100
+
+84 bytes from 192.168.20.100 icmp_seq=1 ttl=253 time=653.950 ms
+84 bytes from 192.168.20.100 icmp_seq=2 ttl=253 time=29.699 ms
+^C
+r_vpc1_v10> ping 192.168.30.30 
+
+84 bytes from 192.168.30.30 icmp_seq=1 ttl=62 time=219.579 ms
+192.168.30.30 icmp_seq=2 timeout
+84 bytes from 192.168.30.30 icmp_seq=3 ttl=62 time=69.816 ms
+84 bytes from 192.168.30.30 icmp_seq=4 ttl=62 time=362.515 ms
+84 bytes from 192.168.30.30 icmp_seq=5 ttl=62 time=21.980 ms
+```
+
+Two things in the host view deserve a note. First, nothing blinked: R_VPC1 still reaches VPC1 bridged (`ttl=64`) — and VPC1 sits *behind the leaf that was just rebuilt* — plus the routed targets (`ttl=62`) and Linux2 (`ttl=253`), all mid-migration. Second, the one failure is not a failure: `192.168.10.100` is VPC1's retired address from the section 1–5 era, so nothing answers its ARP in the current build — it is kept here precisely so nobody diffs an old capture and panics.
+
+Next, the migrated leaf itself:
+
+```text
+Leaf1#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.21, local AS number 65101
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.0           65000 Established   IPv4 Unicast            Negotiated             12         12
+10.0.21.0           65000 Established   IPv4 Unicast            Negotiated             12         12
+10.255.255.11       65000 Established   L2VPN EVPN              Negotiated             17         17
+10.255.255.12       65000 Established   L2VPN EVPN              Negotiated             17         17
+Leaf1#
+Leaf1#show bgp evpn route-type mac-ip
+BGP routing table information for VRF default
+Router identifier 10.255.255.21, local AS number 65101
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802
+                                 -                     -       -       0       i
+          RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 -                     -       -       0       i
+          RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65000 i
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 -                     -       -       0       i
+          RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 -                     -       -       0       i
+          RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014
+                                 -                     -       -       0       i
+          RD: 10.255.255.22:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65000 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 -                     -       -       0       i
+          RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65000 i
+Leaf1#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.255.21, local AS number 65101
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 -                     -       -       0       i
+          RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 i
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 -                     -       -       0       i
+          RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65000 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 -                     -       -       0       i
+          RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65000 i
+Leaf1#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.255.21, local AS number 65101
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >Ec    RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 -                     -       -       0       i
+          RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 i
+          RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+```
+
+Leaf1's tables are the migrated world, and three details in them matter:
+
+- **The summary is the exact target session set**: two underlay eBGP sessions on the /31s and two overlay eBGP sessions to the spine loopbacks, all toward AS 65000, all Established with NLRI moving.
+- **Leaf2's routes (RD `...22:*`) appear with no status flags at all** — not valid, not active. Their next hop is 10.255.255.112, which is Leaf1's *own* anycast VTEP address, and BGP will not validate a route whose next hop is a local address. This is the anycast-VTEP cousin of the MLAG loop-prevention note in the Leaf2 step below: harmless by construction, since Leaf1 originates its own routes for the same MAC/IPs and MLAG syncs the state directly over the peer link. Do not "fix" it.
+- **Leaf3 and site B routes now show `Ec`/`ec` pairs** — two equal-cost BGP paths, one per spine: `maximum-paths` plus `as-path multipath-relax` earning their keep on the very first migrated leaf. And the site B paths read `65000 65099 65030` — spine tier, DCI, remote site — exactly walk 2's prediction. Every next hop in all three tables is a VTEP loopback (.112, .113, .31.113); not one is a spine address, which means the 3.3 gate is already passing.
+
+The pivot spine next — this is where both control planes coexist:
+
+```text
+!!on spine check what's the next hop for the ANYCAST IP FOR LEAF1/2
+SP1(config-router-bgp)#show ip route 10.255.255.112
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+ O        10.255.255.112/32 [110/20]
+           via 10.0.11.1, Ethernet1
+           via 10.0.12.1, Ethernet2
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1        65000 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.12       65000 Established   L2VPN EVPN              Negotiated             31         31
+10.255.255.21       65101 Established   L2VPN EVPN              Negotiated             12         12
+10.255.255.22       65000 Established   L2VPN EVPN              Negotiated             12         12
+10.255.255.23       65000 Established   L2VPN EVPN              Negotiated              9          9
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#show bgp evpn mac-ip
+% Invalid input
+SP1(config-router-bgp)#show bgp evpn route-type mac-ip 
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       i
+ *  ec    RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       i
+ *  ec    RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >Ec    RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       i
+ *  ec    RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       i Or-ID: 10.255.255.23 C-LST: 10.255.2 
+ * >Ec    RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       i
+ *  ec    RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       i Or-ID: 10.255.255.23 C-LST: 10.255.2 
+ * >Ec    RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       i
+ *  ec    RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       i Or-ID: 10.255.255.23 C-LST: 10.255.2 
+ * >Ec    RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       i
+ *  ec    RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       i Or-ID: 10.255.255.23 C-LST: 10.255.2 
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LS 
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65099 65030 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       i
+ *  ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       i
+ *  ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       i
+ *  ec    RD: 10.255.255.22:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       i
+ *  ec    RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+SP1(config-router-bgp)#show bgp evpn route-type ip-prefix 
+% Incomplete command
+SP1(config-router-bgp)#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LS 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       i
+ *  ec    RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LS 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       i
+ *  ec    RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >Ec    RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       i
+ *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       i Or-ID: 10.255.255.23 C-LST: 10.255.2 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       i
+ *  ec    RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >Ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       i
+ *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       i Or-ID: 10.255.255.23 C-LST: 10.255.2 
+SP1(config-router-bgp)#show bgp evpn route-type imet
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LS 
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       i
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       i
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       i
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       i
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       i
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       i
+```
+
+SP1's summary table is the whole interim design in six rows: `10.255.255.21` Established at AS **65101** — a dynamic listen-range peer with no neighbor statement behind it — sitting beside `.22`, `.23`, and `.1` still at AS 65000 under the RR function, plus the new underlay session to `10.0.11.1`. Two control planes, one switch, zero redistribution between them. In its EVPN table the origin of every path is readable at a glance: Leaf1's routes carry `65101`, the unmigrated leaves' carry an empty AS path with `Or-ID`/`C-LST` reflection bookkeeping (many arriving twice — the second copy via the spine–spine iBGP session), and site B's carry `65099 65030`. The spine advertises all of it to both populations — the interworking the runbook promised, visible. (The `% Invalid input` line stays in the capture as a small reminder: on EOS the `route-type` keyword is mandatory.)
+
+Last, the best witness of all — Leaf3, still iBGP, completely untouched:
+
+```text
+Leaf3#show bgp evpn route-type mac-ip 192.168.10.10 detail 
+BGP routing table information for VRF default
+Router identifier 10.255.255.23, local AS number 65000
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.21:10
+ Paths: 2 available
+  65101
+    10.255.255.112 from 10.255.255.11 (10.255.255.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP head, ECMP, best, ECMP contributor
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+  65101
+    10.255.255.112 from 10.255.255.12 (10.255.255.12)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP, ECMP contributor
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.22:10
+ Paths: 2 available
+  Local
+    10.255.255.112 from 10.255.255.11 (10.255.255.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP head, ECMP, best, ECMP contributor
+      Originator: 10.255.255.22, Cluster list: 10.255.255.11 
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+  Local
+    10.255.255.112 from 10.255.255.12 (10.255.255.12)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP, ECMP contributor
+      Originator: 10.255.255.22, Cluster list: 10.255.255.12 
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+Leaf3#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.255.23, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LS 
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LS 
+ * >Ec    RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *  ec    RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ *  ec    RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LS 
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LS 
+ * >Ec    RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *  ec    RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ *  ec    RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *  ec    RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ *  ec    RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 -                     -       -       0       i
+
+
+Leaf3#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.255.23, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LS 
+ *  ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LS 
+ * >Ec    RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LS 
+ *  ec    RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LS 
+ * >Ec    RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *  ec    RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *  ec    RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *  ec    RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ *  ec    RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >Ec    RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ *  ec    RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >Ec    RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ *  ec    RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       i Or-ID: 10.255.255.22 C-LST: 10.255.2 
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 -                     -       -       0       i
+```
+
+Leaf3's detail view of VPC1's MAC/IP is the single best proof that the interim state works: the same host visible through both worlds at once — under RD `...21:10` with AS path `65101` (Leaf1's eBGP advertisement, ECMP'd through both spines) and under RD `...22:10` as an iBGP `Local` path with `Originator`/`Cluster list` (Leaf2's reflected copy) — same next hop 10.255.255.112, same RTs `1:10` + `1:50000`, same VNIs `1010`/`50000`. Whichever copy best-path picks, the frame lands on the same MLAG VTEP. One thing these outputs cannot show is what the spines' RIB is doing underneath the anycast VTEP — so it was checked directly, and the answer is *not* the Cisco-trained guess:
+
+```text
+SP1(config-router-bgp)#show ip route 10.255.255.112
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+ O        10.255.255.112/32 [110/20]
+           via 10.0.11.1, Ethernet1
+           via 10.0.12.1, Ethernet2
+
+
+SP2(config-router-bgp)#show ip route 10.255.255.112
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+ O        10.255.255.112/32 [110/20]
+           via 10.0.22.1, Ethernet1
+           via 10.0.21.1, Ethernet2
+```
+
+Both spines still hold the **OSPF** route — `[110/20]`, ECMP through both members — even though Leaf1's eBGP underlay is up and advertising the same /32. Two facts explain it, and together they invert the Cisco-trained prediction. First, **EOS gives all BGP routes administrative distance 200 by default** (no 20/200 eBGP/iBGP split), so OSPF at 110 outranks the new eBGP route in the RIB, full stop. Second, at the moment of this capture Leaf1 had not yet run `no router ospf 1`, so Leaf1's own OSPF advertisement of .112 is still one of the two ECMP paths. The pair's real sequence is therefore: **two-way ECMP while the migrated leaf still speaks OSPF → all inbound through Leaf2, the *unmigrated* member, once Leaf1 drops OSPF** (Leaf2's 110 beats Leaf1's 200) **→ ECMP again only when Leaf2 finishes and the eBGP paths are all that remain.** For the dual-homed `Switch`/Linux2 that is the whole inbound story; its *outbound* never changes — the LACP hash keeps using both Po20 members, whichever leaf receives a frame forwards it, and bridging keeps no flow state, so the asymmetry is fine.
+
+And the far end — Leaf31 in site B, which nobody touched:
+
+```text
+Leaf31#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Neighbor              AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------ ----------- ------------- ----------------------- -------------- ---------- ----------
+10.255.31.11       65030 Established   L2VPN EVPN              Negotiated             29         29
+
+Leaf31#show bgp evpn route-type mac-ip 192.168.10.10 detail 
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.21:10
+ Paths: 1 available
+  65099 65000 65101
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00:00:d5:50
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.22:10
+ Paths: 1 available
+  65099 65000
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00:00:d5:50
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+Leaf31#show bgp evpn route-type mac-ip 192.168.10.10
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
+Leaf31#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:10 imet 10.255.31.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
+Leaf31#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
+Leaf31#
+```
+
+From site B, the entire migration is visible as exactly one thing: an extra ASN. VPC1's MAC/IP arrives twice as always — the MLAG pair's two RDs — but Leaf1's copy now reads `65099 65000 65101` while Leaf2's still reads `65099 65000`. (65000 appears once, not twice, even though both the spines and Border1 sit in it — the spine-to-Border1 leg is still iBGP, so only Border1's eBGP hop toward the DCI prepends it.) The detail view makes "exactly one thing" literal: apart from the AS path, the two copies are attribute-for-attribute identical — `Route-Target-AS:1:10` and `1:50000`, `TunnelEncap:tunnelTypeVxlan`, the same `EvpnRouterMac`, `VNI: 1010 L3 VNI: 50000` — the static RTs crossing the DCI untouched mid-migration, exactly as Phase 1 intended. Same next hop 10.255.255.112 on both copies, the same three VTEPs in every IMET route, flood lists unchanged — and Leaf31 itself untouched, its `show bgp summary` still the same single iBGP session to SP31 it has had since bring-up. This is the section 6.1 contract holding at the far end of the design: the remote site can *read* that site A is renumbering, but cannot *feel* it. Run the 3.3 list, undrain, and take Leaf2 next.
+
+**3.3 — Verify before undraining.** This list is the safety net; the next-hop check is the one that catches a missing `next-hop-unchanged` on a spine:
+
+```text
+show ip bgp summary                ! underlay sessions Established, prefixes exchanged
+show bgp evpn summary              ! both overlay sessions Established
+show bgp evpn route-type mac-ip    ! remote MACs present, next hops = VTEP addresses, NOT spine loopbacks
+show bgp evpn route-type imet
+show vxlan vtep                    ! full remote VTEP list, identical to the Phase 0 snapshot (incl. 10.255.31.113)
+show vxlan address-table
+show bgp evpn instance             ! RDs/RTs exactly as pinned
+```
+
+If any next hop shows a spine loopback — stop, fix the spine, do not undrain.
+
+**3.4 — Undrain and spot-check the data plane:**
+
+```text
+maintenance
+   unit System
+      no quiesce
+!
+show maintenance
+show mlag detail
+ping 192.168.20.20                 ! from Switch/Linux2: MLAG VTEP -> Leaf3, same VLAN
+ping 192.168.10.150                ! from VPC1: across the DCI to site B
+```
+
+**Then Leaf2**, identically, with its own values: same new ASN 65101, RDs `10.255.255.22:*`, underlay neighbors `10.0.12.0` (its Et2 → Spine1) and `10.0.22.0` (its Et1 → Spine2), spine-side adds `10.0.12.1` / `10.0.22.1` with `remote-as 65101`. Two things are *expected* as Leaf2's window completes: once its OSPF is removed and the two eBGP advertisements are all that is left of 10.255.255.112, the spines' ECMP to the anycast VTEP returns (walk 2's interim funnel — through Leaf2 — ends); and each MLAG member starts rejecting the other's routes relayed via the spines — its own AS 65101 is in the path. That rejection is normal and harmless: MLAG peers sync MAC/ARP state directly over the peer link and share the anycast VTEP. Do **not** add `allowas-in` to "fix" it.
+
+**A detour worth keeping: the first attempt gave Leaf2 its own ASN.** In the first run of this window, Leaf2 was rebuilt as AS **65102** instead of joining Leaf1 in 65101 — the "one ASN per device" reflex instead of one per MLAG pair. Everything came up and traffic kept flowing: this is a *working* design. The captures are kept precisely because they show, better than any argument, what the shared ASN buys. Three differences, all visible in the output.
+
+First, Leaf2's own table (note `local AS number 65102` in the header):
+
+```text
+Leaf2#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.255.22, local AS number 65102
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >Ec    RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+          RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+          RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+          RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+          RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+          RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+          RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+Leaf2#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.255.22, local AS number 65102
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+          RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+          RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+          RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+          RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65000 i
+          RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+          RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65000 i
+```
+
+With per-member ASNs there is **no AS-path rejection between the members**: Leaf1's routes — RD `...21:*`, path `65000 65101` — are accepted (65102 is nowhere in that path) and sit in the table **flag-less**, invalidated only by the next-hop-is-local rule. The end state looks like the shared-ASN design, but for a weaker reason, and the useless copies stay in the table to be re-evaluated on every churn instead of being dropped at the door.
+
+Second, the spine's view of the pair:
+
+```text
+SP1(config-router-bgp)#show bgp evpn route-type mac-ip 
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65102 i
+ *        RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65102 i
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65102 i
+ *        RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65102 i
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65102 i
+ *        RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65102 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65102 i
+ *        RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65102 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65102 i
+ *        RD: 10.255.255.22:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65102 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65102 i
+ *        RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65102 i
+SP1(config-router-bgp)#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65102 i
+ *        RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65102 i
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65102 i
+ *        RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65102 i
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65102 i
+ *        RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65102 i
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       i
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       i
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       i
+SP1(config-router-bgp)#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65102 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65102 i
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65102 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65102 i
+ * >Ec    RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       i
+ *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       i Or-ID: 10.255.255.23 C-LST: 10.255.255.12 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65102 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65102 i
+ * >Ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       i
+ *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       i Or-ID: 10.255.255.23 C-LST: 10.255.255.12 
+SP1(config-router-bgp)#
+```
+
+The anycast VTEP now stands behind **two different AS paths** — `65101 i` on Leaf1's copies, `65102 i` on Leaf2's. Everything is valid, but ECMP toward 10.255.255.112 is now hostage to `bestpath as-path multipath-relax`: the spines have it from Phase 2, so the split works *here* — but every future eBGP speaker that should load-balance toward the pair has to remember the same knob forever. With a shared ASN the two paths are identical and ECMP needs no favors.
+
+Third, the remote-site view — captured twice a few minutes apart, which accidentally produced a before/after of Leaf2's cutover:
+
+```text
+Leaf31#show bgp evpn route-type mac-ip 192.168.10.10 detail 
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.21:10
+ Paths: 1 available
+  65099 65000 65101
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00:00:d5:50
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.22:10
+ Paths: 1 available
+  65099 65000
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00:00:d5:50
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+Leaf31#show bgp evpn route-type mac-ip 192.168.10.10 detail
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.21:10
+ Paths: 1 available
+  65099 65000 65101
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00:00:d5:50
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.22:10
+ Paths: 1 available
+  65099 65000 65102
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00:00:d5:50
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+Leaf31#show bgp evpn route-type mac-ip 192.168.20.100 detail
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+BGP routing table entry for mac-ip 5000.0008.8014 192.168.20.100, Route Distinguisher: 10.255.255.21:20
+ Paths: 1 available
+  65099 65000 65101
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:20 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00:00:d5:50
+      VNI: 1020 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 5000.0008.8014 192.168.20.100, Route Distinguisher: 10.255.255.22:20
+ Paths: 1 available
+  65099 65000 65102
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:20 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00:00:d5:50
+      VNI: 1020 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+Leaf31#
+```
+
+In the first run the `...22:10` copy still reads `65099 65000` (Leaf2 mid-window, still iBGP); in the second, `65099 65000 65102`. Leaf31 now sees one host, one VTEP, one MLAG pair — behind **two ASNs**. Nothing breaks, but every AS-path analysis from here on treats the pair as two devices, and the plan has quietly burned 65102, the number reserved for Leaf3.
+
+That is the case for the shared pair ASN, stated by the fabric itself: the same end behavior with fewer conditions — member copies rejected outright instead of lingering flag-less, ECMP to the anycast VTEP with no `multipath-relax` dependency, AS paths that map one-to-one onto logical devices, and an intact ASN plan. Leaf2 was therefore drained again and rebuilt with the pair's shared **65101** — the same 3.2 transaction with the right number, plus `remote-as 65101` corrections on the spines' underlay entries for `10.0.12.1` / `10.0.22.1`.
+
+**The pair, corrected — Leaf2 retaken at 65101.** Same commands as the detour, and every difference the shared ASN promised shows up on cue. Leaf2's own view first:
+
+```text
+Leaf2#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.22, local AS number 65101
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.12.0           65000 Established   IPv4 Unicast            Negotiated             12         12
+10.0.22.0           65000 Established   IPv4 Unicast            Negotiated             12         12
+10.255.255.11       65000 Established   L2VPN EVPN              Negotiated              9          9
+10.255.255.12       65000 Established   L2VPN EVPN              Negotiated              9          9
+Leaf2#
+Leaf2#
+Leaf2#
+Leaf2#show bgp evpn route-type mac-ip 
+BGP routing table information for VRF default
+Router identifier 10.255.255.22, local AS number 65101
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 -                     -       -       0       i
+Leaf2#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.255.22, local AS number 65101
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65000 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65000 i
+Leaf2#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.255.22, local AS number 65101
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >Ec    RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ * >Ec    RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+ *  ec    RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 i
+Leaf2# show bgp evpn route-type mac-ip 192.168.10.150 detail 
+BGP routing table information for VRF default
+Router identifier 10.255.255.22, local AS number 65101
+BGP routing table entry for mac-ip 0050.7966.6810 192.168.10.150, Route Distinguisher: 10.255.31.21:10
+ Paths: 2 available
+  65000 65099 65030
+    10.255.31.113 from 10.255.255.11 (10.255.255.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, external, ECMP head, ECMP, best, ECMP contributor
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:50:00:00:ba:c8
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+  65000 65099 65030
+    10.255.31.113 from 10.255.255.12 (10.255.255.12)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, external, ECMP, ECMP contributor
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:50:00:00:ba:c8
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+Leaf2#
+```
+
+Three proofs in Leaf2's tables. The summary says `local AS number 65101`, and — the quiet one — **EVPN NLRI accepted is down to 9 per spine**: Leaf1's advertisements are no longer among them. That is why the route-type views contain **no `RD ...21:*` entries at all**: with both members in 65101, Leaf1's routes arrive carrying `65000 65101`, eBGP finds the receiver's own AS in the path, and drops them at the door — compare the detour, where the same routes lingered flag-less on next-hop grounds. And the R_VPC1 detail now reads `valid, external`: site B reachable over two clean eBGP ECMP paths, one per spine, RTs and VNIs untouched as always.
+
+The spines' session tables:
+
+```text
+SP1(config-router-bgp)# show bgp evpn summary
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor Status Codes: m - Under maintenance
+  Neighbor      V AS           MsgRcvd   MsgSent  InQ OutQ  Up/Down State   PfxRcd PfxAcc
+  10.255.255.1  4 65000            245       507    0    0 03:01:20 Estab   4      4
+  10.255.255.12 4 65000           1066      1111    0    0 03:16:28 Estab   21     21
+  10.255.255.21 4 65101            128       211    0    0 01:13:59 Estab   8      8
+  10.255.255.22 4 65101             20        42    0    0 00:06:36 Estab   8      8
+  10.255.255.23 4 65000            903      1243    0    0 11:58:19 Estab   5      5
+
+SP2(config-router-bgp)#show bgp evpn summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor Status Codes: m - Under maintenance
+  Neighbor      V AS           MsgRcvd   MsgSent  InQ OutQ  Up/Down State   PfxRcd PfxAcc
+  10.255.255.1  4 65000            245       438    0    0 03:01:43 Estab   4      4
+  10.255.255.11 4 65000            442       406    0    0 03:16:55 Estab   25     25
+  10.255.255.21 4 65101            149       195    0    0 01:14:12 Estab   8      8
+  10.255.255.22 4 65101             31        43    0    0 00:07:04 Estab   8      8
+  10.255.255.23 4 65000            266       461    0    0 03:16:55 Estab   5      5
+
+SP2(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.21.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.22.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1        65000 Established   L2VPN EVPN              Negotiated              4          4
+10.255.255.11       65000 Established   L2VPN EVPN              Negotiated             25         25
+10.255.255.21       65101 Established   L2VPN EVPN              Negotiated              8          8
+10.255.255.22       65101 Established   L2VPN EVPN              Negotiated              8          8
+10.255.255.23       65000 Established   L2VPN EVPN              Negotiated              5          5
+```
+
+The pair is coherent again from the spines' seats: `.21` and `.22` both Established at **65101** with symmetric `PfxRcd 8/8`, the underlay /31 pairs at 65101 beneath them — and note the `m - Under maintenance` status code in the summary header, EOS's reminder of which peers are quiesced (none, here).
+
+Then the capture that earns its place in the runbook:
+
+```text
+SP1(config-router-bgp)# show ip route 10.255.255.112
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+ O        10.255.255.112/32 [110/20]
+           via 10.0.11.1, Ethernet1
+           via 10.0.12.1, Ethernet2
+
+SP2(config-router-bgp)#show ip route 10.255.255.112
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+ O        10.255.255.112/32 [110/20]
+           via 10.0.22.1, Ethernet1
+           via 10.0.21.1, Ethernet2
+```
+
+**Both spines still route 10.255.255.112 via OSPF — `[110/20]`, ECMP through both members — after both members migrated.** Nothing is wrong; this is EOS's BGP distance of 200 again. Neither leaf has run `no router ospf 1` yet, so the eBGP copies stay benched and the RIB never budged through either window. Which reveals a sequencing option walk 2 did not promise: **rebuild both MLAG members' BGP first, then remove OSPF from both — and the single-member funnel never happens at all.** The RIB steps from two-way OSPF ECMP straight to two-way eBGP ECMP. The price is a longer ships-in-the-night period per pair; the prize is skipping the asymmetric window entirely. (On NX-OS this trick does not exist — eBGP at distance 20 seizes the RIB the moment the first member's session opens.) The step still owed on both leaves is `no router ospf 1`, after which this same command should show two `B E [200/0]` paths.
+
+SP1's EVPN view of the corrected pair:
+
+```text
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.12.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1        65000 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.12       65000 Established   L2VPN EVPN              Negotiated             31         31
+10.255.255.21       65101 Established   L2VPN EVPN              Negotiated             12         12
+10.255.255.22       65101 Established   L2VPN EVPN              Negotiated             12         12
+10.255.255.23       65000 Established   L2VPN EVPN              Negotiated              5          5
+SP1(config-router-bgp)#show bgp evpn route-type mac-ip 
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65101 i
+SP1(config-router-bgp)#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       i
+ *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       i Or-ID: 10.255.255.23 C-LST: 10.255.255.12 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       i
+ *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       i Or-ID: 10.255.255.23 C-LST: 10.255.255.12 
+SP1(config-router-bgp)#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       i
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       i
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       i
+```
+
+This closes the case the detour opened: every pair route — both RDs — now carries the identical path `65101 i`, so ECMP toward the pair no longer depends on `multipath-relax`, and the AS path maps one-to-one onto the logical device again.
+
+And the verdict from site B:
+
+```text
+Leaf31#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Neighbor              AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------ ----------- ------------- ----------------------- -------------- ---------- ----------
+10.255.31.11       65030 Established   L2VPN EVPN              Negotiated             29         29
+Leaf31#show bgp evpn route-type mac-ip 
+show bgp evpn route-type ip-prefix ipv4
+show bgp evpn route-type imet BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.21:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:10 mac-ip 0050.7966.6802 192.168.10.10
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 -                     -       -       0       i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+Leaf31#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST: 10.255. 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST: 10.255. 
+Leaf31#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:10 imet 10.255.31.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST: 10.255. 
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST: 10.255. 
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST: 10.255. 
+Leaf31#show bgp evpn route-type mac-ip 192.168.10.10 detail 
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.21:10
+ Paths: 1 available
+  65099 65000 65101
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00:00:d5:50
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distinguisher: 10.255.255.22:10
+ Paths: 1 available
+  65099 65000 65101
+    10.255.255.112 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:52:00:00:d5:50
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+Leaf31#
+```
+
+Both copies of VPC1 are back to `65099 65000 65101` — one host, one VTEP, one pair, **one ASN** — and the detail view is attribute-identical on both RDs, down to the router MAC. Put this next to the same command in the detour and the whole argument for the shared pair ASN is two captures long.
+
+**Then Leaf3**, as AS 65102: RDs `10.255.255.23:*`, `network 10.255.255.113/32` instead of .112, underlay neighbors `10.0.13.0` / `10.0.23.0`, spine-side adds `10.0.13.1` / `10.0.23.1` with `remote-as 65102`, and no MLAG lines anywhere. Leaf3 has no MLAG peer to drain onto, so VPC2 and VPC3 are down for the whole window — keep it short, and schedule it. And one warning earned the hard way in this lab: when cloning the pair's block as a template, **the RDs are exactly the thing that must not survive the copy.** A reused RD merges this leaf's routes with its donor's into single NLRI — remote devices then run best-path *inside* what should be two separate routes, and since BGP propagates only the winner, the losing VTEP silently disappears from remote sites. The symptom to grep for in 3.3 is your own `show bgp evpn` output advertising another leaf's RD with this leaf's next hop.
+
+**Leaf3, retaken with its own RDs.** The four `rd` statements corrected — the `(config-router-bgp-vrf-TENANT_A)#` prompt is the fix still warm — and the same commands re-run:
+
+```text
+Leaf3(config-router-bgp-vrf-TENANT_A)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.13.0           65000 Established   IPv4 Unicast            Negotiated             12         12
+10.0.23.0           65000 Established   IPv4 Unicast            Negotiated             12         12
+10.255.255.11       65000 Established   L2VPN EVPN              Negotiated             20         20
+10.255.255.12       65000 Established   L2VPN EVPN              Negotiated             20         20
+Leaf3(config-router-bgp-vrf-TENANT_A)#
+Leaf3(config-router-bgp-vrf-TENANT_A)#
+Leaf3(config-router-bgp-vrf-TENANT_A)#
+Leaf3(config-router-bgp-vrf-TENANT_A)#show bgp evpn route-type mac-ip 
+BGP routing table information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >Ec    RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 65101 i
+Leaf3(config-router-bgp-vrf-TENANT_A)#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >Ec    RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >Ec    RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 -                     -       -       0       i
+Leaf3(config-router-bgp-vrf-TENANT_A)#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >Ec    RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ *  ec    RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65099 65030 i
+ * >Ec    RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 -                     -       -       0       i
+Leaf3#show bgp evpn route-type mac-ip 192.168.10 150 detail
+BGP routing table information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+BGP routing table entry for mac-ip 0050.7966.6810 192.168.10.150, Route Distinguisher: 10.255.31.21:10
+ Paths: 2 available
+  65000 65099 65030
+    10.255.31.113 from 10.255.255.11 (10.255.255.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, external, ECMP head, ECMP, best, ECMP conr
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRoute8
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+  65000 65099 65030
+    10.255.31.113 from 10.255.255.12 (10.255.255.12)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, external, ECMP, ECMP contributor
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRoute8
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+Leaf3#end
+```
+
+Leaf3's identity is its own again: every local route — MAC/IP, Type-5, IMET — sits under `RD 10.255.255.23:*` with next hop `-`. The pair arrives as distinct `Ec`/`ec` routes per NLRI (two RDs, two spines) carrying `65000 65101`, and site B as `65000 65099 65030`, flagged `external`. With that, **all three leaves are migrated**: the site A leaf tier is fully eBGP.
+
+The spine, where the collision had lived:
+
+```text
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.12.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.13.1           65102 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1        65000 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.12       65000 Established   L2VPN EVPN              Negotiated             30         30
+10.255.255.21       65101 Established   L2VPN EVPN              Negotiated              8          8
+10.255.255.22       65101 Established   L2VPN EVPN              Negotiated              8          8
+10.255.255.23       65102 Established   L2VPN EVPN              Negotiated              9          9
+SP1(config-router-bgp)#show bgp evpn route-type mac-ip 
+show bgp evpn route-type ip-prefix ipv4
+show bgp evpn route-type imet BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65102 i
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+SP1(config-router-bgp)#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65102 i
+SP1(config-router-bgp)#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i
+ *  ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i Or-ID: 10.255.255.1 C-LST: 10.255 
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65102 i
+SP1(config-router-bgp)#
+```
+
+SP1's Type-5 table is the un-merge, printed. `192.168.20.0/24` and `192.168.30.0/24` now exist as **separate routes per leaf** — `.21:50000` and `.22:50000` behind 10.255.255.112 with `65101 i`, `.23:50000` behind 10.255.255.113 with `65102 i` — where the reused RD had fused them into one NLRI with mixed next hops. The summary reads like the ASN plan itself: `.21`/`.22` at 65101, `.23` at 65102, three underlay sessions beneath. And the IMET view is the full flood matrix again — three VNIs, three site A identities, plus site B — every next hop a VTEP.
+
+And site B, where the collision had done its silent damage:
+
+```text
+Leaf31#
+Leaf31#show bgp evpn route-type mac-ip 
+show bgp evpn route-type imet BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65099 65000 65102 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65099 65000 65102 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65099 65000 65102 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65099 65000 65102 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 -                     -       -       0       i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+Leaf31#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65099 65000 65102 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65099 65000 65102 i Or-ID: 10.255.31.1 C-LST: 1 
+Leaf31#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:10 imet 10.255.31.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65000 65101 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 65102 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 65102 i Or-ID: 10.255.31.1 C-LST: 1 
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65000 65102 i Or-ID: 10.255.31.1 C-LST: 1 
+Leaf31#show bgp evpn route-type mac-ip 192.168.20.20 detail
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+BGP routing table entry for mac-ip 0050.7966.6807 192.168.20.20, Route Distinguisher: 10.255.255.23:20
+ Paths: 1 available
+  65099 65000 65102
+    10.255.255.113 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:20 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:50:00:00:72:81
+      VNI: 1020 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+Leaf31#show bgp evpn route-type mac-ip 192.168.30.30 detail
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+BGP routing table entry for mac-ip 0050.7966.680b 192.168.30.30, Route Distinguisher: 10.255.255.23:30
+ Paths: 1 available
+  65099 65000 65102
+    10.255.255.113 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:30 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:50:00:00:72:81
+      VNI: 1030 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+```
+
+This is the restoration that matters most, because this was the invisible loss: **site B can see Leaf3 again.** The `.23:50000` prefixes for VLANs 20 and 30 are back in Leaf31's table behind `.113` with path `65099 65000 65102`, and the host details carry the full attribute set — both RTs, both VNIs, router MAC — under Leaf3's own RD. From across the DCI, site A's leaf tier now reads `65101`/`65102`: one device short of walk 3's final AS path. Border1 is next.
+
+#### Phase 4 — cut Border1 over to AS 65100
+
+Last device, biggest caveat: this lab has **one** border. Draining it makes the inter-site cutover graceful, not hitless — site B is unreachable from the moment Border1's BGP instance is removed until the new sessions establish. In production this design runs two borders and migrates them one at a time, exactly like the MLAG pair.
+
+Two devices change. Border1 is rebuilt (note the *new* `next-hop-unchanged` toward the spines — as an eBGP transit hop it would now rewrite site B's VTEP next hop on the way in, something its old iBGP session never did — and note that OSPF goes away in the same commit, since every site A device it needed OSPF for is already on BGP):
+
+```text
+configure session migrate-border1
+no router bgp 65000
+router bgp 65100
+   router-id 10.255.255.1
+   no bgp default ipv4-unicast
+   bgp bestpath as-path multipath-relax
+   graceful-restart restart-time 300
+   !
+   neighbor UNDERLAY peer group
+   neighbor UNDERLAY remote-as 65000
+   neighbor UNDERLAY send-community
+   neighbor 10.0.101.0 peer group UNDERLAY      ! Et5 -> Spine1
+   neighbor 10.0.102.0 peer group UNDERLAY      ! Et4 -> Spine2
+   !
+   neighbor EVPN peer group                     ! overlay toward the spines - now eBGP
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN ebgp-multihop 3
+   neighbor EVPN send-community extended
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   !
+   neighbor 10.0.103.0 remote-as 65099          ! DCI underlay - unchanged addresses
+   neighbor 10.255.99.1 remote-as 65099         ! DCI overlay - unchanged addresses
+   neighbor 10.255.99.1 update-source Loopback0
+   neighbor 10.255.99.1 ebgp-multihop 3
+   neighbor 10.255.99.1 send-community extended
+   !
+   address-family ipv4
+      neighbor UNDERLAY activate
+      neighbor 10.0.103.0 activate
+      network 10.255.255.1/32
+   !
+   address-family evpn
+      neighbor EVPN activate
+      neighbor EVPN next-hop-unchanged          ! NEW: eBGP toward the spines must preserve site B's VTEP next hops
+      neighbor 10.255.99.1 activate
+      neighbor 10.255.99.1 next-hop-unchanged
+no router ospf 1
+commit
+
+```
+
+On the spines, the same two-part visit as every leaf window: retire Border1's old client entry (it shadows the listen range), and add its underlay sessions. The second part is not optional bookkeeping — Border1's rebuild removes OSPF in the same commit, and the listen range only covers the overlay loopbacks, so without these underlay entries Border1 comes out of its rebuild with no routes at all and the cutover outage never ends:
+
+```text
+! Spine1
+router bgp 65000
+   no neighbor 10.255.255.1 peer group EVPN-RRC   ! retire the old iBGP client entry - it shadows the listen range
+   neighbor 10.0.101.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.101.1 remote-as 65100
+! Spine2
+router bgp 65000
+   no neighbor 10.255.255.1 peer group EVPN-RRC
+   neighbor 10.0.102.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.102.1 remote-as 65100
+```
+
+And the DCI updates its idea of who site A is — the only time anything outside site A is touched:
+
+```text
+router bgp 65099
+   neighbor 10.0.103.1 remote-as 65100
+   neighbor 10.255.255.1 remote-as 65100
+```
+
+
+A fair question here, fresh from the 3.2 lesson: why not delete the old neighbors first? Because the two situations are opposites. On the spines the stale entry *had* to go — the new session was meant to arrive through the dynamic listen range, and a static neighbor for the same address shadows the range. On the DCI the sessions stay **static**: same addresses, same `update-source`, `ebgp-multihop`, `send-community extended`, and — critically — the same `next-hop-unchanged`. Re-entering `remote-as` updates that single attribute in place and bounces the session; `no neighbor 10.255.255.1` would instead erase the neighbor's whole attribute set, and re-typing it from memory is exactly how a `next-hop-unchanged` gets forgotten and cross-site traffic blackholes into the DCI. Update, don't delete.
+
+**Phase 4, captured.** The cutover applied — Border1 rebuilt as 65100, the spines retired and re-peered, the DCI updated in place. The spine's overlay view first:
+
+```text
+SP1(config-router-bgp)#show bgp evpn route-type mac-ip 
+show bgp evpn route-type ip-prefix ipv4
+show bgp evpn route-type imet BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65100 65099 65030 i
+ *        RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65100 65099 65030 i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65100 65099 65030 i
+ *        RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65100 65099 65030 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65101 i
+SP1(config-router-bgp)#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65100 65099 65030 i
+ *        RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65100 65099 65030 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65100 65099 65030 i
+ *        RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65100 65099 65030 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65102 i
+SP1(config-router-bgp)#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65100 65099 65030 i
+ *        RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65100 65099 65030 i
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65100 65099 65030 i
+ *        RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65100 65099 65030 i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ *        RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65101 i
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65102 i
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65102 i
+ *        RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65102 i
+
+SP1(config-router-bgp)#
+```
+
+Site B's routes now carry `65100 65099 65030` — Border1's new ASN in the path, the inward half of walk 3. A quieter change rides along: these routes used to appear as `Ec`/`ec` pairs (two iBGP reflections), and now show an eBGP best with an iBGP shadow via Spine2 — external and internal paths do not ECMP together, so the pairing is gone. Site A's own routes sit untouched at `65101`/`65102`.
+
+The same spine's RIB:
+
+```text
+SP1(config-router-bgp)#show ip route
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+Gateway of last resort is not set
+
+ C        10.0.11.0/31
+           directly connected, Ethernet1
+ C        10.0.12.0/31
+           directly connected, Ethernet2
+ C        10.0.13.0/31
+           directly connected, Ethernet4
+ O        10.0.21.0/31 [110/20]
+           via 10.0.11.1, Ethernet1
+ O        10.0.22.0/31 [110/20]
+           via 10.0.12.1, Ethernet2
+ O        10.0.23.0/31 [110/20]
+           via 10.0.13.1, Ethernet4
+ C        10.0.101.0/31
+           directly connected, Ethernet5
+ O        10.0.102.0/31 [110/30]
+           via 10.0.11.1, Ethernet1
+           via 10.0.12.1, Ethernet2
+           via 10.0.13.1, Ethernet4
+ B E      10.31.11.0/31 [200/0]
+           via 10.0.101.1, Ethernet5
+ B E      10.255.31.1/32 [200/0]
+           via 10.0.101.1, Ethernet5
+ B E      10.255.31.11/32 [200/0]
+           via 10.0.101.1, Ethernet5
+ B E      10.255.31.21/32 [200/0]
+           via 10.0.101.1, Ethernet5
+ B E      10.255.31.113/32 [200/0]
+           via 10.0.101.1, Ethernet5
+ B E      10.255.99.1/32 [200/0]
+           via 10.0.101.1, Ethernet5
+ B E      10.255.255.1/32 [200/0]
+           via 10.0.101.1, Ethernet5
+ C        10.255.255.11/32
+           directly connected, Loopback0
+ O        10.255.255.12/32 [110/30]
+           via 10.0.11.1, Ethernet1
+           via 10.0.12.1, Ethernet2
+           via 10.0.13.1, Ethernet4
+ O        10.255.255.21/32 [110/20]
+           via 10.0.11.1, Ethernet1
+ O        10.255.255.22/32 [110/20]
+           via 10.0.12.1, Ethernet2
+ O        10.255.255.23/32 [110/20]
+           via 10.0.13.1, Ethernet4
+ O        10.255.255.112/32 [110/20]
+           via 10.0.11.1, Ethernet1
+           via 10.0.12.1, Ethernet2
+ O        10.255.255.113/32 [110/20]
+           via 10.0.13.1, Ethernet4
+```
+
+Everything south of Border1 — the site B loopbacks, the DCI, Border1's own `10.255.255.1/32` — is now `B E [200/0]` via `10.0.101.1`: the OSPF externals that Border1's old `redistribute bgp` used to provide died with its OSPF process, and direct eBGP replaced them. Two details worth a pause: the leaf loopbacks are *still* OSPF — `no router ospf 1` on the leaves remains Phase 3's open item, so the AD-200 finale is still owed — and every site B route lists exactly **one** next hop, via Ethernet5. The next capture explains why:
+
+```text
+Border1(config)#show bgp summary
+BGP summary information for VRF default
+Router identifier 10.255.255.1, local AS number 65100
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.101.0          65000 Established   IPv4 Unicast            Negotiated             11         11
+10.0.102.0          65000 Connect       IPv4 Unicast            Configured              0          0
+10.0.103.0          65099 Established   IPv4 Unicast            Negotiated              6          6
+10.255.99.1         65099 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.11       65000 Established   L2VPN EVPN              Negotiated             25         25
+10.255.255.12       65000 Established   L2VPN EVPN              Negotiated             25         25
+Border1(config)#show bgp evpn route-type mac-ip 
+show bgp evpn route-type ip-prefix ipv4
+show bgp evpn route-type imet BGP routing table information for VRF default
+Router identifier 10.255.255.1, local AS number 65100
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65000 65102 i
+ *  ec    RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65000 65102 i
+ * >Ec    RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65000 65102 i
+ *  ec    RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65000 65102 i
+ * >Ec    RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65000 65102 i
+ *  ec    RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65000 65102 i
+ * >Ec    RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65000 65102 i
+ *  ec    RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65000 65102 i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65099 65030 i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65099 65030 i
+ * >Ec    RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 65101 i
+Border1(config)#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.255.1, local AS number 65100
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65099 65030 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65000 65102 i
+ *        RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65000 65102 i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *        RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *        RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65000 65102 i
+ *        RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65000 65102 i
+Border1(config)#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.255.1, local AS number 65100
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65099 65030 i
+ * >Ec    RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 65102 i
+ *  ec    RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 65102 i
+ * >Ec    RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 65102 i
+ *  ec    RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 65102 i
+ * >Ec    RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 65102 i
+ *  ec    RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65000 65102 i
+```
+
+Two proofs and one problem. The proofs: the DCI sessions — underlay and overlay — re-established at 65100 with nothing but the in-place `remote-as` change (the update-don't-delete argument, vindicated), and both spine overlay sessions Established through the listen range, 25 NLRI each, no neighbor statements behind them. The problem, in plain sight: **`10.0.102.0`, the Spine2 underlay session, is stuck in `Connect`.** A session that never leaves Connect means TCP itself is not completing, and the checklist runs in order: the far end's neighbor pair (the Phase 4 spine visit), then the transport underneath. In this lab the config checked out on both ends — the root cause was the *virtual lab itself*, an EVE-NG fault on that emulated wire, the kind of failure no `show bgp` output can explain. Which is a better lesson than a typo would have been: **Connect-state debugging starts below BGP** — prove the /31 actually forwards before touching neighbor statements, doubly so in emulated labs where the wire is software too. Until the link passes traffic, Border1's underlay is single-homed through Spine1 — the RIB above already showed it — and one link failure severs the sites. The 3.3 discipline applies to borders too: this row is exactly what verify-before-undrain exists to catch.
+
+The far end, and the finish line:
+
+```text
+Leaf31#show bgp evpn route-type mac-ip 
+show bgp evpn route-type ip-prefix ipv4
+show bgp evpn route-type imet BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 -                     -       -       0       i
+ * >      RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+Leaf31#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+Leaf31#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.31.21:10 imet 10.255.31.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.31.21:20 imet 10.255.31.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65099 65100 65000 65101 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+Leaf31#
+Leaf31#show bgp evpn route-type mac-ip 192.168.20.20
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+Leaf31#show bgp evpn route-type mac-ip 192.168.30.30
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+Leaf31#
+Leaf31#show bgp evpn route-type mac-ip 192.168.20.20
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+Leaf31#show bgp evpn route-type mac-ip 192.168.30.30
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 10.255.255.113        -       100     0       65099 65100 65000 65102 i Or-ID: 10.255.31.1 C- 
+Leaf31#show bgp evpn route-type mac-ip 192.168.20.20 detail 
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+BGP routing table entry for mac-ip 0050.7966.6807 192.168.20.20, Route Distinguisher: 10.255.255.23:20
+ Paths: 1 available
+  65099 65100 65000 65102
+    10.255.255.113 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:20 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:50:00:00:72:81
+      VNI: 1020 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+Leaf31#show bgp evpn route-type mac-ip 192.168.30.30 detail 
+BGP routing table information for VRF default
+Router identifier 10.255.31.21, local AS number 65030
+BGP routing table entry for mac-ip 0050.7966.680b 192.168.30.30, Route Distinguisher: 10.255.255.23:30
+ Paths: 1 available
+  65099 65100 65000 65102
+    10.255.255.113 from 10.255.31.11 (10.255.31.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, best
+      Originator: 10.255.31.1, Cluster list: 10.255.31.11 
+      Extended Community: Route-Target-AS:1:30 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:50:00:00:72:81
+      VNI: 1030 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+Leaf31#
+```
+
+**And there it is.** Leaf31 — untouched, in another autonomous system, three eBGP domains away — now shows every site A host behind AS path **`65099 65100 65000 65101`** or **`…65102`**: route server, border tier, spine tier, originating leaf. Walk 3's predicted path, character for character, with the next hops still the same two VTEPs and the RTs still the same `1:*` values. The migration's externally visible change is complete, and it is exactly one attribute wide.
+
+And the mirror from inside site A:
+
+```text
+Leaf3#show bgp evpn route-type mac-ip 
+show bgp evpn route-type ip-prefix ipv4
+show bgp evpn route-type imet BGP routing table information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.23:20 mac-ip 0050.7966.6807 192.168.20.20
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.23:30 mac-ip 0050.7966.680b 192.168.30.30
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ * >Ec    RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0000
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:20 mac-ip 5000.0008.0001
+                                 10.255.255.112        -       100     0       65000 65101 i
+Leaf3#show bgp evpn route-type ip-prefix ipv4
+BGP routing table information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ * >Ec    RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:50000 ip-prefix 192.168.10.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ *  ec    RD: 10.255.31.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ * >Ec    RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:50000 ip-prefix 192.168.20.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.20.0/24
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:50000 ip-prefix 192.168.30.0/24
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
+                                 -                     -       -       0       i
+Leaf3#show bgp evpn route-type imet 
+BGP routing table information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ * >Ec    RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ *  ec    RD: 10.255.31.21:20 imet 10.255.31.113
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ * >Ec    RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.21:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:10 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:20 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >Ec    RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ *  ec    RD: 10.255.255.22:30 imet 10.255.255.112
+                                 10.255.255.112        -       100     0       65000 65101 i
+ * >      RD: 10.255.255.23:10 imet 10.255.255.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.23:20 imet 10.255.255.113
+                                 -                     -       -       0       i
+ * >      RD: 10.255.255.23:30 imet 10.255.255.113
+                                 -                     -       -       0       i
+Leaf3#
+Leaf3#
+Leaf3#
+Leaf3#
+Leaf3#show bgp evpn route-type mac-ip 192.168.10.150
+BGP routing table information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending best path selection
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >Ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+ *  ec    RD: 10.255.31.21:10 mac-ip 0050.7966.6810 192.168.10.150
+                                 10.255.31.113         -       100     0       65000 65100 65099 65030 i
+Leaf3#show bgp evpn route-type mac-ip 192.168.10.150 detail 
+BGP routing table information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+BGP routing table entry for mac-ip 0050.7966.6810 192.168.10.150, Route Distinguisher: 10.255.31.21:10
+ Paths: 2 available
+  65000 65100 65099 65030
+    10.255.31.113 from 10.255.255.11 (10.255.255.11)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, external, ECMP head, ECMP, best, ECMP conr
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRoute8
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+  65000 65100 65099 65030
+    10.255.31.113 from 10.255.255.12 (10.255.255.12)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, external, ECMP, ECMP contributor
+      Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRoute8
+      VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
+```
+
+Leaf3 reads site B behind `65000 65100 65099 65030` — the same four-tier chain in the opposite direction, ECMP'd `external` through both spines, attributes intact. Site A is now eBGP everywhere with its border carrying the site ASN. What remains: the Spine2 underlay fix above, the leaves' OSPF removal, and Phase 6's cleanup.
+
+From this commit on, site B sees site A host routes with AS path `65099 65100 65000 6510x` — walk 3 is now the live fabric. On the overlay side the spines needed nothing: Border1's new session lands in the same listen range and AS filter as the leaves, with no neighbor statement added — the underlay pair above was the whole spine-side cost.
+#### Phase 5 — remove OSPF from the underlay
+
+The Phase 3 windows deliberately left OSPF running on all three leaves — the both-members-first sequencing that kept the anycast VTEP on two-way ECMP the whole way through. With Border1 done (its OSPF went inside the Phase 4 commit), the last act of the underlay migration is one command per leaf, gated by the 3.2 check that the BGP table already holds everything:
+
+```text
+! Leaf1, Leaf2, Leaf3
+no router ospf 1
+```
+
+The RIBs afterwards, on every site A device — kept in full, because this is the state the whole migration was aiming at:
+
+```text
+
+Leaf1(config)#show ip route
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+Gateway of last resort is not set
+
+ C        10.0.11.0/31
+           directly connected, Ethernet1
+ C        10.0.21.0/31
+           directly connected, Ethernet2
+ B E      10.31.11.0/31 [200/0]
+           via 10.0.11.0, Ethernet1
+ B E      10.255.31.1/32 [200/0]
+           via 10.0.11.0, Ethernet1
+ B E      10.255.31.11/32 [200/0]
+           via 10.0.11.0, Ethernet1
+ B E      10.255.31.21/32 [200/0]
+           via 10.0.11.0, Ethernet1
+ B E      10.255.31.113/32 [200/0]
+           via 10.0.11.0, Ethernet1
+ B E      10.255.99.1/32 [200/0]
+           via 10.0.11.0, Ethernet1
+ B E      10.255.255.1/32 [200/0]
+           via 10.0.11.0, Ethernet1
+ B E      10.255.255.11/32 [200/0]
+           via 10.0.11.0, Ethernet1
+ B E      10.255.255.12/32 [200/0]
+           via 10.0.21.0, Ethernet2
+ C        10.255.255.21/32
+           directly connected, Loopback0
+ B E      10.255.255.23/32 [200/0]
+           via 10.0.11.0, Ethernet1
+           via 10.0.21.0, Ethernet2
+ C        10.255.255.112/32
+           directly connected, Loopback1
+ B E      10.255.255.113/32 [200/0]
+           via 10.0.11.0, Ethernet1
+           via 10.0.21.0, Ethernet2
+ C        169.254.1.0/30
+           directly connected, Vlan4094
+
+Leaf2(config)#show ip route
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+Gateway of last resort is not set
+
+ C        10.0.12.0/31
+           directly connected, Ethernet2
+ C        10.0.22.0/31
+           directly connected, Ethernet1
+ B E      10.31.11.0/31 [200/0]
+           via 10.0.12.0, Ethernet2
+ B E      10.255.31.1/32 [200/0]
+           via 10.0.12.0, Ethernet2
+ B E      10.255.31.11/32 [200/0]
+           via 10.0.12.0, Ethernet2
+ B E      10.255.31.21/32 [200/0]
+           via 10.0.12.0, Ethernet2
+ B E      10.255.31.113/32 [200/0]
+           via 10.0.12.0, Ethernet2
+ B E      10.255.99.1/32 [200/0]
+           via 10.0.12.0, Ethernet2
+ B E      10.255.255.1/32 [200/0]
+           via 10.0.12.0, Ethernet2
+ B E      10.255.255.11/32 [200/0]
+           via 10.0.12.0, Ethernet2
+ B E      10.255.255.12/32 [200/0]
+           via 10.0.22.0, Ethernet1
+ C        10.255.255.22/32
+           directly connected, Loopback0
+ B E      10.255.255.23/32 [200/0]
+           via 10.0.22.0, Ethernet1
+           via 10.0.12.0, Ethernet2
+ C        10.255.255.112/32
+           directly connected, Loopback1
+ B E      10.255.255.113/32 [200/0]
+           via 10.0.22.0, Ethernet1
+           via 10.0.12.0, Ethernet2
+ C        169.254.1.0/30
+           directly connected, Vlan4094
+
+Leaf3(config)#show ip route
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+Gateway of last resort is not set
+
+ C        10.0.13.0/31
+           directly connected, Ethernet4
+ C        10.0.23.0/31
+           directly connected, Ethernet3
+ B E      10.31.11.0/31 [200/0]
+           via 10.0.13.0, Ethernet4
+ B E      10.255.31.1/32 [200/0]
+           via 10.0.13.0, Ethernet4
+ B E      10.255.31.11/32 [200/0]
+           via 10.0.13.0, Ethernet4
+ B E      10.255.31.21/32 [200/0]
+           via 10.0.13.0, Ethernet4
+ B E      10.255.31.113/32 [200/0]
+           via 10.0.13.0, Ethernet4
+ B E      10.255.99.1/32 [200/0]
+           via 10.0.13.0, Ethernet4
+ B E      10.255.255.1/32 [200/0]
+           via 10.0.13.0, Ethernet4
+ B E      10.255.255.11/32 [200/0]
+           via 10.0.13.0, Ethernet4
+ B E      10.255.255.12/32 [200/0]
+           via 10.0.23.0, Ethernet3
+ B E      10.255.255.21/32 [200/0]
+           via 10.0.23.0, Ethernet3
+           via 10.0.13.0, Ethernet4
+ B E      10.255.255.22/32 [200/0]
+           via 10.0.23.0, Ethernet3
+           via 10.0.13.0, Ethernet4
+ C        10.255.255.23/32
+           directly connected, Loopback0
+ B E      10.255.255.112/32 [200/0]
+           via 10.0.23.0, Ethernet3
+           via 10.0.13.0, Ethernet4
+ C        10.255.255.113/32
+           directly connected, Loopback1
+ C        192.168.10.0/24
+           directly connected, Vlan10
+
+Leaf3(config)#
+
+SP1(config)#
+SP1(config)#show ip route
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+Gateway of last resort is not set
+
+ C        10.0.11.0/31
+           directly connected, Ethernet1
+ C        10.0.12.0/31
+           directly connected, Ethernet2
+ C        10.0.13.0/31
+           directly connected, Ethernet4
+ C        10.0.101.0/31
+           directly connected, Ethernet5
+ B E      10.31.11.0/31 [200/0]
+           via 10.0.101.1, Ethernet5
+ B E      10.255.31.1/32 [200/0]
+           via 10.0.101.1, Ethernet5
+ B E      10.255.31.11/32 [200/0]
+           via 10.0.101.1, Ethernet5
+ B E      10.255.31.21/32 [200/0]
+           via 10.0.101.1, Ethernet5
+ B E      10.255.31.113/32 [200/0]
+           via 10.0.101.1, Ethernet5
+ B E      10.255.99.1/32 [200/0]
+           via 10.0.101.1, Ethernet5
+ B E      10.255.255.1/32 [200/0]
+           via 10.0.101.1, Ethernet5
+ C        10.255.255.11/32
+           directly connected, Loopback0
+ B E      10.255.255.21/32 [200/0]
+           via 10.0.11.1, Ethernet1
+ B E      10.255.255.22/32 [200/0]
+           via 10.0.12.1, Ethernet2
+ B E      10.255.255.23/32 [200/0]
+           via 10.0.13.1, Ethernet4
+ B E      10.255.255.112/32 [200/0]
+           via 10.0.11.1, Ethernet1
+           via 10.0.12.1, Ethernet2
+ B E      10.255.255.113/32 [200/0]
+           via 10.0.13.1, Ethernet4
+
+SP2(config)#
+SP2(config)#show ip route
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+Gateway of last resort is not set
+
+ C        10.0.21.0/31
+           directly connected, Ethernet2
+ C        10.0.22.0/31
+           directly connected, Ethernet1
+ C        10.0.23.0/31
+           directly connected, Ethernet3
+ C        10.0.102.0/31
+           directly connected, Ethernet4
+ C        10.255.255.12/32
+           directly connected, Loopback0
+ B E      10.255.255.21/32 [200/0]
+           via 10.0.21.1, Ethernet2
+ B E      10.255.255.22/32 [200/0]
+           via 10.0.22.1, Ethernet1
+ B E      10.255.255.23/32 [200/0]
+           via 10.0.23.1, Ethernet3
+ B E      10.255.255.112/32 [200/0]
+           via 10.0.22.1, Ethernet1
+           via 10.0.21.1, Ethernet2
+ B E      10.255.255.113/32 [200/0]
+           via 10.0.23.1, Ethernet3
+
+SP2(config)#
+
+Border1(config)#show ip route
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+Gateway of last resort is not set
+
+ C        10.0.101.0/31
+           directly connected, Ethernet5
+ C        10.0.102.0/31
+           directly connected, Ethernet4
+ C        10.0.103.0/31
+           directly connected, Ethernet3
+ B E      10.31.11.0/31 [200/0]
+           via 10.0.103.0, Ethernet3
+ B E      10.255.31.1/32 [200/0]
+           via 10.0.103.0, Ethernet3
+ B E      10.255.31.11/32 [200/0]
+           via 10.0.103.0, Ethernet3
+ B E      10.255.31.21/32 [200/0]
+           via 10.0.103.0, Ethernet3
+ B E      10.255.31.113/32 [200/0]
+           via 10.0.103.0, Ethernet3
+ B E      10.255.99.1/32 [200/0]
+           via 10.0.103.0, Ethernet3
+ C        10.255.255.1/32
+           directly connected, Loopback0
+ B E      10.255.255.11/32 [200/0]
+           via 10.0.101.0, Ethernet5
+ B E      10.255.255.21/32 [200/0]
+           via 10.0.101.0, Ethernet5
+ B E      10.255.255.22/32 [200/0]
+           via 10.0.101.0, Ethernet5
+ B E      10.255.255.23/32 [200/0]
+           via 10.0.101.0, Ethernet5
+ B E      10.255.255.112/32 [200/0]
+           via 10.0.101.0, Ethernet5
+ B E      10.255.255.113/32 [200/0]
+           via 10.0.101.0, Ethernet5
+
+```
+
+Read the spines first, because this is the capture the section has been promising since walk 2: **`10.255.255.112/32` as `B E [200/0]` with two paths, one per MLAG member, on both spines.** The RIB stepped from two-way OSPF ECMP straight to two-way eBGP ECMP — because both members migrated before either dropped OSPF, the single-member funnel never existed on this fabric. And there is not one `O` route left on any site A device: the underlay is BGP end to end, one routing protocol, distance 200 everywhere.
+
+Two smaller stories hide in the same outputs. First, the dead Spine2 wire from Phase 4 is still visible: site B's loopbacks appear only through Spine1 — `10.0.101.1` on SP1, a single SP1-facing uplink path on every leaf, and nothing at all on SP2 — where a healthy link would give SP2 the same `B E` set via `10.0.102.1` and the leaves a second path toward the DCI. Second, neither spine has a route to the other's loopback anymore: the only candidates would be leaf-relayed paths carrying `65000`, which die to ordinary eBGP loop prevention. The spine-spine iBGP session has quietly lost its transport — one more reason Phase 6 deletes it rather than mourns it.
+
+#### Phase 6 — decommission the iBGP scaffolding
+
+Only after everything is migrated and stable (in production: a multi-day soak; in the lab: after the walks check out):
+
+```text
+! Spines - remove the RR function and the interim underlay bridge
+router bgp 65000
+   no neighbor EVPN-RRC peer group  ! the per-leaf/border client entries were already retired in their Phase 3 / Phase 4 windows
+   no neighbor 10.255.255.12        ! Spine1 (Spine2: no neighbor 10.255.255.11) - the spine-spine iBGP session
+   address-family ipv4
+      no redistribute ospf
+!
+no router ospf 1
+```
+
+The end state, from both spines — session tables first, then the running configuration that remains:
+
+```text
+SP1(config-router-bgp-af)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.12.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.13.1           65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1          65100 Established   IPv4 Unicast            Negotiated              7          7
+10.255.255.1        65100 Established   L2VPN EVPN              Negotiated              4          4
+10.255.255.21       65101 Established   L2VPN EVPN              Negotiated              8          8
+10.255.255.22       65101 Established   L2VPN EVPN              Negotiated              8          8
+10.255.255.23       65102 Established   L2VPN EVPN              Negotiated              5          5
+SP1(config-router-bgp-af)#
+
+
+SP2(config-router-bgp-af)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.21.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.22.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.23.1           65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.102.1          65100 Active        IPv4 Unicast            Configured              0          0
+10.255.255.11       65000 Active        L2VPN EVPN              Configured              0          0
+10.255.255.21       65101 Established   L2VPN EVPN              Negotiated              8          8
+10.255.255.22       65101 Established   L2VPN EVPN              Negotiated              8          8
+10.255.255.23       65102 Established   L2VPN EVPN              Negotiated              5          5
+SP2(config-router-bgp-af)#
+```
+
+SP1's table is the finished design in eight rows: four underlay sessions (65101 twice, 65102, 65100) and four overlay sessions, every one eBGP, every overlay peer a dynamic listen-range entry — no route reflection, no iBGP, nothing left of AS 65000 except the spines' own membership. SP2's table tells two smaller truths. `10.0.102.1 Active` is the familiar dead lab wire. But **`10.255.255.11 65000 Active` is a decommission miss**: the Phase 6 removal ran on SP1 — its config below is clean — while SP2 still carries the spine-spine neighbor. This is exactly how missed cleanup announces itself: not as a failure, but as a session parked in `Active` forever, its transport gone since Phase 5. Finish the job with `no neighbor 10.255.255.11` on SP2.
+
+The dead wire's final-state blast radius is also visible by absence: SP2 has **no session to Border1 at all** — no underlay (the wire), and no overlay either, because Border1 can no longer reach `10.255.255.12`: the only path that loopback had left was the broken link, and leaf-relayed copies arrive carrying `65000` and die to loop prevention. Until the wire heals, every inter-site route and packet rides SP1 alone; when it heals, both sessions are already configured on both ends, and the symmetry returns by itself.
+
+```text
+SP1(config-router-bgp-af)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.11
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   neighbor 10.0.11.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.11.1 remote-as 65101
+   neighbor 10.0.12.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.12.1 remote-as 65101
+   neighbor 10.0.13.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.13.1 remote-as 65102
+   neighbor 10.0.101.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.101.1 remote-as 65100
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      network 10.255.255.11/32
+!
+
+SP2(config-router-bgp-af)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.12
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   neighbor 10.0.21.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.21.1 remote-as 65101
+   neighbor 10.0.22.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.22.1 remote-as 65101
+   neighbor 10.0.23.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.23.1 remote-as 65102
+   neighbor 10.0.102.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.102.1 remote-as 65100
+   neighbor 10.255.255.11 remote-as 65000
+   neighbor 10.255.255.11 update-source Loopback0
+   neighbor 10.255.255.11 send-community extended
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+      neighbor 10.255.255.11 activate
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      network 10.255.255.12/32
+!
+```
+
+The configuration that remains is the point: it is the Phase 2 scaffold minus the scaffolding — the listen range, the two peer groups, `next-hop-unchanged`, the per-neighbor underlay entries, one `network` statement, and nothing else. One line from the published Phase 2 block is absent in the lab's running config — `bgp bestpath as-path multipath-relax` — and nothing missed it, because after the corrections every ECMP set in site A carries identical AS paths (the pair shares 65101). Keep it anyway: it costs nothing, and it is what protects any future design where equal-cost paths cross different ASNs.
+
+Keep `next-hop-unchanged`, the peer groups, the listen range, and the pinned RTs — those are the fabric now, not migration scaffolding. Re-run the full Phase 0 snapshot set and archive it as the new baseline; the EVPN route-type outputs should differ from the original snapshots in exactly one attribute, the AS path.
+
+Site B was never touched: same configs, same iBGP, same RR — and, per walk 3, the same tunnels. Which is the quiet conclusion of the whole exercise: in this design, a site's internal control-plane model is a private implementation detail.
+
+#### Summary and considerations from the test
+
+**1. ASN planning is an operations feature, not paperwork.** A lab can spend private ASNs freely; production should make every number carry meaning:
+
+- **Map ASNs to device or rack names.** This lab used 65101 for the MLAG pair and 65102 for Leaf3; a naming-aligned plan would skip 65102 entirely and give Leaf3 **65103**, so the trailing digit tracks the switch name and a glance at any AS path names the rack. It would also have made the Phase 3 detour's mistake visible on sight — a pair member running a number that does not match its name.
+- **Carve per-DC pools with room to grow**: for example 65100–65199 for DC1, 65200–65299 for DC2, and a separate reserved block (say 64550–64599) for inter-DC roles — borders, route servers. Review the pools against utilization before expansion turns into archaeology, and remember the 2-byte private range holds only 1,023 ASNs (64512–65534) — multi-DC designs at scale move to the 4-byte private range. Then make the plan self-enforcing: encode the pool in the spines' `peer-filter` (this lab's `LEAF-ASNS 65100-65199`), and an out-of-pool ASN cannot even form a session.
+
+**2. One control-plane variable per migration.** EOS would have supported converting the underlay to BGP unnumbered in the same windows, and it was deliberately not done. iBGP + RR to eBGP everywhere already changes the routing design; going unnumbered at the same time would additionally invalidate every /31 neighbor statement, every capture being diffed, and every rollback file — mid-flight. Convert to unnumbered as its own later phase, link by link with its own verification, unless releasing the point-to-point addressing is itself the urgent requirement. (What unnumbered changes is covered in the [architecture post's section 4.1](/posts/vxlan-evpn-architecture/#41-ibgp-overlay-with-an-igp-underlay-versus-ebgp-everywhere).)
+
+**3. Three ways to run this migration, and what each one costs.** The real purpose of this test was to measure service impact per option:
+
+- **Big bang** — rebuild everything in one window. Its only virtue is speed. Everything else argues against it: the window is long, the entire DC is exposed at once (realistically forcing a DC-level switchover first), and with every device changing simultaneously, fault isolation inside the window becomes guesswork.
+- **Migrate by replacement** — for the most change-sensitive environments: pre-stage a new switch per rack with the target configuration, connect it to the spines (it joins as eBGP from day one — nothing is ever rebuilt in place), and let the application teams move circuits over one at a time; the old switch then becomes the pre-staged switch for the next rack. Smoothest service impact, slowest calendar — and it spends spare hardware, spine ports, and per-circuit coordination to buy that smoothness. Note what it really does: it converts a control-plane migration into a cabling migration.
+- **In-place, one rack per window** — what this lab demoed. One leaf's blast radius at a time, a fault domain small enough to reason about, maintenance-mode drains with the MLAG peer carrying the pair, and — with the sequencing discovered along the way (both members' BGP first, OSPF removal in Phase 5) — not even an ECMP wobble on the anycast VTEP. The balanced default.
+
+**4. Day-1 design is day-2 operations.** The test kept proving one sentence: the decisions made when a fabric is built determine how expensive it is to change. The ASN-free RTs pinned in section 4 turned the migration's most dangerous phase into a read-only check; loopback-based RDs sailed through the renumbering untouched; and the one day-1-style shortcut taken mid-test — cloning a config block with its RDs still in it — instantly produced the exact class of invisible damage (merged NLRI, routes hidden from the remote site) that the original design existed to prevent. Good design did not make this migration possible; it made it *boring* — the highest compliment a migration can earn.
+
+#### Risk register
+
+| Risk                                                                                                                       | Mitigation                                                                                                                                                     |
+|----------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| RT mismatch after ASN change → silent import failure                                                                       | Static ASN-free RTs since day one (Phase 1 verifies); fabrics with `ASN:VNI` RTs must pin current values fabric-wide before any ASN change                     |
+| A transit hop rewrites EVPN next hops → blackhole                                                                          | `next-hop-unchanged` on spine, border, and DCI EVPN sessions; the 3.3 next-hop check gates every undrain                                                       |
+| Migrated leaf loses routes to unmigrated VTEPs (or vice versa)                                                             | Interim mutual OSPF↔BGP redistribution on the spines; removed in Phase 6                                                                                       |
+| ECMP loss with unique leaf ASNs                                                                                            | `bgp bestpath as-path multipath-relax` + `maximum-paths` everywhere                                                                                            |
+| Interim funnel to the anycast VTEP via the unmigrated member (EOS BGP distance 200 loses to OSPF 110)                      | Expected once the migrated member drops OSPF — or avoided entirely: migrate both members' BGP first, remove OSPF from both afterwards (the Phase 5 sequencing) |
+| Overlay session won't establish                                                                                            | `ebgp-multihop 3` + `update-source Loopback0` + underlay loopback reachability first                                                                           |
+| Stale RR-client neighbor shadows the listen range → `BAD_AS_NUMBER`, overlay session never forms                           | Retire the leaf's `EVPN-RRC` entry on both spines inside its migration window — the real log signature is in 3.2                                               |
+| MLAG members rebuilt with different ASNs                                                                                   | Works, but ECMP needs `multipath-relax` everywhere and AS paths stop mapping to devices — use one ASN per pair (the 65102 detour in Phase 3 shows why)         |
+| Traffic hit during a leaf's BGP rebuild                                                                                    | Maintenance-mode drain; MLAG peer carries the pair; one member per window                                                                                      |
+| Single-attached hosts (VPC1, VPC2/VPC3)                                                                                    | Identified in Phase 0; brief hit scheduled or accepted                                                                                                         |
+| Inter-site outage at Border1 cutover                                                                                       | Unavoidable with one border — drain first; production runs two borders, migrated one at a time                                                                 |
+| Cloned config block keeps the donor's RDs → merged NLRI, the new leaf silently vanishes from remote sites                  | Loopback-based per-VTEP RDs, never copied; the 3.3 symptom is your own `show bgp evpn` advertising another leaf's RD (the Leaf3 incident in Phase 3)           |
+| Border rebuild drops OSPF with no spine-side underlay sessions in place → device fully isolated, cutover outage never ends | The Phase 4 spine visit adds the underlay pair before the border commits; verify both sessions before undraining                                               |
+| Decommission applied unevenly across devices → leftover neighbors parked in `Active` forever                               | Run Phase 6 from a per-device checklist and finish with a fabric-wide sweep for non-Established sessions (the SP2 leftover in Phase 6 is the exhibit)          |
+| A dead link masquerades as a BGP problem — session stuck in `Connect`                                                      | Connect-state debugging starts below BGP: prove the /31 forwards before touching neighbor statements (the EVE-NG wire in Phase 4)                              |
+| Rollback                                                                                                                   | Old config is a saved file; `configure replace` on a drained leaf restores its iBGP identity in seconds                                                        |
+
+## 7. Summary: HER vs multicast, IGMP snooping, versions, and queriers
+
+### 7.1 HER vs multicast underlay
 
 Both solve the same problem — delivering one BUM frame to N remote VTEPs — at opposite ends of a classic trade: **HER spends bandwidth to keep the network stateless; multicast spends state and protocol complexity to keep bandwidth minimal.**
 
 With HER, the ingress VTEP makes N-1 unicast copies. A broadcast entering a fabric of 100 VTEPs leaves the ingress leaf's uplinks 99 times. With a multicast underlay it leaves once, and the PIM tree forks it only where paths actually diverge — spines replicate, links never carry duplicates.
 
-| | Head-end replication | Multicast underlay |
-|---|---|---|
-| Copies on ingress uplink | one per remote VTEP in the VNI | exactly one |
-| Underlay requirements | plain IP unicast | PIM-SM everywhere, RP design, RPF-clean topology |
-| State in the core | none — spines just route unicast | (*,G)/(S,G) per group on every router in the tree |
-| Flood list / tree maintenance | static: manual (section 2); EVPN: automatic Type-3 (section 4) | PIM joins/prunes; EVPN PMSI signals group membership (section 4.1) |
-| Troubleshooting | easy — it's unicast; ping and traceroute tell the truth | mroute state, RPF failures, RP health all in play |
-| Failure domain | per-VTEP | RP is critical shared infrastructure (mitigate with anycast RP) |
-| Scales badly when | many VTEPs per VNI **and** lots of BUM (each of N VTEPs replicating to N-1 peers is O(N²) fabric-wide) | operational scale: many groups, many trees, multicast expertise required |
-| Virtual lab support | works on vEOS-lab | data plane unsupported on vEOS-lab (sections 3, 4.1) |
-| Typical fit | the default; small-to-large fabrics with modest BUM | very large fabrics, or overlays carrying real multicast applications (market data, IPTV, storage sync) |
+|                               | Head-end replication                                                                                   | Multicast underlay                                                                                     |
+|-------------------------------|--------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|
+| Copies on ingress uplink      | one per remote VTEP in the VNI                                                                         | exactly one                                                                                            |
+| Underlay requirements         | plain IP unicast                                                                                       | PIM-SM everywhere, RP design, RPF-clean topology                                                       |
+| State in the core             | none — spines just route unicast                                                                       | (*,G)/(S,G) per group on every router in the tree                                                      |
+| Flood list / tree maintenance | static: manual (section 2); EVPN: automatic Type-3 (section 4)                                         | PIM joins/prunes; EVPN PMSI signals group membership (section 4.1)                                     |
+| Troubleshooting               | easy — it's unicast; ping and traceroute tell the truth                                                | mroute state, RPF failures, RP health all in play                                                      |
+| Failure domain                | per-VTEP                                                                                               | RP is critical shared infrastructure (mitigate with anycast RP)                                        |
+| Scales badly when             | many VTEPs per VNI **and** lots of BUM (each of N VTEPs replicating to N-1 peers is O(N²) fabric-wide) | operational scale: many groups, many trees, multicast expertise required                               |
+| Virtual lab support           | works on vEOS-lab                                                                                      | data plane unsupported on vEOS-lab (sections 3, 4.1)                                                   |
+| Typical fit                   | the default; small-to-large fabrics with modest BUM                                                    | very large fabrics, or overlays carrying real multicast applications (market data, IPTV, storage sync) |
 
 Rules of thumb:
 
@@ -1987,7 +6926,7 @@ Rules of thumb:
 - Move to a multicast underlay when BUM volume is genuinely high — usually because tenants **run multicast applications over the overlay** — or when VTEP counts per VNI reach the point where ingress replication measurably loads leaf uplinks.
 - Group-to-VNI mapping is a design knob: one group per VNI (as here) gives precise delivery but more state; sharing one group across many VNIs shrinks state but delivers BUM to VTEPs that must then drop it — the same bandwidth-vs-state trade-off one level down.
 
-### 6.2 IGMP snooping
+### 7.2 IGMP snooping
 
 Everything above moves multicast **between** routers. IGMP snooping is the L2 half of the story: inside a VLAN, a switch treats multicast like broadcast and floods it to every port unless something tells it who the receivers are. A snooping switch listens to the IGMP conversation between hosts and routers, learns which ports have members of which group, and constrains forwarding to member ports plus multicast-router (mrouter) ports.
 
@@ -1999,16 +6938,16 @@ Where it matters in this lab's context:
 
 One classic trap: a snooping switch only learns from IGMP packets it actually sees, and hosts only send reports when queried. Which is why versions and queriers matter.
 
-### 6.3 IGMPv1 vs v2 vs v3
+### 7.3 IGMPv1 vs v2 vs v3
 
-| | IGMPv1 (RFC 1112) | IGMPv2 (RFC 2236) | IGMPv3 (RFC 3376) |
-|---|---|---|---|
-| Join | Membership Report | Membership Report | Report to 224.0.0.22, with source lists |
-| Leave | **silent** — stop reporting, group times out (minutes) | Leave Group to 224.0.0.2; router sends Group-Specific Query | per-source leave via INCLUDE/EXCLUDE state change |
-| Querier election | none in the protocol (left to the routing protocol/DR) | lowest IP address wins | lowest IP address wins |
-| Source selection | any source | any source | **source filtering** — "group G only from source S" |
-| Enables | ASM only | ASM, fast leave | **SSM (232.0.0.0/8)** — no RP needed, host names the source |
-| Report suppression | yes | yes (one host answers per group) | **no** — every host reports, so snooping switches see every member |
+|                    | IGMPv1 (RFC 1112)                                      | IGMPv2 (RFC 2236)                                           | IGMPv3 (RFC 3376)                                                  |
+|--------------------|--------------------------------------------------------|-------------------------------------------------------------|--------------------------------------------------------------------|
+| Join               | Membership Report                                      | Membership Report                                           | Report to 224.0.0.22, with source lists                            |
+| Leave              | **silent** — stop reporting, group times out (minutes) | Leave Group to 224.0.0.2; router sends Group-Specific Query | per-source leave via INCLUDE/EXCLUDE state change                  |
+| Querier election   | none in the protocol (left to the routing protocol/DR) | lowest IP address wins                                      | lowest IP address wins                                             |
+| Source selection   | any source                                             | any source                                                  | **source filtering** — "group G only from source S"                |
+| Enables            | ASM only                                               | ASM, fast leave                                             | **SSM (232.0.0.0/8)** — no RP needed, host names the source        |
+| Report suppression | yes                                                    | yes (one host answers per group)                            | **no** — every host reports, so snooping switches see every member |
 
 Practical notes:
 
@@ -2017,7 +6956,7 @@ Practical notes:
 - Version mismatches degrade to the lowest common version on the segment, losing v3's source filtering — pin versions where SSM matters.
 - SSM (v3-only) removes the RP entirely: the host asks for (S,G) directly and the tree is built straight to the source. If this lab's underlay used SSM-mapped groups, Border-as-RP would not exist as a failure point at all.
 
-### 6.4 When you need an IGMP querier
+### 7.4 When you need an IGMP querier
 
 Snooping is a **listener** — it depends on somebody transmitting periodic General Queries to make hosts refresh their membership. Normally the PIM router on the VLAN is that somebody (in this lab's multicast sections, the leaves would be).
 
@@ -2033,18 +6972,18 @@ ip igmp snooping vlan 20 querier address 192.168.20.1
 
 Guidelines: enable a querier on every snooped VLAN that has no PIM router; give it a source address valid for that subnet (a low one, since lowest-IP wins election if a real router shows up later — the real querier should win); one active querier per VLAN with a second switch configured as standby is plenty.
 
-### 6.5 Closing checklist
+### 7.5 Closing checklist
 
 The one-paragraph version of this whole lab: **build a boring OSPF underlay, let EVPN build the flood lists (HER) and suppress the ARP that would have needed them, keep MLAG peers presenting one shared VTEP IP, remember that bridging across the fabric and routing across the fabric are two separate features, and reach for a multicast underlay only when BUM volume or overlay multicast applications justify carrying PIM state in the core — and when that day comes, test it on hardware, because vEOS-lab will happily run the entire multicast control plane while forwarding none of it.**
 
 The four failures that cost the most time here, and the command that catches each one:
 
-| Symptom | Cause | Command that finds it |
-|---|---|---|
-| No BUM crosses the fabric; remote MACs never learned | VXLAN source interface does not match the IP remote VTEPs are addressing | `show interfaces vxlan 1 \| include Source` |
-| PIM up, RP known, `show ip mroute` permanently empty | vEOS-lab does not implement the VXLAN multicast data plane | `show ip mroute` on every node |
-| Same-VLAN pings work, inter-VLAN pings fail | SVI down from autostate, or missing virtual VTEP IP | `show ip interface brief`, `show vxlan config-sanity detail` |
-| Routed traffic hairpins across the MLAG peer-link | MLAG shared router MAC not enabled | `show interfaces vxlan 1 \| include Shared Router MAC` |
+| Symptom                                              | Cause                                                                    | Command that finds it                                        |                            |
+|------------------------------------------------------|--------------------------------------------------------------------------|--------------------------------------------------------------|----------------------------|
+| No BUM crosses the fabric; remote MACs never learned | VXLAN source interface does not match the IP remote VTEPs are addressing | `show interfaces vxlan 1 \                                   | include Source`            |
+| PIM up, RP known, `show ip mroute` permanently empty | vEOS-lab does not implement the VXLAN multicast data plane               | `show ip mroute` on every node                               |                            |
+| Same-VLAN pings work, inter-VLAN pings fail          | SVI down from autostate, or missing virtual VTEP IP                      | `show ip interface brief`, `show vxlan config-sanity detail` |                            |
+| Routed traffic hairpins across the MLAG peer-link    | MLAG shared router MAC not enabled                                       | `show interfaces vxlan 1 \                                   | include Shared Router MAC` |
 
 `show vxlan config-sanity detail` is worth running after every change in this lab. It catches three of the four on its own.
 

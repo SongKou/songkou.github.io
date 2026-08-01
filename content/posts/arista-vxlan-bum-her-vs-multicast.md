@@ -17,7 +17,7 @@ This lab builds the same Arista fabric four times, once per combination:
 | 4       | HER (dynamic flood list)    | BGP EVPN (Type-3 IMET) | Works                                              |
 | 4.1     | Multicast underlay          | BGP EVPN (IMET + PMSI) | Config correct, same vEOS-lab limitation           |
 
-All four sections above only get traffic between hosts in the **same** VLAN. Section 5 covers inter-VLAN routing (IRB) — the asymmetric and symmetric models, the two prerequisites that break it silently, and the MLAG-specific configuration it needs. Section 6 then uses the finished fabric as the starting point of a second lab: a new iBGP EVPN site and a DCI route server are attached, and the original fabric is live-migrated from iBGP EVPN to eBGP everywhere, leaf by leaf, with packet walks for the before, interim, and final states. Section 7 closes with the theory the lab keeps bumping into: HER vs multicast trade-offs, IGMP snooping, the differences between IGMPv1/v2/v3, and when an IGMP querier is required.
+All four sections above only get traffic between hosts in the **same** VLAN. Section 5 covers inter-VLAN routing (IRB) — the asymmetric and symmetric models, the two prerequisites that break it silently, and the MLAG-specific configuration it needs. Section 6 then uses the finished fabric as the starting point of a second lab: a new iBGP EVPN site and a DCI route server are attached, and the original fabric is live-migrated from iBGP EVPN to eBGP everywhere, leaf by leaf, with packet walks for the before, interim, and final states. Section 7 continues with the deferred follow-up — a method of procedure for converting the numbered eBGP underlay to BGP unnumbered, link by link and make-before-break. Section 8 closes with the theory the lab keeps bumping into: HER vs multicast trade-offs, IGMP snooping, the differences between IGMPv1/v2/v3, and when an IGMP querier is required.
 
 ## 1. Lab setup and introduction
 
@@ -6871,7 +6871,7 @@ Site B was never touched: same configs, same iBGP, same RR — and, per walk 3, 
 - **Map ASNs to device or rack names.** This lab used 65101 for the MLAG pair and 65102 for Leaf3; a naming-aligned plan would skip 65102 entirely and give Leaf3 **65103**, so the trailing digit tracks the switch name and a glance at any AS path names the rack. It would also have made the Phase 3 detour's mistake visible on sight — a pair member running a number that does not match its name.
 - **Carve per-DC pools with room to grow**: for example 65100–65199 for DC1, 65200–65299 for DC2, and a separate reserved block (say 64550–64599) for inter-DC roles — borders, route servers. Review the pools against utilization before expansion turns into archaeology, and remember the 2-byte private range holds only 1,023 ASNs (64512–65534) — multi-DC designs at scale move to the 4-byte private range. Then make the plan self-enforcing: encode the pool in the spines' `peer-filter` (this lab's `LEAF-ASNS 65100-65199`), and an out-of-pool ASN cannot even form a session.
 
-**2. One control-plane variable per migration.** EOS would have supported converting the underlay to BGP unnumbered in the same windows, and it was deliberately not done. iBGP + RR to eBGP everywhere already changes the routing design; going unnumbered at the same time would additionally invalidate every /31 neighbor statement, every capture being diffed, and every rollback file — mid-flight. Convert to unnumbered as its own later phase, link by link with its own verification, unless releasing the point-to-point addressing is itself the urgent requirement. (What unnumbered changes is covered in the [architecture post's section 4.1](/posts/vxlan-evpn-architecture/#41-ibgp-overlay-with-an-igp-underlay-versus-ebgp-everywhere).)
+**2. One control-plane variable per migration.** EOS would have supported converting the underlay to BGP unnumbered in the same windows, and it was deliberately not done. iBGP + RR to eBGP everywhere already changes the routing design; going unnumbered at the same time would additionally invalidate every /31 neighbor statement, every capture being diffed, and every rollback file — mid-flight. Convert to unnumbered as its own later phase, link by link with its own verification, unless releasing the point-to-point addressing is itself the urgent requirement — section 7 is that phase, written out as a method of procedure. (What unnumbered changes is covered in the [architecture post's section 4.1](/posts/vxlan-evpn-architecture/#41-ibgp-overlay-with-an-igp-underlay-versus-ebgp-everywhere).)
 
 **3. Three ways to run this migration, and what each one costs.** The real purpose of this test was to measure service impact per option:
 
@@ -6902,9 +6902,152 @@ Site B was never touched: same configs, same iBGP, same RR — and, per walk 3, 
 | A dead link masquerades as a BGP problem — session stuck in `Connect`                                                      | Connect-state debugging starts below BGP: prove the /31 forwards before touching neighbor statements (the EVE-NG wire in Phase 4)                              |
 | Rollback                                                                                                                   | Old config is a saved file; `configure replace` on a drained leaf restores its iBGP identity in seconds                                                        |
 
-## 7. Summary: HER vs multicast, IGMP snooping, versions, and queriers
+## 7. MOP: converting the eBGP underlay to BGP unnumbered
 
-### 7.1 HER vs multicast underlay
+Section 6 ended with a deliberate deferral: the underlay became eBGP everywhere, but every session still runs over configured /31s — one control-plane variable per migration. This section is the deferred phase, written as a method of procedure: convert site A's fabric links to **BGP unnumbered** — interface eBGP sessions over IPv6 link-local addresses, carrying the IPv4 underlay with RFC 8950 next hops — and release the point-to-point addressing. The [architecture post's section 4.1](/posts/vxlan-evpn-architecture/#41-ibgp-overlay-with-an-igp-underlay-versus-ebgp-everywhere) explains the mechanics — link-local autoconfiguration, neighbor discovery instead of neighbor statements, IPv4-over-IPv6 next hops; this MOP is those mechanics applied to a running fabric. The exact EOS semantics below follow [ipSpace's interface-EBGP writeup](https://blog.ipspace.net/2024/03/arista-interface-ebgp/), which documents them against netlab-verified configs.
+
+### 7.1 Scope and design decisions
+
+In scope — the eight fabric links, both ends of each:
+
+| Link             | Numbered today (released at the end) | Interfaces               |
+|------------------|--------------------------------------|--------------------------|
+| Leaf1 – Spine1   | 10.0.11.0/31                         | Leaf1 Et1 / Spine1 Et1   |
+| Leaf1 – Spine2   | 10.0.21.0/31                         | Leaf1 Et2 / Spine2 Et2   |
+| Leaf2 – Spine1   | 10.0.12.0/31                         | Leaf2 Et2 / Spine1 Et2   |
+| Leaf2 – Spine2   | 10.0.22.0/31                         | Leaf2 Et1 / Spine2 Et1   |
+| Leaf3 – Spine1   | 10.0.13.0/31                         | Leaf3 Et4 / Spine1 Et4   |
+| Leaf3 – Spine2   | 10.0.23.0/31                         | Leaf3 Et3 / Spine2 Et3   |
+| Border1 – Spine1 | 10.0.101.0/31                        | Border1 Et5 / Spine1 Et5 |
+| Border1 – Spine2 | 10.0.102.0/31                        | Border1 Et4 / Spine2 Et4 |
+
+Out of scope, deliberately: **every loopback** (router-ids, overlay peering, VTEP sources — unnumbered is a fabric-link pattern, not a fabric-wide one), **the EVPN overlay sessions** (loopback-to-loopback multihop, untouched), **the Border1–DCI link** (an administrative boundary between ASes under different control — keep it numbered, filterable, and boring), and **site B** (still nobody's business).
+
+Four design decisions carry the whole procedure:
+
+1. **A new peer group, not the old one.** Adding `next-hop address-family ipv6 originate` to the existing `UNDERLAY`/`UNDERLAY-EBGP` groups would change the capabilities of every *established* numbered session — and a capability change resets the session. The unnumbered sessions get their own group (`UNDERLAY-LL`), so nothing existing so much as blinks until it is retired on purpose.
+2. **Make-before-break, per link.** A numbered session (between the /31 addresses) and an unnumbered session (between link-locals) are different BGP sessions and coexist on the same wire. Each wave brings the link-local session up alongside the numbered one, verifies doubled paths, and only then retires the numbered neighbor. Headroom check: during the overlap a leaf holds up to four underlay paths per spine prefix — exactly its `maximum-paths 4`.
+3. **The ASN plan stays enforced.** EOS interface neighbors take an explicit `remote-as` per statement, so the spine still names 65101/65102/65100 per port — no `remote-as auto`, no accidental widening of trust.
+4. **Explicit router-ids are now a prerequisite, not a nicety.** After the /31s are removed, these devices have no IPv4 interface addresses left to derive anything from. Every device already carries an explicit `router-id` from section 6 — verify it anyway in the prechecks, because a missing one surfaces as a BGP identity change at the worst possible time.
+
+### 7.2 Prechecks
+
+```text
+show version                        ! interface eBGP sessions: supported on this vEOS-lab 4.33 image
+show running-config | include router-id     ! explicit on every device - mandatory before the /31s go away
+show ip bgp summary                 ! all numbered underlay sessions Established - the baseline
+show bgp evpn summary               ! overlay baseline (these sessions must never notice this MOP)
+show vxlan vtep                     ! data-plane baseline
+show ip route summary               ! route counts to diff against after every wave
+```
+
+Snapshot the full Phase 0 command set once more; every wave below diffs against it. The contract for this MOP is even stricter than section 6's: **not one EVPN route, VTEP, or next hop may change** — only the underlay sessions' identities and the RIB's next-hop *format* (`fe80::…%EtX` instead of /31 addresses).
+
+### 7.3 The procedure
+
+**Step A — global preparation, all site A devices, hitless.** IPv6 routing must be enabled even though no global IPv6 addresses are configured anywhere, and `ip routing ipv6 interfaces` is what allows IPv4 forwarding over interfaces whose only address is a link-local:
+
+```text
+ipv6 unicast-routing
+ip routing ipv6 interfaces
+!
+interface Ethernet1               ! repeat per fabric interface from the 7.1 table
+   ipv6 enable
+```
+
+`ipv6 enable` puts an autoconfigured `fe80::` address on each fabric interface and starts neighbor discovery. Nothing about the numbered sessions changes.
+
+**Step B — the new peer group, all site A devices, hitless.** Leaves and Border1 (single upstream AS, so `remote-as` lives on the group):
+
+```text
+router bgp 65101                   ! 65102 on Leaf3, 65100 on Border1
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL remote-as 65000
+   neighbor UNDERLAY-LL send-community
+   !
+   address-family ipv4
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+```
+
+Spines (mixed downstream ASNs, so `remote-as` moves onto the per-interface statements in step C):
+
+```text
+router bgp 65000
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   !
+   address-family ipv4
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+```
+
+`next-hop address-family ipv6 originate` is the RFC 8950 half of the design: without it on **both** ends, the sessions establish and then advertise IPv4 prefixes with unusable next hops — the unnumbered edition of the `next-hop-unchanged` class of silent failure.
+
+**Step C — wave 1: Leaf1.** Interface neighbors on both ends of both links:
+
+```text
+! Leaf1
+router bgp 65101
+   neighbor interface Ethernet1 peer-group UNDERLAY-LL remote-as 65000   ! -> Spine1
+   neighbor interface Ethernet2 peer-group UNDERLAY-LL remote-as 65000   ! -> Spine2
+! Spine1
+router bgp 65000
+   neighbor interface Ethernet1 peer-group UNDERLAY-LL remote-as 65101
+! Spine2
+router bgp 65000
+   neighbor interface Ethernet2 peer-group UNDERLAY-LL remote-as 65101
+```
+
+The link-local sessions establish next to the numbered ones. Verify the overlap before breaking anything:
+
+```text
+show ip bgp summary                 ! numbered pair still Established, PLUS fe80::...%Et1 / %Et2 entries
+show ip bgp neighbors               ! on the LL sessions: IPv4 Unicast negotiated, IPv6 next-hop capability negotiated
+show ip route 10.255.255.11/32      ! spine loopback now with doubled paths - /31 next hops and fe80 next hops
+```
+
+Then retire the numbered pair — both ends, matching the make-before-break promise:
+
+```text
+! Leaf1                                   ! Spine1                       ! Spine2
+router bgp 65101                          router bgp 65000               router bgp 65000
+   no neighbor 10.0.11.0                     no neighbor 10.0.11.1          no neighbor 10.0.21.1
+   no neighbor 10.0.21.0
+```
+
+Re-verify (same commands — the doubled paths collapse back to the fe80 pair, nothing else moves), then release the addressing, which is the entire point of the exercise:
+
+```text
+! Leaf1                                   ! Spine1                       ! Spine2
+interface Ethernet1                       interface Ethernet1            interface Ethernet2
+   no ip address                             no ip address                  no ip address
+interface Ethernet2
+   no ip address
+```
+
+Close the wave with the invariants: `show bgp evpn summary` identical to the precheck, `show vxlan vtep` identical, one bridged and one routed ping from the walk-1 set. **Then Leaf2** (its Et2/Et1, spine ports Et2/Et1, `remote-as 65101`), **then Leaf3** (Et4/Et3, spine ports Et4/Et3, `remote-as 65102`), **then Border1** (Et5/Et4, spine ports Et5/Et4, `remote-as 65100`) — same wave, four times. The MLAG pair needs no special ordering here: with make-before-break there is no window in which a member has fewer paths than it started with, so no drain and no funnel.
+
+### 7.4 Verification, rollback, and what must not change
+
+The end-state checks, fabric-wide:
+
+```text
+show ip bgp summary                 ! every fabric session an fe80::...%EtX entry; no /31 neighbors left in site A
+show ip route                       ! underlay next hops all link-local-on-interface; loopbacks still the only /32s
+show bgp evpn summary               ! byte-for-byte the section 6 end state - the overlay never noticed
+show vxlan address-table            ! unchanged
+ping 192.168.10.150                 ! from VPC1: the cross-site walk still works
+```
+
+Rollback is symmetrical and boring, which is what a MOP wants: re-apply the /31 from the 7.1 table to both ends of the affected link, re-add the numbered neighbor pair, and (optionally) remove the interface neighbors — the numbered session re-forms exactly as it was, because nothing else was touched. Keep the released /31s quarantined until the soak completes; readdressing them elsewhere while a rollback is still plausible converts a routing rollback into an addressing project.
+
+What this MOP deliberately leaves behind: a fabric whose links need no IPAM entries, whose cabling changes need no addressing changes, and whose underlay configuration is nearly identical on every device — with the loopbacks, the overlay, the RTs, and the site's external identity exactly where section 6 left them.
+
+## 8. Summary: HER vs multicast, IGMP snooping, versions, and queriers
+
+### 8.1 HER vs multicast underlay
 
 Both solve the same problem — delivering one BUM frame to N remote VTEPs — at opposite ends of a classic trade: **HER spends bandwidth to keep the network stateless; multicast spends state and protocol complexity to keep bandwidth minimal.**
 
@@ -6928,7 +7071,7 @@ Rules of thumb:
 - Move to a multicast underlay when BUM volume is genuinely high — usually because tenants **run multicast applications over the overlay** — or when VTEP counts per VNI reach the point where ingress replication measurably loads leaf uplinks.
 - Group-to-VNI mapping is a design knob: one group per VNI (as here) gives precise delivery but more state; sharing one group across many VNIs shrinks state but delivers BUM to VTEPs that must then drop it — the same bandwidth-vs-state trade-off one level down.
 
-### 7.2 IGMP snooping
+### 8.2 IGMP snooping
 
 Everything above moves multicast **between** routers. IGMP snooping is the L2 half of the story: inside a VLAN, a switch treats multicast like broadcast and floods it to every port unless something tells it who the receivers are. A snooping switch listens to the IGMP conversation between hosts and routers, learns which ports have members of which group, and constrains forwarding to member ports plus multicast-router (mrouter) ports.
 
@@ -6940,7 +7083,7 @@ Where it matters in this lab's context:
 
 One classic trap: a snooping switch only learns from IGMP packets it actually sees, and hosts only send reports when queried. Which is why versions and queriers matter.
 
-### 7.3 IGMPv1 vs v2 vs v3
+### 8.3 IGMPv1 vs v2 vs v3
 
 |                    | IGMPv1 (RFC 1112)                                      | IGMPv2 (RFC 2236)                                           | IGMPv3 (RFC 3376)                                                  |
 |--------------------|--------------------------------------------------------|-------------------------------------------------------------|--------------------------------------------------------------------|
@@ -6958,7 +7101,7 @@ Practical notes:
 - Version mismatches degrade to the lowest common version on the segment, losing v3's source filtering — pin versions where SSM matters.
 - SSM (v3-only) removes the RP entirely: the host asks for (S,G) directly and the tree is built straight to the source. If this lab's underlay used SSM-mapped groups, Border-as-RP would not exist as a failure point at all.
 
-### 7.4 When you need an IGMP querier
+### 8.4 When you need an IGMP querier
 
 Snooping is a **listener** — it depends on somebody transmitting periodic General Queries to make hosts refresh their membership. Normally the PIM router on the VLAN is that somebody (in this lab's multicast sections, the leaves would be).
 
@@ -6974,7 +7117,7 @@ ip igmp snooping vlan 20 querier address 192.168.20.1
 
 Guidelines: enable a querier on every snooped VLAN that has no PIM router; give it a source address valid for that subnet (a low one, since lowest-IP wins election if a real router shows up later — the real querier should win); one active querier per VLAN with a second switch configured as standby is plenty.
 
-### 7.5 Closing checklist
+### 8.5 Closing checklist
 
 The one-paragraph version of this whole lab: **build a boring OSPF underlay, let EVPN build the flood lists (HER) and suppress the ARP that would have needed them, keep MLAG peers presenting one shared VTEP IP, remember that bridging across the fabric and routing across the fabric are two separate features, and reach for a multicast underlay only when BUM volume or overlay multicast applications justify carrying PIM state in the core — and when that day comes, test it on hardware, because vEOS-lab will happily run the entire multicast control plane while forwarding none of it.**
 

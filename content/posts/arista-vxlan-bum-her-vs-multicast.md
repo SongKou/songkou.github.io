@@ -7005,7 +7005,7 @@ The link-local sessions establish next to the numbered ones. Verify the overlap 
 ```text
 show ip bgp summary                 ! numbered pair still Established, PLUS fe80::...%Et1 / %Et2 entries
 show ip bgp neighbors               ! on the LL sessions: IPv4 Unicast negotiated, IPv6 next-hop capability negotiated
-show ip route 10.255.255.11/32      ! spine loopback now with doubled paths - /31 next hops and fe80 next hops
+show ip route 10.255.255.11/32      ! still via the /31 next hop - the RIB keeps the oldest eBGP path (see the wave-1 captures below)
 ```
 
 Then retire the numbered pair — both ends, matching the make-before-break promise:
@@ -7017,7 +7017,7 @@ router bgp 65101                          router bgp 65000               router 
    no neighbor 10.0.21.0
 ```
 
-Re-verify (same commands — the doubled paths collapse back to the fe80 pair, nothing else moves), then release the addressing, which is the entire point of the exercise:
+Re-verify (same commands — the numbered sessions leave the summary and the RIB flips to the fe80 next hops, nothing else moves), then release the addressing, which is the entire point of the exercise:
 
 ```text
 ! Leaf1                                   ! Spine1                       ! Spine2
@@ -7027,7 +7027,3122 @@ interface Ethernet2
    no ip address
 ```
 
-Close the wave with the invariants: `show bgp evpn summary` identical to the precheck, `show vxlan vtep` identical, one bridged and one routed ping from the walk-1 set. **Then Leaf2** (its Et2/Et1, spine ports Et2/Et1, `remote-as 65101`), **then Leaf3** (Et4/Et3, spine ports Et4/Et3, `remote-as 65102`), **then Border1** (Et5/Et4, spine ports Et5/Et4, `remote-as 65100`) — same wave, four times. The MLAG pair needs no special ordering here: with make-before-break there is no window in which a member has fewer paths than it started with, so no drain and no funnel.
+Close the wave with the invariants: `show bgp evpn summary` identical to the precheck, `show vxlan vtep` identical, one bridged and one routed ping from the walk-1 set.
+
+Wave 1 ran live on this fabric. Leaf1's side, end to end — the interface neighbors going in, and the overlap forming in real time:
+
+```text
+Leaf1(config-router-bgp-af)#exit
+Leaf1(config-router-bgp)#neighbor interface Ethernet1 peer-group UNDERLAY-LL remote-as 65000
+Leaf1(config-router-bgp)#neighbor interface Ethernet2 peer-group UNDERLAY-LL remote-as 65000
+Leaf1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.21, local AS number 65101
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.0                         65000 Established   IPv4 Unicast            Negotiated              5          5
+10.0.21.0                         65000 Established   IPv4 Unicast            Negotiated              5          5
+10.255.255.11                     65000 Established   L2VPN EVPN              Negotiated              5          5
+10.255.255.12                     65000 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe03:3766%Et1       65000 Connect       IPv4 Unicast            Configured              0          0
+fe80::5200:ff:fe15:f4e8%Et2       65000 Connect       IPv4 Unicast            Configured              0          0
+Leaf1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.21, local AS number 65101
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.0                         65000 Established   IPv4 Unicast            Negotiated              5          5
+10.0.21.0                         65000 Established   IPv4 Unicast            Negotiated              5          5
+10.255.255.11                     65000 Established   L2VPN EVPN              Negotiated              5          5
+10.255.255.12                     65000 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe03:3766%Et1       65000 Established   IPv4 Unicast            Negotiated              5          5
+fe80::5200:ff:fe15:f4e8%Et2       65000 Established   IPv4 Unicast            Negotiated              5          5
+```
+
+The first summary catches the link-local sessions still in `Connect` — the `Configured` AFI/SAFI state means the neighbor statement exists but neighbor discovery hasn't yet handed BGP a peer address — and one refresh later both are `Established` at five NLRI each, **alongside** the untouched /31 pair. Four underlay sessions on two wires: make-before-break in its most literal form. The full neighbor detail, taken mid-overlap:
+
+```text
+Leaf1(config-router-bgp)#show ip bgp nei
+BGP neighbor is 10.0.11.0, remote AS 65000, external link
+  BGP version 4, remote router ID 10.255.255.11, VRF default
+  Inherits configuration from and member of peer-group UNDERLAY
+  Last read 00:00:02, last write 00:00:38
+  Hold time is 180, keepalive interval is 60 seconds
+  Configured hold time is 180, keepalive interval is 60 seconds
+  Effective minimum hold time is 3 seconds
+  Send failure hold time is 0 seconds
+  Hold timer is active, time left: 00:02:58
+  Keepalive timer is active, time left: 00:00:18
+  Connect timer is inactive
+  Idle-restart timer is inactive
+  BGP state is Established, up for 00:31:19
+  Number of transitions to established: 1
+  Last state was OpenConfirm
+  Last event was RecvUpdate
+  Types of communities advertised: standard extended large
+  Enhanced route refresh stale path removal disabled
+  Outbound enhanced route refresh enabled
+  Neighbor Capabilities:
+    Multiprotocol IPv4 Unicast: advertised and received and negotiated
+    Four Octet ASN: advertised and received and negotiated
+    Route Refresh: advertised and received and negotiated
+    Enhanced route refresh: advertised and received and negotiated
+    Send End-of-RIB messages: advertised and received and negotiated
+    Additional-paths recv capability:
+      IPv4 Unicast: advertised
+    Additional-paths send capability:
+      IPv4 Unicast: received
+    Graceful Restart advertised:
+      Restart-time is 300
+      Restart-State bit: yes
+      Graceful notification: yes
+    Graceful Restart received:
+      Restart-time is 300
+      Restart-State bit: no
+      Graceful notification: yes
+  Restart timer is inactive
+  End of rib timer is inactive
+    IPv4 Unicast End-of-RIB received: Yes
+      Received 00:31:18
+      Number of stale paths removed after graceful restart: 0
+      Number of paths received before End-of-RIB: 10
+  IPv4 Unicast AS_SET/AS_CONFED_SET processing: accept
+  IPv6 Unicast AS_SET/AS_CONFED_SET processing: accept
+  AIGP attribute send and receive for IPv4 Unicast are disabled
+  AIGP attribute send and receive for IPv4 with MPLS Labels are disabled
+  AIGP attribute send and receive for IPv6 Unicast are disabled
+  AIGP attribute send and receive for IPv6 with MPLS Labels are disabled
+  BGP session driven failover for IPv4 Unicast is disabled
+  BGP session driven failover for IPv6 Unicast is disabled
+  Message Statistics:
+                                  Sent      Rcvd
+    Opens:                           1         1
+    Notifications:                   0         0
+    Updates:                        16        15
+    Keepalives:                     34        34
+    Enhanced Route Refresh:          0         0
+    Begin of Route Refresh:          0         0
+    End of Route Refresh:            0         0
+    Total messages:                 51        50
+  Prefix Statistics:
+                                   Sent      Rcvd     Best Paths     Best ECMP Paths
+    IPv4 Unicast:                     7         5              5                   0
+    IPv6 Unicast:                     0         0              0                   0
+  Configured maximum total number of routes is 256000, warning limit is 204800
+  Inbound updates dropped by reason:
+    AS path loop detection: 1
+    Cluster ID loop detection: 0
+    Enforced First AS: 0
+    Malformed MPBGP routes: 0
+    Originator ID matches local router ID: 0
+    Nexthop matches local IP address: 0
+    Unexpected IPv6 nexthop for IPv4 routes: 0
+    AS_SET/AS_CONFED_SET in AS_PATH for IPv4 Unicast: 0
+    AS_SET/AS_CONFED_SET in AS_PATH for IPv6 Unicast: 0
+  Inbound updates with attribute errors:
+    Resulting in removal of all paths in update (treat as withdraw): 0
+    Resulting in AFI/SAFI disable: 0
+    Resulting in attribute ignore: 0
+    Disabled AFI/SAFIs: None
+  Inbound paths dropped by reason:
+    IPv4 unicast NLRIs dropped due to martian prefix: 0
+    IPv4 unicast NLRIs dropped due to maximum route limit violation: 0
+    IPv6 unicast NLRIs dropped due to martian prefix: 0
+    IPv4 labeled-unicast NLRIs dropped due to excessive labels: 0
+    IPv4 labeled-unicast NLRIs dropped due to martian prefix: 0
+    IPv6 labeled-unicast NLRIs dropped due to excessive labels: 0
+    IPv6 labeled-unicast NLRIs dropped due to martian prefix: 0
+    VPN-IPv4 NLRIs dropped due to route import match failure: 0
+    VPN-IPv6 NLRIs dropped due to route import match failure: 0
+    L2VPN EVPN NLRIs dropped due to route import match failure: 0
+    L2VPN EVPN NLRIs dropped due to unsupported route type: 0
+    Link-state NLRIs dropped because reception is unsupported: 0
+    RT Membership NLRIs dropped due to local origin ASN received from external peer: 0
+  Outbound paths dropped by reason:
+    IPv4 local address not available: 0
+    IPv6 local address not available: 0
+Local AS is 65101, local router ID 10.255.255.21
+TTL is 1
+Local TCP address is 10.0.11.1, local port is 45863
+Remote TCP address is 10.0.11.0, remote port is 179
+Local next hop for next hop self:
+  IPv4 Unicast: 10.0.11.1
+TCP Socket Information:
+  TCP state is ESTABLISHED
+  Recv-Q: 0/32768
+  Send-Q: 0/46080
+  Outgoing Maximum Segment Size (MSS): 1448
+  Total Number of TCP retransmissions: 2
+  Options:
+    Timestamps enabled: yes
+    Selective Acknowledgments enabled: yes
+    Window Scale enabled: yes
+    Explicit Congestion Notification (ECN) enabled: no
+  Socket Statistics:
+    Window Scale (wscale): 7,7
+    Retransmission Timeout (rto): 216.0ms
+    Round-trip Time (rtt/rtvar): 13.3ms/14.1ms
+    Delayed Ack Timeout (ato): 40.0ms
+    Congestion Window (cwnd): 10
+    TCP Throughput: 8.70 Mbps
+    Advertised Recv Window (rcv_space): 14480
+
+BGP neighbor is 10.0.21.0, remote AS 65000, external link
+  BGP version 4, remote router ID 10.255.255.12, VRF default
+  Inherits configuration from and member of peer-group UNDERLAY
+  Last read 00:00:21, last write 00:00:14
+  Hold time is 180, keepalive interval is 60 seconds
+  Configured hold time is 180, keepalive interval is 60 seconds
+  Effective minimum hold time is 3 seconds
+  Send failure hold time is 0 seconds
+  Hold timer is active, time left: 00:02:39
+  Keepalive timer is active, time left: 00:00:38
+  Connect timer is inactive
+  Idle-restart timer is inactive
+  BGP state is Established, up for 00:31:19
+  Number of transitions to established: 1
+  Last state was OpenConfirm
+  Last event was RecvUpdate
+  Types of communities advertised: standard extended large
+  Enhanced route refresh stale path removal disabled
+  Outbound enhanced route refresh enabled
+  Neighbor Capabilities:
+    Multiprotocol IPv4 Unicast: advertised and received and negotiated
+    Four Octet ASN: advertised and received and negotiated
+    Route Refresh: advertised and received and negotiated
+    Enhanced route refresh: advertised and received and negotiated
+    Send End-of-RIB messages: advertised and received and negotiated
+    Additional-paths recv capability:
+      IPv4 Unicast: advertised
+    Additional-paths send capability:
+      IPv4 Unicast: received
+    Graceful Restart advertised:
+      Restart-time is 300
+      Restart-State bit: yes
+      Graceful notification: yes
+    Graceful Restart received:
+      Restart-time is 300
+      Restart-State bit: no
+      Graceful notification: yes
+  Restart timer is inactive
+  End of rib timer is inactive
+    IPv4 Unicast End-of-RIB received: Yes
+      Received 00:31:18
+      Number of stale paths removed after graceful restart: 0
+      Number of paths received before End-of-RIB: 10
+  IPv4 Unicast AS_SET/AS_CONFED_SET processing: accept
+  IPv6 Unicast AS_SET/AS_CONFED_SET processing: accept
+  AIGP attribute send and receive for IPv4 Unicast are disabled
+  AIGP attribute send and receive for IPv4 with MPLS Labels are disabled
+  AIGP attribute send and receive for IPv6 Unicast are disabled
+  AIGP attribute send and receive for IPv6 with MPLS Labels are disabled
+  BGP session driven failover for IPv4 Unicast is disabled
+  BGP session driven failover for IPv6 Unicast is disabled
+  Message Statistics:
+                                  Sent      Rcvd
+    Opens:                           1         1
+    Notifications:                   0         0
+    Updates:                         7        19
+    Keepalives:                     35        34
+    Enhanced Route Refresh:          0         0
+    Begin of Route Refresh:          0         0
+    End of Route Refresh:            0         0
+    Total messages:                 43        54
+  Prefix Statistics:
+                                   Sent      Rcvd     Best Paths     Best ECMP Paths
+    IPv4 Unicast:                     3         5              5                   4
+    IPv6 Unicast:                     0         0              0                   0
+  Configured maximum total number of routes is 256000, warning limit is 204800
+  Inbound updates dropped by reason:
+    AS path loop detection: 1
+    Cluster ID loop detection: 0
+    Enforced First AS: 0
+    Malformed MPBGP routes: 0
+    Originator ID matches local router ID: 0
+    Nexthop matches local IP address: 0
+    Unexpected IPv6 nexthop for IPv4 routes: 0
+    AS_SET/AS_CONFED_SET in AS_PATH for IPv4 Unicast: 0
+    AS_SET/AS_CONFED_SET in AS_PATH for IPv6 Unicast: 0
+  Inbound updates with attribute errors:
+    Resulting in removal of all paths in update (treat as withdraw): 0
+    Resulting in AFI/SAFI disable: 0
+    Resulting in attribute ignore: 0
+    Disabled AFI/SAFIs: None
+  Inbound paths dropped by reason:
+    IPv4 unicast NLRIs dropped due to martian prefix: 0
+    IPv4 unicast NLRIs dropped due to maximum route limit violation: 0
+    IPv6 unicast NLRIs dropped due to martian prefix: 0
+    IPv4 labeled-unicast NLRIs dropped due to excessive labels: 0
+    IPv4 labeled-unicast NLRIs dropped due to martian prefix: 0
+    IPv6 labeled-unicast NLRIs dropped due to excessive labels: 0
+    IPv6 labeled-unicast NLRIs dropped due to martian prefix: 0
+    VPN-IPv4 NLRIs dropped due to route import match failure: 0
+    VPN-IPv6 NLRIs dropped due to route import match failure: 0
+    L2VPN EVPN NLRIs dropped due to route import match failure: 0
+    L2VPN EVPN NLRIs dropped due to unsupported route type: 0
+    Link-state NLRIs dropped because reception is unsupported: 0
+    RT Membership NLRIs dropped due to local origin ASN received from external peer: 0
+  Outbound paths dropped by reason:
+    IPv4 local address not available: 0
+    IPv6 local address not available: 0
+Local AS is 65101, local router ID 10.255.255.21
+TTL is 1
+Local TCP address is 10.0.21.1, local port is 38393
+Remote TCP address is 10.0.21.0, remote port is 179
+Local next hop for next hop self:
+  IPv4 Unicast: 10.0.21.1
+TCP Socket Information:
+  TCP state is ESTABLISHED
+  Recv-Q: 0/32768
+  Send-Q: 0/46080
+  Outgoing Maximum Segment Size (MSS): 1448
+  Total Number of TCP retransmissions: 2
+  Options:
+    Timestamps enabled: yes
+    Selective Acknowledgments enabled: yes
+    Window Scale enabled: yes
+    Explicit Congestion Notification (ECN) enabled: no
+  Socket Statistics:
+    Window Scale (wscale): 7,7
+    Retransmission Timeout (rto): 236.0ms
+    Round-trip Time (rtt/rtvar): 21.2ms/22.8ms
+    Delayed Ack Timeout (ato): 56.0ms
+    Congestion Window (cwnd): 10
+    TCP Throughput: 5.46 Mbps
+    Advertised Recv Window (rcv_space): 14480
+
+BGP neighbor is 10.255.255.11, remote AS 65000, external link
+  BGP version 4, remote router ID 10.255.255.11, VRF default
+  Inherits configuration from and member of peer-group EVPN
+  Last read 00:00:29, last write 00:00:29
+  Hold time is 180, keepalive interval is 60 seconds
+  Configured hold time is 180, keepalive interval is 60 seconds
+  Effective minimum hold time is 3 seconds
+  Send failure hold time is 0 seconds
+  Hold timer is active, time left: 00:02:31
+  Keepalive timer is active, time left: 00:00:15
+  Connect timer is inactive
+  Idle-restart timer is inactive
+  BGP state is Established, up for 00:31:16
+  Number of transitions to established: 1
+  Last state was OpenConfirm
+  Last event was RecvUpdate
+  Types of communities advertised: extended
+  Enhanced route refresh stale path removal disabled
+  Outbound enhanced route refresh enabled
+  Neighbor Capabilities:
+    Multiprotocol L2VPN EVPN: advertised and received and negotiated
+    Four Octet ASN: advertised and received and negotiated
+    Route Refresh: advertised and received and negotiated
+    Enhanced route refresh: advertised and received and negotiated
+    Send End-of-RIB messages: advertised and received and negotiated
+    Additional-paths recv capability:
+      L2VPN EVPN: advertised
+    Additional-paths send capability:
+      L2VPN EVPN: received
+    Graceful Restart advertised:
+      Restart-time is 300
+      Restart-State bit: yes
+      Graceful notification: yes
+    Graceful Restart received:
+      Restart-time is 300
+      Restart-State bit: no
+      Graceful notification: yes
+  Restart timer is inactive
+  End of rib timer is inactive
+    L2VPN EVPN End-of-RIB received: Yes
+      Received 00:31:14
+      Number of stale paths removed after graceful restart: 0
+      Number of paths received before End-of-RIB: 9
+  IPv4 Unicast AS_SET/AS_CONFED_SET processing: accept
+  IPv6 Unicast AS_SET/AS_CONFED_SET processing: accept
+  AIGP attribute send and receive for IPv4 Unicast are disabled
+  AIGP attribute send and receive for IPv4 with MPLS Labels are disabled
+  AIGP attribute send and receive for IPv6 Unicast are disabled
+  AIGP attribute send and receive for IPv6 with MPLS Labels are disabled
+  BGP session driven failover for IPv4 Unicast is disabled
+  BGP session driven failover for IPv6 Unicast is disabled
+  Message Statistics:
+                                  Sent      Rcvd
+    Opens:                           1         1
+    Notifications:                   0         0
+    Updates:                        19        19
+    Keepalives:                     34        35
+    Enhanced Route Refresh:          0         0
+    Begin of Route Refresh:          0         0
+    End of Route Refresh:            0         0
+    Total messages:                 54        55
+  Prefix Statistics:
+                                   Sent      Rcvd     Best Paths     Best ECMP Paths
+    IPv4 Unicast:                     0         0              0                   0
+    IPv6 Unicast:                     0         0              0                   0
+    EVPN:                            11         5              5                   0
+  Configured maximum total number of routes is 256000, warning limit is 204800
+  Inbound updates dropped by reason:
+    AS path loop detection: 4
+    Cluster ID loop detection: 0
+    Enforced First AS: 0
+    Malformed MPBGP routes: 0
+    Originator ID matches local router ID: 0
+    Nexthop matches local IP address: 0
+    Unexpected IPv6 nexthop for IPv4 routes: 0
+    AS_SET/AS_CONFED_SET in AS_PATH for IPv4 Unicast: 0
+    AS_SET/AS_CONFED_SET in AS_PATH for IPv6 Unicast: 0
+  Inbound updates with attribute errors:
+    Resulting in removal of all paths in update (treat as withdraw): 0
+    Resulting in AFI/SAFI disable: 0
+    Resulting in attribute ignore: 0
+    Disabled AFI/SAFIs: None
+  Inbound paths dropped by reason:
+    IPv4 unicast NLRIs dropped due to martian prefix: 0
+    IPv6 unicast NLRIs dropped due to martian prefix: 0
+    IPv4 labeled-unicast NLRIs dropped due to excessive labels: 0
+    IPv4 labeled-unicast NLRIs dropped due to martian prefix: 0
+    IPv6 labeled-unicast NLRIs dropped due to excessive labels: 0
+    IPv6 labeled-unicast NLRIs dropped due to martian prefix: 0
+    VPN-IPv4 NLRIs dropped due to route import match failure: 0
+    VPN-IPv6 NLRIs dropped due to route import match failure: 0
+    L2VPN EVPN NLRIs dropped due to route import match failure: 0
+    L2VPN EVPN NLRIs dropped due to unsupported route type: 0
+    L2VPN EVPN NLRIs dropped due to maximum route limit violation: 0
+    Link-state NLRIs dropped because reception is unsupported: 0
+    RT Membership NLRIs dropped due to local origin ASN received from external peer: 0
+  Outbound paths dropped by reason:
+    IPv4 local address not available: 0
+    IPv6 local address not available: 0
+Local AS is 65101, local router ID 10.255.255.21
+TTL is 3, external peer can be 3 hops away
+Local TCP address is 10.255.255.21, local port is 40939
+Remote TCP address is 10.255.255.11, remote port is 179
+Local next hop for next hop self:
+  L2VPN EVPN: 10.255.255.112
+TCP Socket Information:
+  TCP state is ESTABLISHED
+  Recv-Q: 0/32768
+  Send-Q: 0/46080
+  Outgoing Maximum Segment Size (MSS): 1448
+  Total Number of TCP retransmissions: 2
+  Options:
+    Timestamps enabled: yes
+    Selective Acknowledgments enabled: yes
+    Window Scale enabled: yes
+    Explicit Congestion Notification (ECN) enabled: no
+  Socket Statistics:
+    Window Scale (wscale): 7,7
+    Retransmission Timeout (rto): 228.0ms
+    Round-trip Time (rtt/rtvar): 22.4ms/24.0ms
+    Delayed Ack Timeout (ato): 40.0ms
+    Congestion Window (cwnd): 2
+    TCP Throughput: 1.03 Mbps
+    Recv Round-trip Time (rcv_rtt): 30.0ms
+    Advertised Recv Window (rcv_space): 14480
+
+BGP neighbor is 10.255.255.12, remote AS 65000, external link
+  BGP version 4, remote router ID 10.255.255.12, VRF default
+  Inherits configuration from and member of peer-group EVPN
+  Last read 00:00:13, last write 00:00:11
+  Hold time is 180, keepalive interval is 60 seconds
+  Configured hold time is 180, keepalive interval is 60 seconds
+  Effective minimum hold time is 3 seconds
+  Send failure hold time is 0 seconds
+  Hold timer is active, time left: 00:02:47
+  Keepalive timer is active, time left: 00:00:43
+  Connect timer is inactive
+  Idle-restart timer is inactive
+  BGP state is Established, up for 00:31:19
+  Number of transitions to established: 1
+  Last state was OpenConfirm
+  Last event was RecvUpdate
+  Types of communities advertised: extended
+  Enhanced route refresh stale path removal disabled
+  Outbound enhanced route refresh enabled
+  Neighbor Capabilities:
+    Multiprotocol L2VPN EVPN: advertised and received and negotiated
+    Four Octet ASN: advertised and received and negotiated
+    Route Refresh: advertised and received and negotiated
+    Enhanced route refresh: advertised and received and negotiated
+    Send End-of-RIB messages: advertised and received and negotiated
+    Additional-paths recv capability:
+      L2VPN EVPN: advertised
+    Additional-paths send capability:
+      L2VPN EVPN: received
+    Graceful Restart advertised:
+      Restart-time is 300
+      Restart-State bit: yes
+      Graceful notification: yes
+    Graceful Restart received:
+      Restart-time is 300
+      Restart-State bit: no
+      Graceful notification: yes
+  Restart timer is inactive
+  End of rib timer is inactive
+    L2VPN EVPN End-of-RIB received: Yes
+      Received 00:31:18
+      Number of stale paths removed after graceful restart: 0
+      Number of paths received before End-of-RIB: 9
+  IPv4 Unicast AS_SET/AS_CONFED_SET processing: accept
+  IPv6 Unicast AS_SET/AS_CONFED_SET processing: accept
+  AIGP attribute send and receive for IPv4 Unicast are disabled
+  AIGP attribute send and receive for IPv4 with MPLS Labels are disabled
+  AIGP attribute send and receive for IPv6 Unicast are disabled
+  AIGP attribute send and receive for IPv6 with MPLS Labels are disabled
+  BGP session driven failover for IPv4 Unicast is disabled
+  BGP session driven failover for IPv6 Unicast is disabled
+  Message Statistics:
+                                  Sent      Rcvd
+    Opens:                           1         1
+    Notifications:                   0         0
+    Updates:                         7        20
+    Keepalives:                     36        36
+    Enhanced Route Refresh:          0         0
+    Begin of Route Refresh:          0         0
+    End of Route Refresh:            0         0
+    Total messages:                 44        57
+  Prefix Statistics:
+                                   Sent      Rcvd     Best Paths     Best ECMP Paths
+    IPv4 Unicast:                     0         0              0                   0
+    IPv6 Unicast:                     0         0              0                   0
+    EVPN:                             6         5              5                   5
+  Configured maximum total number of routes is 256000, warning limit is 204800
+  Inbound updates dropped by reason:
+    AS path loop detection: 4
+    Cluster ID loop detection: 0
+    Enforced First AS: 0
+    Malformed MPBGP routes: 0
+    Originator ID matches local router ID: 0
+    Nexthop matches local IP address: 0
+    Unexpected IPv6 nexthop for IPv4 routes: 0
+    AS_SET/AS_CONFED_SET in AS_PATH for IPv4 Unicast: 0
+    AS_SET/AS_CONFED_SET in AS_PATH for IPv6 Unicast: 0
+  Inbound updates with attribute errors:
+    Resulting in removal of all paths in update (treat as withdraw): 0
+    Resulting in AFI/SAFI disable: 0
+    Resulting in attribute ignore: 0
+    Disabled AFI/SAFIs: None
+  Inbound paths dropped by reason:
+    IPv4 unicast NLRIs dropped due to martian prefix: 0
+    IPv6 unicast NLRIs dropped due to martian prefix: 0
+    IPv4 labeled-unicast NLRIs dropped due to excessive labels: 0
+    IPv4 labeled-unicast NLRIs dropped due to martian prefix: 0
+    IPv6 labeled-unicast NLRIs dropped due to excessive labels: 0
+    IPv6 labeled-unicast NLRIs dropped due to martian prefix: 0
+    VPN-IPv4 NLRIs dropped due to route import match failure: 0
+    VPN-IPv6 NLRIs dropped due to route import match failure: 0
+    L2VPN EVPN NLRIs dropped due to route import match failure: 0
+    L2VPN EVPN NLRIs dropped due to unsupported route type: 0
+    L2VPN EVPN NLRIs dropped due to maximum route limit violation: 0
+    Link-state NLRIs dropped because reception is unsupported: 0
+    RT Membership NLRIs dropped due to local origin ASN received from external peer: 0
+  Outbound paths dropped by reason:
+    IPv4 local address not available: 0
+    IPv6 local address not available: 0
+Local AS is 65101, local router ID 10.255.255.21
+TTL is 3, external peer can be 3 hops away
+Local TCP address is 10.255.255.21, local port is 35489
+Remote TCP address is 10.255.255.12, remote port is 179
+Local next hop for next hop self:
+  L2VPN EVPN: 10.255.255.112
+TCP Socket Information:
+  TCP state is ESTABLISHED
+  Recv-Q: 0/32768
+  Send-Q: 0/46080
+  Outgoing Maximum Segment Size (MSS): 1448
+  Total Number of TCP retransmissions: 0
+  Options:
+    Timestamps enabled: yes
+    Selective Acknowledgments enabled: yes
+    Window Scale enabled: yes
+    Explicit Congestion Notification (ECN) enabled: no
+  Socket Statistics:
+    Window Scale (wscale): 7,7
+    Retransmission Timeout (rto): 216.0ms
+    Round-trip Time (rtt/rtvar): 13.1ms/15.0ms
+    Delayed Ack Timeout (ato): 40.0ms
+    Congestion Window (cwnd): 10
+    TCP Throughput: 8.88 Mbps
+    Advertised Recv Window (rcv_space): 14480
+```
+
+Three things in there are worth the scroll. The numbered sessions still announce `member of peer-group UNDERLAY` — the old world, alive and captured minutes before its retirement. `AS path loop detection: 1` on each underlay session and `4` on each overlay session — section 6's MLAG same-AS rejection, no longer a migration anecdote but a steady-state counter, quietly incrementing on every UPDATE that carries 65101 back to Leaf1. And on the EVPN sessions, `TTL is 3` with next-hop-self `10.255.255.112` — the overlay's fingerprints, byte-identical to the section 6 end state, exactly as the scope table promised.
+
+Then the pre-retirement route check — and a correction the lab made to this MOP's own draft:
+
+```text
+Leaf1(config-router-bgp)#show ip route 10.255.255.11/32 
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+ B E      10.255.255.11/32 [200/0]
+           via 10.0.11.0, Ethernet1
+
+Leaf1(config-router-bgp)#show ip route 10.255.255.11
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+ B E      10.255.255.11/32 [200/0]
+           via 10.0.11.0, Ethernet1
+
+Leaf1(config-router-bgp)#no neighbor 10.0.11.0
+Leaf1(config-router-bgp)#Aug  1 11:12:53 Leaf1 Bgp: %BGP-3-NOTIFICATION: sent to neighbor 10.0.11.0 (VRF default AS 65000) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+no neighbor 10.0.21.0
+Leaf1(config-router-bgp)#Aug  1 11:12:58 Leaf1 Bgp: %BGP-3-NOTIFICATION: sent to neighbor 10.0.21.0 (VRF default AS 65000) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+Leaf1(config-router-bgp)#int et-2
+% Invalid input
+Leaf1(config-router-bgp)#int e1-2
+Leaf1(config-if-Et1-2)#no ip
+% Incomplete command
+Leaf1(config-if-Et1-2)#no ip address 
+Leaf1(config-if-Et1-2)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.21, local AS number 65101
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.255.255.11                     65000 Established   L2VPN EVPN              Negotiated              5          5
+10.255.255.12                     65000 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe03:3766%Et1       65000 Established   IPv4 Unicast            Negotiated              5          5
+fe80::5200:ff:fe15:f4e8%Et2       65000 Established   IPv4 Unicast            Negotiated              5          5
+Leaf1(config-if-Et1-2)#
+
+
+Leaf1(config-if-Et1-2)#show ip route 10.255.255.11
+
+VRF: default
+Source Codes:
+       C - connected, S - static, K - kernel,
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route,
+       CL - CBF Leaked Route
+
+ B E      10.255.255.11/32 [200/0]
+           via fe80::5200:ff:fe03:3766, Ethernet1
+
+Leaf1(config-if-Et1-2)#
+```
+
+`B E 10.255.255.11/32 [200/0] via 10.0.11.0` — still the numbered next hop, and still that Arista `[200/0]`. During the overlap the RIB does **not** double: the link-local session offers an otherwise-equal eBGP path, and EOS keeps the oldest one — the numbered session's — as best. The "doubled paths" this MOP's verification step originally predicted turns out to be a session-table fact, not a RIB fact (the comment above has been corrected accordingly); the RIB flip is the retirement's job. And so it lands: the numbered neighbors go down as `Cease/peer de-configured <Hard Reset>` — a dismantling, not a failure — `no ip address` strips both uplinks in one range command (typos preserved: `int et-2` is not a valid range, `no ip` on its own is not a command), and the closing lookup is the state this whole section exists to produce: **an IPv4 route whose next hop is `fe80::5200:ff:fe03:3766` on Ethernet1**.
+
+The spine side of the same wave:
+
+```text
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.12.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.13.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.1                         65101 Connect       IPv4 Unicast            Configured              0          0
+10.0.12.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.13.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-router-bgp)#no neighbor 10.0.11.1
+SP1(config-router-bgp)#show lldp nei
+Last table change time   : 0:59:21 ago
+Number of table inserts  : 9
+Number of table deletes  : 5
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           Leaf1                    Ethernet1           120
+Et2           Leaf2                    Ethernet2           120
+Et4           Leaf3                    Ethernet4           120
+Et5           Border1                  Ethernet5           120
+
+SP1(config-router-bgp)#int e1
+SP1(config-if-Et1)#no ip address 
+SP1(config-if-Et1)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.12.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.13.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-if-Et1)#
+
+
+
+SP2(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.21.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.22.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.23.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.102.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP2(config-router-bgp)#
+```
+
+Three notes from up here. The ordering shows in the summaries: SP1's first snapshot has both `10.0.11.1` and `fe80::...%Et1` Established — the overlap seen from above — and its second has the numbered session in `Connect`, because Leaf1 retired its side first and a half-deconfigured session is indistinguishable from a broken one. That is why the MOP retires both ends inside the same step. Second, `show lldp nei` right before `no ip address`: the question the /31 table used to answer — *which wire is Et1?* — now gets answered by LLDP and interface names instead of IPAM, which is the quiet operational shift an unnumbered fabric commits you to. Third, two artifacts of the reboot that preceded this test: SP2's `10.0.102.1` session to Border1 is **Established** — the wire that was dead through Phases 4–6 came back with the host, closing that saga — while the spines' EVPN sessions to Border1 (`10.255.255.1`) sit Established at **0 NLRI**, meaning site B's routes are not arriving yet. Most plausibly the second site is still converging after the reboot; but Established-and-empty is also exactly what a broken import looks like, so it stays on the checklist for a re-check before this wave's soak is called clean.
+
+**Then Leaf2** (its Et2/Et1, spine ports Et2/Et1, `remote-as 65101`), **then Leaf3** (Et4/Et3, spine ports Et4/Et3, `remote-as 65102`), **then Border1** (Et5/Et4, spine ports Et5/Et4, `remote-as 65100`) — same wave, four times. The MLAG pair needs no special ordering here: with make-before-break there is no window in which a member has fewer paths than it started with, so no drain and no funnel.
+
+Wave 2 — the MLAG pair's second member — ran next, and this time the captures cover both ends of every wire. Leaf2 first:
+
+```text
+Leaf2(config-if-Et1-2)# router bgp 65101
+Leaf2(config-router-bgp)#   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL remote-as 65000
+   neighbor UNDERLAY-LL send-community
+   !
+   address-family ipv4
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originateLeaf2(config-router-bgp)#   neighbor UNDERLAY-LL remote-as 65000
+Leaf2(config-router-bgp)#   neighbor UNDERLAY-LL send-community
+Leaf2(config-router-bgp)#   !
+Leaf2(config-router-bgp)#   address-family ipv4
+Leaf2(config-router-bgp-af)#      neighbor UNDERLAY-LL activate
+Leaf2(config-router-bgp-af)#      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+Leaf2(config-router-bgp-af)#
+Leaf2(config-router-bgp-af)#
+Leaf2(config-router-bgp-af)#
+Leaf2(config-router-bgp-af)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.22, local AS number 65101
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.12.0           65000 Established   IPv4 Unicast            Negotiated              5          5
+10.0.22.0           65000 Established   IPv4 Unicast            Negotiated              5          5
+10.255.255.11       65000 Established   L2VPN EVPN              Negotiated              5          5
+10.255.255.12       65000 Established   L2VPN EVPN              Negotiated              5          5
+Leaf2(config-router-bgp-af)#wr
+Copy completed successfully.
+Leaf2(config-router-bgp-af)#exit
+Leaf2(config-router-bgp)#show lldp nei 
+Last table change time   : 0:32:42 ago
+Number of table inserts  : 17
+Number of table deletes  : 14
+Number of table drops    : 0
+Number of table age-outs : 11
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           SP2                      Ethernet1           120
+Et2           SP1                      Ethernet2           120
+Et8           Leaf1                    Ethernet8           120
+
+Leaf2(config-router-bgp)#show 
+
+% Incomplete command
+Leaf2(config-router-bgp)#
+Leaf2(config-router-bgp)#show run | b r b
+router bgp 65101
+   router-id 10.255.255.22
+   no bgp default ipv4-unicast
+   maximum-paths 4 ecmp 4
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN ebgp-multihop 3
+   neighbor EVPN send-community extended
+   neighbor UNDERLAY peer group
+   neighbor UNDERLAY remote-as 65000
+   neighbor UNDERLAY send-community
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL remote-as 65000
+   neighbor UNDERLAY-LL send-community
+   neighbor 10.0.12.0 peer group UNDERLAY
+   neighbor 10.0.22.0 peer group UNDERLAY
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   !
+   vlan 10
+      rd 10.255.255.22:10
+      route-target both 1:10
+      redistribute learned
+   !
+   vlan 20
+      rd 10.255.255.22:20
+      route-target both 1:20
+      redistribute learned
+   !
+   vlan 30
+      rd 10.255.255.22:30
+      route-target both 1:30
+      redistribute learned
+   !
+   address-family evpn
+      neighbor EVPN activate
+   !
+   address-family ipv4
+      neighbor UNDERLAY activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.22/32
+      network 10.255.255.112/32
+   !
+   vrf TENANT_A
+      rd 10.255.255.22:50000
+      route-target import evpn 1:50000
+      route-target export evpn 1:50000
+      redistribute connected
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+Leaf2(config-router-bgp)#show lldp nei
+Last table change time   : 0:40:03 ago
+Number of table inserts  : 17
+Number of table deletes  : 14
+Number of table drops    : 0
+Number of table age-outs : 11
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           SP2                      Ethernet1           120
+Et2           SP1                      Ethernet2           120
+Et8           Leaf1                    Ethernet8           120
+
+Leaf2(config-router-bgp)#neighbor interface Ethernet1 peer-group UNDERLAY-LL remote-as 65000
+Leaf2(config-router-bgp)#neighbor interface Ethernet2 peer-group UNDERLAY-LL remote-as 65000
+Leaf2(config-router-bgp)#Aug  1 11:21:43 Leaf2 Bgp: %BGP-3-NOTIFICATION: received from neighbor 10.0.12.0 (VRF default AS 65000) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+Aug  1 11:21:51 Leaf2 Bgp: %BGP-3-NOTIFICATION: received from neighbor 10.0.22.0 (VRF default AS 65000) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+Leaf2(config-router-bgp)#show run | b r b
+router bgp 65101
+   router-id 10.255.255.22
+   no bgp default ipv4-unicast
+   maximum-paths 4 ecmp 4
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN ebgp-multihop 3
+   neighbor EVPN send-community extended
+   neighbor UNDERLAY peer group
+   neighbor UNDERLAY remote-as 65000
+   neighbor UNDERLAY send-community
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL remote-as 65000
+   neighbor UNDERLAY-LL send-community
+   neighbor 10.0.12.0 peer group UNDERLAY
+   neighbor 10.0.22.0 peer group UNDERLAY
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   neighbor interface Et1-2 peer-group UNDERLAY-LL remote-as 65000
+   !
+   vlan 10
+      rd 10.255.255.22:10
+      route-target both 1:10
+      redistribute learned
+   !
+   vlan 20
+      rd 10.255.255.22:20
+      route-target both 1:20
+      redistribute learned
+   !
+   vlan 30
+      rd 10.255.255.22:30
+      route-target both 1:30
+      redistribute learned
+   !
+   address-family evpn
+      neighbor EVPN activate
+   !
+   address-family ipv4
+      neighbor UNDERLAY activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.22/32
+      network 10.255.255.112/32
+   !
+   vrf TENANT_A
+      rd 10.255.255.22:50000
+      route-target import evpn 1:50000
+      route-target export evpn 1:50000
+      redistribute connected
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+Leaf2(config-router-bgp)#no neighbor 10.0.12.0 
+Leaf2(config-router-bgp)#no neighbor 10.0.22.0
+Leaf2(config-router-bgp)#no neighbor UNDERLAY peer group
+Leaf2(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.22, local AS number 65101
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.255.255.11                     65000 Established   L2VPN EVPN              Negotiated              5          5
+10.255.255.12                     65000 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe03:3766%Et2       65000 Established   IPv4 Unicast            Negotiated              5          5
+fe80::5200:ff:fe15:f4e8%Et1       65000 Established   IPv4 Unicast            Negotiated              5          5
+Leaf2(config-router-bgp)#
+Leaf2(config-router-bgp)#
+Leaf2(config-router-bgp)#
+Leaf2(config-router-bgp)#show lldp nei
+Last table change time   : 0:44:40 ago
+Number of table inserts  : 17
+Number of table deletes  : 14
+Number of table drops    : 0
+Number of table age-outs : 11
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           SP2                      Ethernet1           120
+Et2           SP1                      Ethernet2           120
+Et8           Leaf1                    Ethernet8           120
+
+Leaf2(config-router-bgp)#show ip int bri
+                                                                        Address
+Interface       IP Address            Status     Protocol         MTU   Owner  
+--------------- --------------------- ---------- ------------ --------- -------
+Ethernet1       10.0.22.1/31          up         up              1500          
+Ethernet2       10.0.12.1/31          up         up              1500          
+Loopback0       10.255.255.22/32      up         up             65535          
+Loopback1       10.255.255.112/32     up         up             65535          
+Management1     unassigned            up         up              1500          
+Vlan10          192.168.10.1/24       up         up              1500          
+Vlan20          192.168.20.1/24       up         up              1500          
+Vlan30          192.168.30.1/24       up         up              1500          
+Vlan4094        169.254.1.2/30        up         up              1500          
+Vlan4097        unassigned            up         up              9164          
+
+Leaf2(config-router-bgp)#int e1-2
+Leaf2(config-if-Et1-2)#no ip
+% Incomplete command
+Leaf2(config-if-Et1-2)#no ip add
+Leaf2(config-if-Et1-2)#show ip int br
+                                                                        Address
+Interface       IP Address            Status     Protocol         MTU   Owner  
+--------------- --------------------- ---------- ------------ --------- -------
+Ethernet1       unassigned            up         up              1500          
+Ethernet2       unassigned            up         up              1500          
+Loopback0       10.255.255.22/32      up         up             65535          
+Loopback1       10.255.255.112/32     up         up             65535          
+Management1     unassigned            up         up              1500          
+Vlan10          192.168.10.1/24       up         up              1500          
+Vlan20          192.168.20.1/24       up         up              1500          
+Vlan30          192.168.30.1/24       up         up              1500          
+Vlan4094        169.254.1.2/30        up         up              1500          
+Vlan4097        unassigned            up         up              9164          
+
+Leaf2(config-if-Et1-2)#show ipv6 int bri
+Interface  Status    MTU   IPv6 Address                 Addr State  Addr Source
+---------- ------- ------ ---------------------------- ------------ -----------
+Et1        up       1500   fe80::5200:ff:fed5:5dc0/64   up          link local 
+Et2        up       1500   fe80::5200:ff:fed5:5dc0/64   up          link local 
+Vl4097     up       9164   fe80::5200:ff:fed5:5dc0/64   up          link local 
+
+Leaf2(config-if-Et1-2)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.22, local AS number 65101
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.255.255.11                     65000 Established   L2VPN EVPN              Negotiated              5          5
+10.255.255.12                     65000 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe03:3766%Et2       65000 Established   IPv4 Unicast            Negotiated              5          5
+fe80::5200:ff:fe15:f4e8%Et1       65000 Established   IPv4 Unicast            Negotiated              5          5
+Leaf2(config-if-Et1-2)#
+```
+
+The staging shows its own harmlessness: with the `UNDERLAY-LL` peer group in place but no interface neighbors yet, `show bgp summary` still lists exactly the four old sessions — configuration without effect, which is what a make-before-break step should look like until the moment you arm it. Then `show lldp nei` as pre-flight, and it earns its place: Leaf2's wires are *crossed* relative to Leaf1 — Et1 lands on SP2 and Et2 on SP1 — precisely the kind of per-device detail the interface-neighbor commands depend on and the /31 table used to encode. The two `show run | b r b` snapshots bracket the change and double as rollback records, and the second one holds a small EOS surprise: the two separate `neighbor interface Ethernet1` / `Ethernet2` commands come back folded into one line, `neighbor interface Et1-2 peer-group UNDERLAY-LL remote-as 65000` — the config model treats consecutive interface neighbors as a range.
+
+Then the notifications, and the ordering lesson runs in reverse this time: Leaf2 **receives** the Cease from both spines — `11:21:43` from `10.0.12.0`, `11:21:51` from `10.0.22.0` — because the spine side retired first, the opposite order to wave 1, with the same non-event result: the fe80 sessions never blink, five NLRI throughout. Leaf2 also goes one step beyond the wave script and deletes the now-empty `UNDERLAY` peer group — the right hygiene once nothing references it. And two quiet facts sit in the interface tables: Vlan4094's peer-link address and Loopback1's anycast VTEP are exactly where MLAG needs them, untouched; and `show ipv6 int bri` shows **every port carrying the same link-local address**, derived from the system MAC — which is exactly why every neighbor entry, route, and summary line needs its `%Et` interface qualifier to mean anything at all.
+
+The spine captures for this wave rewind further than wave 1's did — each opens with that spine's wave-1 half, frames the earlier paste didn't include. SP2:
+
+```text
+Copy completed successfully.
+SP2(config-if-Et1-4)#router bgp 65000
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   !
+   address-family ipv4
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originateSP2(config-router-bgp)#   neighbor UNDERLAY-LL peer group
+SP2(config-router-bgp)#   neighbor UNDERLAY-LL send-community
+SP2(config-router-bgp)#   neighbor UNDERLAY-LL maximum-routes 12000
+SP2(config-router-bgp)#   !
+SP2(config-router-bgp)#   address-family ipv4
+SP2(config-router-bgp-af)#      neighbor UNDERLAY-LL activate
+SP2(config-router-bgp-af)#      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+SP2(config-router-bgp-af)#
+SP2(config-router-bgp-af)#
+SP2(config-router-bgp-af)#wr
+Copy completed successfully.
+SP2(config-router-bgp-af)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.21.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.22.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.23.1           65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.102.1          65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1        65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21       65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22       65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23       65102 Established   L2VPN EVPN              Negotiated              5          5
+SP2(config-router-bgp-af)#exit
+SP2(config-router-bgp)#neighbor interface Ethernet2 peer-group UNDERLAY-LL remote-as 65101
+SP2(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.21.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.22.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.23.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.102.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP2(config-router-bgp)#Aug  1 11:12:59 SP2 Bgp: %BGP-3-NOTIFICATION: received from neighbor 10.0.21.1 (VRF default AS 65101) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+SP2(config-router-bgp)#
+SP2(config-router-bgp)#
+SP2(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.21.1                         65101 Connect       IPv4 Unicast            Configured              0          0
+10.0.22.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.23.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.102.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP2(config-router-bgp)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.12
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   neighbor 10.0.21.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.21.1 remote-as 65101
+   neighbor 10.0.22.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.22.1 remote-as 65101
+   neighbor 10.0.23.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.23.1 remote-as 65102
+   neighbor 10.0.102.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.102.1 remote-as 65100
+   neighbor interface Et2 peer-group UNDERLAY-LL remote-as 65101
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.12/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+SP2(config-router-bgp)#no neighbor 10.0.21.1
+SP2(config-router-bgp)#show lldp nei
+Last table change time   : 1:02:10 ago
+Number of table inserts  : 9
+Number of table deletes  : 5
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           Leaf2                    Ethernet1           120
+Et2           Leaf1                    Ethernet2           120
+Et3           Leaf3                    Ethernet3           120
+Et4           Border1                  Ethernet4           120
+
+SP2(config-router-bgp)#int e2
+SP2(config-if-Et2)#no ip address 
+SP2(config-if-Et2)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.22.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.23.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.102.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP2(config-if-Et2)#show ip int bri
+                                                                        Address
+Interface       IP Address           Status     Protocol         MTU    Owner  
+--------------- -------------------- ---------- ------------ ---------- -------
+Ethernet1       10.0.22.0/31         up         up              1500           
+Ethernet2       unassigned           up         up              1500           
+Ethernet3       10.0.23.0/31         up         up              1500           
+Ethernet4       10.0.102.0/31        up         up              1500           
+Loopback0       10.255.255.12/32     up         up             65535           
+Management1     unassigned           up         up              1500           
+
+SP2(config-if-Et2)#show ipv6 interface brief 
+Interface  Status    MTU   IPv6 Address                 Addr State  Addr Source
+---------- ------- ------ ---------------------------- ------------ -----------
+Et1        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local 
+Et2        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local 
+Et3        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local 
+Et4        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local 
+
+SP2(config-if-Et2)# show lldp nei
+Last table change time   : 1:06:43 ago
+Number of table inserts  : 9
+Number of table deletes  : 5
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           Leaf2                    Ethernet1           120
+Et2           Leaf1                    Ethernet2           120
+Et3           Leaf3                    Ethernet3           120
+Et4           Border1                  Ethernet4           120
+
+SP2(config-if-Et2)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.12
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   neighbor 10.0.22.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.22.1 remote-as 65101
+   neighbor 10.0.23.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.23.1 remote-as 65102
+   neighbor 10.0.102.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.102.1 remote-as 65100
+   neighbor interface Et2 peer-group UNDERLAY-LL remote-as 65101
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.12/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+SP2(config-if-Et2)#neighbor interface Ethernet1 peer-group UNDERLAY-LL remote-as 65101
+% Invalid input
+SP2(config-if-Et2)#router bgp 65000
+SP2(config-router-bgp)#neighbor interface Ethernet1 peer-group UNDERLAY-LL remote-as 65101
+SP2(config-router-bgp)#
+SP2(config-router-bgp)#
+SP2(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.22.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.23.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.102.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed5:5dc0%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP2(config-router-bgp)#
+SP2(config-router-bgp)#
+SP2(config-router-bgp)#no neighbor 10.0.22.1
+SP2(config-router-bgp)#Aug  1 11:21:51 SP2 Bgp: %BGP-3-NOTIFICATION: sent to neighbor 10.0.22.1 (VRF default AS 65101) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+SP2(config-router-bgp)#show lldp nei
+Last table change time   : 1:10:59 ago
+Number of table inserts  : 9
+Number of table deletes  : 5
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           Leaf2                    Ethernet1           120
+Et2           Leaf1                    Ethernet2           120
+Et3           Leaf3                    Ethernet3           120
+Et4           Border1                  Ethernet4           120
+
+SP2(config-router-bgp)#int et1
+SP2(config-if-Et1)#no ip add
+SP2(config-if-Et1)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.23.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.102.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed5:5dc0%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP2(config-if-Et1)#show ip int bri
+                                                                        Address
+Interface       IP Address           Status     Protocol         MTU    Owner  
+--------------- -------------------- ---------- ------------ ---------- -------
+Ethernet1       unassigned           up         up              1500           
+Ethernet2       unassigned           up         up              1500           
+Ethernet3       10.0.23.0/31         up         up              1500           
+Ethernet4       10.0.102.0/31        up         up              1500           
+Loopback0       10.255.255.12/32     up         up             65535           
+Management1     unassigned           up         up              1500           
+
+SP2(config-if-Et1)#show ipv6 int brief 
+Interface  Status    MTU   IPv6 Address                 Addr State  Addr Source
+---------- ------- ------ ---------------------------- ------------ -----------
+Et1        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local 
+Et2        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local 
+Et3        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local 
+Et4        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local 
+
+SP2(config-if-Et1)#
+```
+
+SP2's opening is its side of wave 1: `UNDERLAY-LL` staged, `neighbor interface Ethernet2` armed toward Leaf1, and Leaf1's Cease arriving at `11:12:59` — the receiving end of the very log line Leaf1's wave-1 capture shows being sent at `11:12:58`, the two ends of one wire logging the same event a second apart. Then the familiar sequence: the `Connect` ghost, the retirement, the release. Its wave-2 half opens with a small CLI-mode lesson — `neighbor interface ...` pasted while still in `config-if-Et2` gets `% Invalid input`; the command only exists under `router bgp` — and one line in its running config is notable for being *absent*: the stale `neighbor 10.255.255.11` that Phase 6 left behind is gone. That leftover is now off the books.
+
+And SP1, whose capture likewise replays its wave-1 half — the pre-change summary with no fe80 entries at all, the pre-change running config, the received side of Leaf1's `11:12:53` Cease — before its wave-2 half:
+
+```text
+Copy completed successfully.
+SP1(config-router-bgp-af)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.12.1           65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.13.1           65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1          65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1        65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21       65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22       65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23       65102 Established   L2VPN EVPN              Negotiated              5          5
+SP1(config-router-bgp-af)#
+SP1(config-router-bgp-af)#
+SP1(config-router-bgp-af)#exit
+SP1(config-router-bgp)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.11
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   neighbor 10.0.11.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.11.1 remote-as 65101
+   neighbor 10.0.12.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.12.1 remote-as 65101
+   neighbor 10.0.13.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.13.1 remote-as 65102
+   neighbor 10.0.101.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.101.1 remote-as 65100
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.11/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+SP1(config-router-bgp)#neighbor interface Ethernet1 peer-group UNDERLAY-LL remote-as 65101
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.12.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.13.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.12.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.13.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-router-bgp)#Aug  1 11:12:53 SP1 Bgp: %BGP-3-NOTIFICATION: received from neighbor 10.0.11.1 (VRF default AS 65101) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.11
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   neighbor 10.0.11.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.11.1 remote-as 65101
+   neighbor 10.0.12.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.12.1 remote-as 65101
+   neighbor 10.0.13.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.13.1 remote-as 65102
+   neighbor 10.0.101.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.101.1 remote-as 65100
+   neighbor interface Et1 peer-group UNDERLAY-LL remote-as 65101
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.11/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.11.1                         65101 Connect       IPv4 Unicast            Configured              0          0
+10.0.12.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.13.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-router-bgp)#no neighbor 10.0.11.1
+SP1(config-router-bgp)#show lldp nei
+Last table change time   : 0:59:21 ago
+Number of table inserts  : 9
+Number of table deletes  : 5
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           Leaf1                    Ethernet1           120
+Et2           Leaf2                    Ethernet2           120
+Et4           Leaf3                    Ethernet4           120
+Et5           Border1                  Ethernet5           120
+
+SP1(config-router-bgp)#int e1
+SP1(config-if-Et1)#no ip address 
+SP1(config-if-Et1)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.12.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.13.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-if-Et1)#show lldp nei
+Last table change time   : 1:03:02 ago
+Number of table inserts  : 9
+Number of table deletes  : 5
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           Leaf1                    Ethernet1           120
+Et2           Leaf2                    Ethernet2           120
+Et4           Leaf3                    Ethernet4           120
+Et5           Border1                  Ethernet5           120
+                   
+SP1(config-if-Et1)#
+SP1(config-if-Et1)#router bgp 65000
+SP1(config-router-bgp)#neighbor interface Ethernet2 peer-group UNDERLAY-LL remote-as 65101
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.12.1                         65101 Established   IPv4 Unicast            Negotiated              2          2
+10.0.13.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed5:5dc0%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-router-bgp)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.11
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   neighbor 10.0.12.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.12.1 remote-as 65101
+   neighbor 10.0.13.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.13.1 remote-as 65102
+   neighbor 10.0.101.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.101.1 remote-as 65100
+   neighbor interface Et1-2 peer-group UNDERLAY-LL remote-as 65101
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.11/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+SP1(config-router-bgp)#no neighbor 10.0.12.1
+SP1(config-router-bgp)#Aug  1 11:21:43 SP1 Bgp: %BGP-3-NOTIFICATION: sent to neighbor 10.0.12.1 (VRF default AS 65101) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#show lldp nei
+Last table change time   : 1:08:14 ago
+Number of table inserts  : 9
+Number of table deletes  : 5
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           Leaf1                    Ethernet1           120
+Et2           Leaf2                    Ethernet2           120
+Et4           Leaf3                    Ethernet4           120
+Et5           Border1                  Ethernet5           120
+
+SP1(config-router-bgp)#int e2
+SP1(config-if-Et2)#no ip add
+SP1(config-if-Et2)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.13.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed5:5dc0%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-if-Et2)#show ip v6 int bri
+% Invalid input
+SP1(config-if-Et2)#show ipv6 int bri
+Interface  Status    MTU   IPv6 Address                 Addr State  Addr Source
+---------- ------- ------ ---------------------------- ------------ -----------
+Et1        up       1500   fe80::5200:ff:fe03:3766/64   up          link local 
+Et2        up       1500   fe80::5200:ff:fe03:3766/64   up          link local 
+Et4        up       1500   fe80::5200:ff:fe03:3766/64   up          link local 
+Et5        up       1500   fe80::5200:ff:fe03:3766/64   up          link local 
+
+SP1(config-if-Et2)#show ip int bri
+                                                                        Address
+Interface       IP Address           Status     Protocol         MTU    Owner  
+--------------- -------------------- ---------- ------------ ---------- -------
+Ethernet1       unassigned           up         up              1500           
+Ethernet2       unassigned           up         up              1500           
+Ethernet4       10.0.13.0/31         up         up              1500           
+Ethernet5       10.0.101.0/31        up         up              1500           
+Loopback0       10.255.255.11/32     up         up             65535           
+Management1     unassigned           up         up              1500
+```
+
+The bookkeeping at the bottom is the halfway mark made visible: on both spines `show ip int bri` is half-unnumbered — the Leaf1 and Leaf2 ports `unassigned`, the Leaf3 and Border1 /31s still in place, waves 3 and 4's work sitting right there as addressing. SP1's running config shows the same `Et1-2` range folding as Leaf2's, and each spine, like each leaf, presents one link-local address on all its ports. The invariants held through both waves: the EVPN sessions never moved, and their NLRI counts — 5/5 on the leaves, 6/6/5 across the spines' view of site A — are byte-identical from the first capture to the last. One watch item survives: Border1's EVPN sessions (`10.255.255.1`) still show **0 NLRI** at `11:21`, nine minutes after wave 1 first flagged it — "still converging after the reboot" is wearing thin as an explanation, and site B earns its investigation before this MOP's soak is called clean.
+
+Wave 3 — Leaf3, the single-homed leaf, `remote-as 65102` — and this wave earned the section its best mistake. The captures arrived by device, not by time; the timestamps will re-order them for us. SP2 first:
+
+```text
+SP2(config-if-Et1)#
+SP2(config-if-Et1)#show lldp nei
+Last table change time   : 1:58:57 ago
+Number of table inserts  : 9
+Number of table deletes  : 5
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           Leaf2                    Ethernet1           120
+Et2           Leaf1                    Ethernet2           120
+Et3           Leaf3                    Ethernet3           120
+Et4           Border1                  Ethernet4           120
+
+SP2(config-if-Et1)#router bgp 65000
+SP2(config-router-bgp)#neighbor interface Ethernet3 peer-group UNDERLAY-LL remote-as 65102
+SP2(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.23.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.102.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe72:8b31%Et3       65102 Established   IPv4 Unicast            Negotiated              0          0
+fe80::5200:ff:fed5:5dc0%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP2(config-router-bgp)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.12
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   neighbor 10.0.23.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.23.1 remote-as 65102
+   neighbor 10.0.102.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.102.1 remote-as 65100
+   neighbor interface Et1-2 peer-group UNDERLAY-LL remote-as 65101
+   neighbor interface Et3 peer-group UNDERLAY-LL remote-as 65102
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.12/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+SP2(config-router-bgp)#no neighbor 10.0.23.1
+SP2(config-router-bgp)#Aug  1 12:13:37 SP2 Bgp: %BGP-3-NOTIFICATION: sent to neighbor 10.0.23.1 (VRF default AS 65102) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+SP2(config-router-bgp)#
+SP2(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.102.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe72:8b31%Et3       65102 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed5:5dc0%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP2(config-router-bgp)#int e3
+SP2(config-if-Et3)#no ip address 
+SP2(config-if-Et3)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.102.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe72:8b31%Et3       65102 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed5:5dc0%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+```
+
+SP2's run is the wave script working as written: LLDP confirms its Leaf3 wire is Et3, the arm lands, and the first summary catches the LL session freshly Established at **0 NLRI** — the moment after the OPEN, before the first UPDATE batch — alongside the still-live numbered `10.0.23.1`. The running config now reads as a roster, `Et1-2` at 65101 and `Et3` at 65102, the per-interface `remote-as` carrying what the /31 table used to. Retire at `12:13:37`, release, done. One chronology note: Leaf3 had already armed its own interface neighbors by this point — its received Ceases match the spines' sent ones to the second — which is why SP2's LL session comes up Established immediately rather than sitting in `Connect`.
+
+Then SP1, and the detour:
+
+```text
+SP1(config-router-bgp)#show lldp nei
+Last table change time   : 1:54:25 ago
+Number of table inserts  : 9
+Number of table deletes  : 5
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           Leaf1                    Ethernet1           120
+Et2           Leaf2                    Ethernet2           120
+Et4           Leaf3                    Ethernet4           120
+Et5           Border1                  Ethernet5           120
+
+SP1(config-router-bgp)#neighbor interface Ethernet3 peer-group UNDERLAY-LL remote-as 65102
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.13.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed5:5dc0%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-router-bgp)#show bgp summary
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.13.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fed5:5dc0%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-router-bgp)#no neighbor interface Ethernet3 peer-group UNDERLAY-LL remote-as 65102
+SP1(config-router-bgp)#neighbor interface Ethernet4 peer-group UNDERLAY-LL remote-as 65102
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.13.1                         65102 Established   IPv4 Unicast            Negotiated              2          2
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe72:8b31%Et4       65102 Established   IPv4 Unicast            Negotiated              0          0
+fe80::5200:ff:fed5:5dc0%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-router-bgp)# show run | b r b
+router bgp 65000
+   router-id 10.255.255.11
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   neighbor 10.0.13.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.13.1 remote-as 65102
+   neighbor 10.0.101.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.101.1 remote-as 65100
+   neighbor interface Et1-2 peer-group UNDERLAY-LL remote-as 65101
+   neighbor interface Et4 peer-group UNDERLAY-LL remote-as 65102
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.11/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+SP1(config-router-bgp)#no neighbor 10.0.13.1
+SP1(config-router-bgp)#Aug  1 12:12:47 SP1 Bgp: %BGP-3-NOTIFICATION: sent to neighbor 10.0.13.1 (VRF default AS 65102) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe72:8b31%Et4       65102 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed5:5dc0%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-router-bgp)#show lldp nei
+Last table change time   : 1:58:24 ago
+Number of table inserts  : 9
+Number of table deletes  : 5
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           Leaf1                    Ethernet1           120
+Et2           Leaf2                    Ethernet2           120
+Et4           Leaf3                    Ethernet4           120
+Et5           Border1                  Ethernet5           120
+
+SP1(config-router-bgp)#show ip int bri
+                                                                        Address
+Interface       IP Address           Status     Protocol         MTU    Owner  
+--------------- -------------------- ---------- ------------ ---------- -------
+Ethernet1       unassigned           up         up              1500           
+Ethernet2       unassigned           up         up              1500           
+Ethernet4       10.0.13.0/31         up         up              1500           
+Ethernet5       10.0.101.0/31        up         up              1500           
+Loopback0       10.255.255.11/32     up         up             65535           
+Management1     unassigned           up         up              1500           
+
+SP1(config-router-bgp)#int e4
+SP1(config-if-Et4)#no ip address 
+SP1(config-if-Et4)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe72:8b31%Et4       65102 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed5:5dc0%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+```
+
+`neighbor interface Ethernet3 peer-group UNDERLAY-LL remote-as 65102` — on the spine whose Leaf3 wire is **Et4**. SP1's own LLDP table, printed seconds earlier, lists Et1, Et2, Et4, Et5 and no Et3 at all. And look at the failure mode: nothing. No error, no `Connect` row, no log — an interface neighbor on a port with nobody behind it simply never discovers a peer, so it never appears in the summary. The two byte-identical `show bgp summary` outputs in a row are the operator noticing that nothing is happening. The fix is symmetric — `no neighbor interface Ethernet3 ...`, arm Et4, session up — but the lesson deserves stating: a numbered neighbor with a wrong address at least shows up as a visibly dead `Active`/`Connect` row you can stare at; a wrong-port interface neighbor **fails silently**. SP2 has Leaf3 on Et3, SP1 has it on Et4 — the crossed-port trap is exactly why the 7.1 table has a which-wire column and why LLDP runs before every arm step. That asymmetry is part of the price of giving up per-link addresses, and LLDP is the compensating control.
+
+Leaf3's own capture is the longest, because it starts further back: this is the first device in the wave list that needed the section 7.2 prerequisites applied live — and it shows the whole `show run` before and after:
+
+```text
+Leaf3#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.13.0           65000 Established   IPv4 Unicast            Negotiated             11         11
+10.0.23.0           65000 Established   IPv4 Unicast            Negotiated             11         11
+10.255.255.11       65000 Established   L2VPN EVPN              Negotiated             16         16
+10.255.255.12       65000 Established   L2VPN EVPN              Negotiated             16         16
+Leaf3#
+Leaf3#
+Leaf3#conf t
+Leaf3(config)#ipv6 unicast-routing
+Leaf3(config)#ip routing ipv6 interfaces
+Leaf3(config)#show lldp nei
+Last table change time   : 0:41:36 ago
+Number of table inserts  : 5
+Number of table deletes  : 3
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et3           SP2                      Ethernet3           120
+Et4           SP1                      Ethernet4           120
+
+Leaf3(config)#int e3-4
+Leaf3(config-if-Et3-4)#ipv6 enable 
+Leaf3(config-if-Et3-4)#wr
+Copy completed successfully.
+Leaf3(config-if-Et3-4)#show run
+! Command: show running-config
+! device: Leaf3 (vEOS-lab, EOS-4.33.1.1F)
+!
+! boot system flash:/vEOS-lab.swi
+!
+no aaa root
+!
+no service interface inactive port-id allocation disabled
+!
+transceiver qsfp default-mode 4x10G
+!
+service routing protocols model multi-agent
+!
+hostname Leaf3
+!
+spanning-tree mode mstp
+!
+system l1
+   unsupported speed action error
+   unsupported error-correction action error
+!
+vlan 10,20,30
+!
+vrf instance TENANT_A
+!
+interface Ethernet1
+   switchport access vlan 20
+!
+interface Ethernet2
+   switchport access vlan 30
+!
+interface Ethernet3
+   no switchport
+   ip address 10.0.23.1/31
+   ipv6 enable
+   ip ospf network point-to-point
+   ip ospf area 0.0.0.0
+!
+interface Ethernet4
+   no switchport
+   ip address 10.0.13.1/31
+   ipv6 enable
+   ip ospf network point-to-point
+   ip ospf area 0.0.0.0
+!
+interface Ethernet5
+!
+interface Ethernet6
+!
+interface Ethernet7
+!
+interface Ethernet8
+!
+interface Loopback0
+   ip address 10.255.255.23/32
+   ip ospf area 0.0.0.0
+!
+interface Loopback1
+   ip address 10.255.255.113/32
+   ip ospf area 0.0.0.0
+!
+interface Management1
+!
+interface Vlan10
+   ip address virtual 192.168.10.1/24
+!
+interface Vlan20
+   no autostate
+   vrf TENANT_A
+   ip address virtual 192.168.20.1/24
+!
+interface Vlan30
+   no autostate
+   vrf TENANT_A
+   ip address virtual 192.168.30.1/24
+!
+interface Vxlan1
+   vxlan source-interface Loopback1
+   vxlan udp-port 4789
+   vxlan vlan 10 vni 1010
+   vxlan vlan 20 vni 1020
+   vxlan vlan 30 vni 1030
+   vxlan vrf TENANT_A vni 50000
+!
+ip virtual-router mac-address 00:1c:73:00:00:01
+!
+ip routing ipv6 interfaces 
+ip routing vrf TENANT_A
+!
+ipv6 unicast-routing
+!
+router bgp 65102
+   router-id 10.255.255.23
+   no bgp default ipv4-unicast
+   maximum-paths 4 ecmp 4
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN ebgp-multihop 3
+   neighbor EVPN send-community extended
+   neighbor UNDERLAY peer group
+   neighbor UNDERLAY remote-as 65000
+   neighbor UNDERLAY send-community
+   neighbor 10.0.13.0 peer group UNDERLAY
+   neighbor 10.0.23.0 peer group UNDERLAY
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   !
+   vlan 10
+      rd 10.255.255.23:10
+      route-target both 1:10
+      redistribute learned
+   !
+   vlan 20
+      rd 10.255.255.23:20
+      route-target both 1:20
+      redistribute learned
+   !
+   vlan 30
+      rd 10.255.255.23:30
+      route-target both 1:30
+      redistribute learned
+   !
+   address-family evpn
+      neighbor EVPN activate
+   !
+   address-family ipv4
+      neighbor UNDERLAY activate
+      network 10.255.255.23/32
+      network 10.255.255.113/32
+   !
+   vrf TENANT_A
+      rd 10.255.255.23:50000
+      route-target import evpn 1:50000
+      route-target export evpn 1:50000
+      redistribute connected
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+Leaf3(config-if-Et3-4)# router bgp 65102
+Leaf3(config-router-bgp)#   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL remote-as 65000
+   neighbor UNDERLAY-LL send-community
+   !
+   address-family ipv4
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originateLeaf3(config-router-bgp)#   neighbor UNDERLAY-LL remote-as 65000
+Leaf3(config-router-bgp)#   neighbor UNDERLAY-LL send-community
+Leaf3(config-router-bgp)#   !
+Leaf3(config-router-bgp)#   address-family ipv4
+Leaf3(config-router-bgp-af)#      neighbor UNDERLAY-LL activate
+Leaf3(config-router-bgp-af)#      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+Leaf3(config-router-bgp-af)#
+Leaf3(config-router-bgp-af)#
+Leaf3(config-router-bgp-af)#wr
+Copy completed successfully.
+Leaf3(config-router-bgp-af)#
+Leaf3(config-router-bgp-af)#
+Leaf3(config-router-bgp-af)#
+Leaf3(config-router-bgp-af)#
+Leaf3(config-router-bgp-af)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.13.0           65000 Established   IPv4 Unicast            Negotiated              6          6
+10.0.23.0           65000 Established   IPv4 Unicast            Negotiated              6          6
+10.255.255.11       65000 Established   L2VPN EVPN              Negotiated             12         12
+10.255.255.12       65000 Established   L2VPN EVPN              Negotiated             12         12
+Leaf3(config-router-bgp-af)#show lldp nei
+Last table change time   : 1:04:10 ago
+Number of table inserts  : 5
+Number of table deletes  : 3
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et3           SP2                      Ethernet3           120
+Et4           SP1                      Ethernet4           120
+
+Leaf3(config-router-bgp-af)#show ip int bri
+                                                                        Address
+Interface       IP Address            Status     Protocol         MTU   Owner  
+--------------- --------------------- ---------- ------------ --------- -------
+Ethernet3       10.0.23.1/31          up         up              1500          
+Ethernet4       10.0.13.1/31          up         up              1500          
+Loopback0       10.255.255.23/32      up         up             65535          
+Loopback1       10.255.255.113/32     up         up             65535          
+Management1     unassigned            up         up              1500          
+Vlan10          192.168.10.1/24       up         up              1500          
+Vlan20          192.168.20.1/24       up         up              1500          
+Vlan30          192.168.30.1/24       up         up              1500          
+Vlan4097        unassigned            up         up              9164          
+
+Leaf3(config-router-bgp-af)#
+Leaf3(config-router-bgp-af)#
+Leaf3(config-router-bgp-af)#show run | b r b
+router bgp 65102
+   router-id 10.255.255.23
+   no bgp default ipv4-unicast
+   maximum-paths 4 ecmp 4
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN ebgp-multihop 3
+   neighbor EVPN send-community extended
+   neighbor UNDERLAY peer group
+   neighbor UNDERLAY remote-as 65000
+   neighbor UNDERLAY send-community
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL remote-as 65000
+   neighbor UNDERLAY-LL send-community
+   neighbor 10.0.13.0 peer group UNDERLAY
+   neighbor 10.0.23.0 peer group UNDERLAY
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   !
+   vlan 10
+      rd 10.255.255.23:10
+      route-target both 1:10
+      redistribute learned
+   !
+   vlan 20
+      rd 10.255.255.23:20
+      route-target both 1:20
+      redistribute learned
+   !
+   vlan 30
+      rd 10.255.255.23:30
+      route-target both 1:30
+      redistribute learned
+   !
+   address-family evpn
+      neighbor EVPN activate
+   !
+   address-family ipv4
+      neighbor UNDERLAY activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.23/32
+      network 10.255.255.113/32
+   !
+   vrf TENANT_A
+      rd 10.255.255.23:50000
+      route-target import evpn 1:50000
+      route-target export evpn 1:50000
+      redistribute connected
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+Leaf3(config-router-bgp-af)#router bgp 65102
+Leaf3(config-router-bgp)#show lldp nei
+Last table change time   : 1:46:40 ago
+Number of table inserts  : 5
+Number of table deletes  : 3
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et3           SP2                      Ethernet3           120
+Et4           SP1                      Ethernet4           120
+
+Leaf3(config-router-bgp)#neighbor interface Ethernet3 peer-group UNDERLAY-LL remote-as 65000
+Leaf3(config-router-bgp)#neighbor interface Ethernet4 peer-group UNDERLAY-LL remote-as 65000
+Leaf3(config-router-bgp)#show ip int bri
+                                                                        Address
+Interface       IP Address            Status     Protocol         MTU   Owner  
+--------------- --------------------- ---------- ------------ --------- -------
+Ethernet3       10.0.23.1/31          up         up              1500          
+Ethernet4       10.0.13.1/31          up         up              1500          
+Loopback0       10.255.255.23/32      up         up             65535          
+Loopback1       10.255.255.113/32     up         up             65535          
+Management1     unassigned            up         up              1500          
+Vlan10          192.168.10.1/24       up         up              1500          
+Vlan20          192.168.20.1/24       up         up              1500          
+Vlan30          192.168.30.1/24       up         up              1500          
+Vlan4097        unassigned            up         up              9164          
+
+Leaf3(config-router-bgp)#Aug  1 12:12:48 Leaf3 Bgp: %BGP-3-NOTIFICATION: received from neighbor 10.0.13.0 (VRF default AS 65000) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+Aug  1 12:13:37 Leaf3 Bgp: %BGP-3-NOTIFICATION: received from neighbor 10.0.23.0 (VRF default AS 65000) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+Leaf3(config-router-bgp)#
+Leaf3(config-router-bgp)#
+Leaf3(config-router-bgp)#show lldp nei
+Last table change time   : 1:53:06 ago
+Number of table inserts  : 5
+Number of table deletes  : 3
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et3           SP2                      Ethernet3           120
+Et4           SP1                      Ethernet4           120
+
+Leaf3(config-router-bgp)#show ip int bri
+                                                                        Address
+Interface       IP Address            Status     Protocol         MTU   Owner  
+--------------- --------------------- ---------- ------------ --------- -------
+Ethernet3       10.0.23.1/31          up         up              1500          
+Ethernet4       10.0.13.1/31          up         up              1500          
+Loopback0       10.255.255.23/32      up         up             65535          
+Loopback1       10.255.255.113/32     up         up             65535          
+Management1     unassigned            up         up              1500          
+Vlan10          192.168.10.1/24       up         up              1500          
+Vlan20          192.168.20.1/24       up         up              1500          
+Vlan30          192.168.30.1/24       up         up              1500          
+Vlan4097        unassigned            up         up              9164          
+
+Leaf3(config-router-bgp)#show run | b r b
+router bgp 65102
+   router-id 10.255.255.23
+   no bgp default ipv4-unicast
+   maximum-paths 4 ecmp 4
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN ebgp-multihop 3
+   neighbor EVPN send-community extended
+   neighbor UNDERLAY peer group
+   neighbor UNDERLAY remote-as 65000
+   neighbor UNDERLAY send-community
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL remote-as 65000
+   neighbor UNDERLAY-LL send-community
+   neighbor 10.0.13.0 peer group UNDERLAY
+   neighbor 10.0.23.0 peer group UNDERLAY
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   neighbor interface Et3-4 peer-group UNDERLAY-LL remote-as 65000
+   !
+   vlan 10
+      rd 10.255.255.23:10
+      route-target both 1:10
+      redistribute learned
+   !
+   vlan 20
+      rd 10.255.255.23:20
+      route-target both 1:20
+      redistribute learned
+   !
+   vlan 30
+      rd 10.255.255.23:30
+      route-target both 1:30
+      redistribute learned
+   !
+   address-family evpn
+      neighbor EVPN activate
+   !
+   address-family ipv4
+      neighbor UNDERLAY activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.23/32
+      network 10.255.255.113/32
+   !
+   vrf TENANT_A
+      rd 10.255.255.23:50000
+      route-target import evpn 1:50000
+      route-target export evpn 1:50000
+      redistribute connected
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+Leaf3(config-router-bgp)#no neighbor 10.0.13.0
+Leaf3(config-router-bgp)#no neighbor 10.0.23.0 
+Leaf3(config-router-bgp)#no neighbor UNDERLAY peer group
+Leaf3(config-router-bgp)#show run | b r b
+router bgp 65102
+   router-id 10.255.255.23
+   no bgp default ipv4-unicast
+   maximum-paths 4 ecmp 4
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN ebgp-multihop 3
+   neighbor EVPN send-community extended
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL remote-as 65000
+   neighbor UNDERLAY-LL send-community
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   neighbor interface Et3-4 peer-group UNDERLAY-LL remote-as 65000
+   !
+   vlan 10
+      rd 10.255.255.23:10
+      route-target both 1:10
+      redistribute learned
+   !
+   vlan 20
+      rd 10.255.255.23:20
+      route-target both 1:20
+      redistribute learned
+   !
+   vlan 30
+      rd 10.255.255.23:30
+      route-target both 1:30
+      redistribute learned
+   !
+   address-family evpn
+      neighbor EVPN activate
+   !
+   address-family ipv4
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.23/32
+      network 10.255.255.113/32
+   !
+   vrf TENANT_A
+      rd 10.255.255.23:50000
+      route-target import evpn 1:50000
+      route-target export evpn 1:50000
+      redistribute connected
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+Leaf3(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.23, local AS number 65102
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.255.255.11                     65000 Established   L2VPN EVPN              Negotiated             12         12
+10.255.255.12                     65000 Established   L2VPN EVPN              Negotiated             12         12
+fe80::5200:ff:fe03:3766%Et4       65000 Established   IPv4 Unicast            Negotiated              6          6
+fe80::5200:ff:fe15:f4e8%Et3       65000 Established   IPv4 Unicast            Negotiated              6          6
+Leaf3(config-router-bgp)#ent e3-4
+% Invalid input
+Leaf3(config-router-bgp)#int e3-4
+Leaf3(config-if-Et3-4)#no ip add
+Leaf3(config-if-Et3-4)#show ip int bri
+                                                                        Address
+Interface       IP Address            Status     Protocol         MTU   Owner  
+--------------- --------------------- ---------- ------------ --------- -------
+Ethernet3       unassigned            up         up              1500          
+Ethernet4       unassigned            up         up              1500          
+Loopback0       10.255.255.23/32      up         up             65535          
+Loopback1       10.255.255.113/32     up         up             65535          
+Management1     unassigned            up         up              1500          
+Vlan10          192.168.10.1/24       up         up              1500          
+Vlan20          192.168.20.1/24       up         up              1500          
+Vlan30          192.168.30.1/24       up         up              1500          
+Vlan4097        unassigned            up         up              9164          
+
+Leaf3(config-if-Et3-4)#show ipv6 int bri
+Interface  Status    MTU   IPv6 Address                 Addr State  Addr Source
+---------- ------- ------ ---------------------------- ------------ -----------
+Et3        up       1500   fe80::5200:ff:fe72:8b31/64   up          link local 
+Et4        up       1500   fe80::5200:ff:fe72:8b31/64   up          link local 
+Vl4097     up       9164   fe80::5200:ff:fe72:8b31/64   up          link local 
+
+Leaf3(config-if-Et3-4)#show lldp nei
+Last table change time   : 1:55:02 ago
+Number of table inserts  : 5
+Number of table deletes  : 3
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et3           SP2                      Ethernet3           120
+Et4           SP1                      Ethernet4           120
+
+Leaf3(config-if-Et3-4)#
+```
+
+The prerequisites go in exactly as 7.2 lists them — `ipv6 unicast-routing`, `ip routing ipv6 interfaces`, `ipv6 enable` on Et3-4 — and the full running config proves them in place. That same config shows something else worth a cleanup ticket: `ip ospf network point-to-point` and `ip ospf area 0.0.0.0` still sitting on Et3, Et4, and both loopbacks. Phase 5 removed the OSPF *process*; the orphaned interface statements stayed behind, inert but misleading to the next reader. Then the by-now-familiar wave: staging, LLDP, arm, the received Ceases (spines moved first again), `no neighbor UNDERLAY peer group` hygiene, the config folding to `neighbor interface Et3-4`, the `ent e3-4` typo, release, and one link-local address (`fe80::5200:ff:fe72:8b31`) on every port. No Vlan4094 in Leaf3's interface table and none needed — single-homed, its own VTEP at `10.255.255.113`, nothing MLAG to protect.
+
+Two route-count observations in Leaf3's summaries reward the arithmetic. First, Leaf3 accepts **12** EVPN NLRI where wave 1 showed Leaf1 accepting only **5**: Leaf3 takes Leaf1's 6 plus Leaf2's 6, while each MLAG member loop-drops the other's 65101-tagged routes and accepts only Leaf3's 5 — the same fabric, different `Rcd` columns, all of it explained by the `AS path loop detection` counters from wave 1. Second, the anomaly: Leaf3's first frame shows `11` underlay and `16` EVPN NLRI per session; by the staged state minutes later it is `6` and `12`. Five underlay routes and four EVPN routes are missing — exactly the shape of site B's contribution. The explanation (confirmed in wave 4's notes) is simpler than any protocol theory: the richer first frame is **pre-reboot scrollback**, still sitting in Leaf3's console buffer from when the whole lab was lit, and every frame actually captured during the MOP shows a fabric without site B. Why that is so — and why it is fine — is wave 4's story.
+
+Wave 4 — Border1, `remote-as 65100`, the wave with the sharpest scope line: the spine uplinks (Et4 to SP2, Et5 to SP1) convert, the DCI link (Et3) does not. It also produced the section's second detour, and where wave 3's was silent, this one is loud. SP2's frame first:
+
+```text
+SP2(config-if-Et3)#router bgp 65000
+SP2(config-router-bgp)#neighbor interface Ethernet4 peer-group UNDERLAY-LL remote-as 65100
+SP2(config-router-bgp)#Aug  1 12:22:15 SP2 Bgp: %BGP-3-NOTIFICATION: received from neighbor fe80::5200:ff:fe6b:2e70%Et4 (VRF default AS 65100) 6/5 (Cease/connection rejected) 0 bytes
+Aug  1 12:22:23 SP2 Bgp: %BGP-3-NOTIFICATION: received from neighbor fe80::5200:ff:fe6b:2e70%Et4 (VRF default AS 65100) 6/5 (Cease/connection rejected) 0 bytes (message repeated 1 times in 8.41806 secs)
+Aug  1 12:22:34 SP2 Bgp: %BGP-3-NOTIFICATION: received from neighbor fe80::5200:ff:fe6b:2e70%Et4 (VRF default AS 65100) 6/5 (Cease/connection rejected) 0 bytes (message repeated 1 times in 10.153 secs)
+Aug  1 12:23:51 SP2 Bgp: %BGP-3-NOTIFICATION: received from neighbor fe80::5200:ff:fe6b:2e70%Et4 (VRF default AS 65100) 6/5 (Cease/connection rejected) 0 bytes (message repeated 1 times in 77.3781 secs)
+Aug  1 12:25:26 SP2 Bgp: %BGP-3-NOTIFICATION: received from neighbor fe80::5200:ff:fe6b:2e70%Et4 (VRF default AS 65100) 6/5 (Cease/connection rejected) 0 bytes
+
+SP2(config-router-bgp)#
+SP2(config-router-bgp)#
+SP2(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.102.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe6b:2e70%Et4       65100 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fe72:8b31%Et3       65102 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed5:5dc0%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP2(config-router-bgp)#Aug  1 12:26:29 SP2 Bgp: %BGP-3-NOTIFICATION: received from neighbor 10.0.102.1 (VRF default AS 65100) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+
+SP2(config-router-bgp)#
+SP2(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.102.1                        65100 Connect       IPv4 Unicast            Configured              0          0
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe6b:2e70%Et4       65100 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fe72:8b31%Et3       65102 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed5:5dc0%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP2(config-router-bgp)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.12
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   neighbor 10.0.102.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.102.1 remote-as 65100
+   neighbor interface Et1-2 peer-group UNDERLAY-LL remote-as 65101
+   neighbor interface Et3 peer-group UNDERLAY-LL remote-as 65102
+   neighbor interface Et4 peer-group UNDERLAY-LL remote-as 65100
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.12/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+SP2(config-router-bgp)#no  neighbor 10.0.102.1 
+SP2(config-router-bgp)#no neighbor UNDERLAY-EBGP peer group
+SP2(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.12, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe6b:2e70%Et4       65100 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fe72:8b31%Et3       65102 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed5:5dc0%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP2(config-router-bgp)#
+SP2(config-router-bgp)#
+SP2(config-router-bgp)#show ip int bri
+                                                                        Address
+Interface       IP Address           Status     Protocol         MTU    Owner  
+--------------- -------------------- ---------- ------------ ---------- -------
+Ethernet1       unassigned           up         up              1500           
+Ethernet2       unassigned           up         up              1500           
+Ethernet3       unassigned           up         up              1500           
+Ethernet4       10.0.102.0/31        up         up              1500           
+Loopback0       10.255.255.12/32     up         up             65535           
+Management1     unassigned           up         up              1500           
+
+SP2(config-router-bgp)#int e4
+SP2(config-if-Et4)#no ip add
+SP2(config-if-Et4)#show ip int bri
+                                                                        Address
+Interface       IP Address           Status     Protocol         MTU    Owner  
+--------------- -------------------- ---------- ------------ ---------- -------
+Ethernet1       unassigned           up         up              1500           
+Ethernet2       unassigned           up         up              1500           
+Ethernet3       unassigned           up         up              1500           
+Ethernet4       unassigned           up         up              1500           
+Loopback0       10.255.255.12/32     up         up             65535           
+Management1     unassigned           up         up              1500           
+
+SP2(config-if-Et4)#show ipv6 int bri
+Interface  Status    MTU   IPv6 Address                 Addr State  Addr Source
+---------- ------- ------ ---------------------------- ------------ -----------
+Et1        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local 
+Et2        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local 
+Et3        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local 
+Et4        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local 
+
+SP2(config-if-Et4)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.12
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   neighbor interface Et1-2 peer-group UNDERLAY-LL remote-as 65101
+   neighbor interface Et3 peer-group UNDERLAY-LL remote-as 65102
+   neighbor interface Et4 peer-group UNDERLAY-LL remote-as 65100
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.12/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+SP2(config-if-Et4)#wr
+Copy completed successfully.
+SP2(config-if-Et4)#
+SP2(config-if-Et4)#
+```
+
+The log tells the story before the summaries do: for over three minutes SP2 receives `Cease/connection rejected` from `fe80::5200:ff:fe6b:2e70%Et4` — Border1's link-local — at 8, 10, 77-second intervals. SP2's own side is fully staged and blameless; the far end keeps slamming the door. (Hold that thought for Border1's capture, which explains it.) At 12:25-something the rejections stop, the summary shows the LL session Established at 2 NLRI, and the wave resumes its familiar shape: Border1 retires the numbered pair from its side first (`10.0.102.1` Cease received at 12:26:29, the `Connect` ghost appears), and then SP2 does something no earlier wave could: `no neighbor 10.0.102.1` **and** `no neighbor UNDERLAY-EBGP peer group` — with the last numbered neighbor gone, the entire numbered scaffold comes down. The closing `show ip int bri` is the end state this MOP promised: **every Ethernet on SP2 unassigned**, Loopback0 the only IPv4 address on the box.
+
+SP1, same storm, same ending:
+
+```text
+SP1(config-if-Et4)#
+SP1(config-if-Et4)#
+SP1(config-if-Et4)#show lldp nei
+Last table change time   : 2:05:39 ago
+Number of table inserts  : 9
+Number of table deletes  : 5
+Number of table drops    : 0
+Number of table age-outs : 3
+
+Port          Neighbor Device ID       Neighbor Port ID    TTL
+---------- ------------------------ ---------------------- ---
+Et1           Leaf1                    Ethernet1           120
+Et2           Leaf2                    Ethernet2           120
+Et4           Leaf3                    Ethernet4           120
+Et5           Border1                  Ethernet5           120
+
+SP1(config-if-Et4)#router bgp 65000
+SP1(config-router-bgp)#neighbor interface Ethernet5 peer-group UNDERLAY-LL remote-as 65100
+SP1(config-router-bgp)#Aug  1 12:21:48 SP1 Bgp: %BGP-3-NOTIFICATION: received from neighbor fe80::5200:ff:fe6b:2e70%Et5 (VRF default AS 65100) 6/5 (Cease/connection rejected) 0 bytes
+Aug  1 12:21:57 SP1 Bgp: %BGP-3-NOTIFICATION: received from neighbor fe80::5200:ff:fe6b:2e70%Et5 (VRF default AS 65100) 6/5 (Cease/connection rejected) 0 bytes (message repeated 1 times in 8.6541 secs)
+Aug  1 12:22:02 SP1 Bgp: %BGP-3-NOTIFICATION: received from neighbor fe80::5200:ff:fe6b:2e70%Et5 (VRF default AS 65100) 6/5 (Cease/connection rejected) 0 bytes
+Aug  1 12:22:11 SP1 Bgp: %BGP-3-NOTIFICATION: received from neighbor fe80::5200:ff:fe6b:2e70%Et5 (VRF default AS 65100) 6/5 (Cease/connection rejected) 0 bytes (message repeated 1 times in 9.16215 secs)
+
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.11
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   neighbor 10.0.101.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.101.1 remote-as 65100
+   neighbor interface Et1-2 peer-group UNDERLAY-LL remote-as 65101
+   neighbor interface Et4 peer-group UNDERLAY-LL remote-as 65102
+   neighbor interface Et5 peer-group UNDERLAY-LL remote-as 65100
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.11/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+SP1(config-router-bgp)#Aug  1 12:23:20 SP1 Bgp: %BGP-3-NOTIFICATION: received from neighbor fe80::5200:ff:fe6b:2e70%Et5 (VRF default AS 65100) 6/5 (Cease/connection rejected) 0 bytes
+ 
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#Aug  1 12:24:40 SP1 Bgp: %BGP-3-NOTIFICATION: received from neighbor fe80::5200:ff:fe6b:2e70%Et5 (VRF default AS 65100) 6/5 (Cease/connection rejected) 0 bytes
+
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.101.1                        65100 Established   IPv4 Unicast            Negotiated              2          2
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe6b:2e70%Et5       65100 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fe72:8b31%Et4       65102 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed5:5dc0%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-router-bgp)#Aug  1 12:26:22 SP1 Bgp: %BGP-3-NOTIFICATION: received from neighbor 10.0.101.1 (VRF default AS 65100) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#
+SP1(config-router-bgp)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.11
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-EBGP peer group
+   neighbor UNDERLAY-EBGP send-community
+   neighbor UNDERLAY-EBGP maximum-routes 12000
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   neighbor 10.0.101.1 peer group UNDERLAY-EBGP
+   neighbor 10.0.101.1 remote-as 65100
+   neighbor interface Et1-2 peer-group UNDERLAY-LL remote-as 65101
+   neighbor interface Et4 peer-group UNDERLAY-LL remote-as 65102
+   neighbor interface Et5 peer-group UNDERLAY-LL remote-as 65100
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-EBGP activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.11/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+SP1(config-router-bgp)#no neighbor 10.0.101.1
+SP1(config-router-bgp)#no neighbor UNDERLAY-EBGP 
+% Incomplete command
+SP1(config-router-bgp)#no neighbor UNDERLAY-EBGP peer group
+SP1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.11, local AS number 65000
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.255.255.1                      65100 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.21                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.22                     65101 Established   L2VPN EVPN              Negotiated              6          6
+10.255.255.23                     65102 Established   L2VPN EVPN              Negotiated              5          5
+fe80::5200:ff:fe6b:2e70%Et5       65100 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fe72:8b31%Et4       65102 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed5:5dc0%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
+fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
+SP1(config-router-bgp)#show run | b r b
+router bgp 65000
+   router-id 10.255.255.11
+   no bgp default ipv4-unicast
+   maximum-paths 64 ecmp 64
+   bgp listen range 10.255.255.0/24 peer-group EVPN-EBGP peer-filter LEAF-ASNS
+   neighbor EVPN-EBGP peer group
+   neighbor EVPN-EBGP update-source Loopback0
+   neighbor EVPN-EBGP ebgp-multihop 3
+   neighbor EVPN-EBGP send-community extended
+   neighbor EVPN-EBGP maximum-routes 0
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL send-community
+   neighbor UNDERLAY-LL maximum-routes 12000
+   neighbor interface Et1-2 peer-group UNDERLAY-LL remote-as 65101
+   neighbor interface Et4 peer-group UNDERLAY-LL remote-as 65102
+   neighbor interface Et5 peer-group UNDERLAY-LL remote-as 65100
+   !
+   address-family evpn
+      neighbor EVPN-EBGP activate
+      neighbor EVPN-EBGP next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      network 10.255.255.11/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+SP1(config-router-bgp)#wr
+Copy completed successfully.
+SP1(config-router-bgp)#show ip int bri
+                                                                        Address
+Interface       IP Address           Status     Protocol         MTU    Owner  
+--------------- -------------------- ---------- ------------ ---------- -------
+Ethernet1       unassigned           up         up              1500           
+Ethernet2       unassigned           up         up              1500           
+Ethernet4       unassigned           up         up              1500           
+Ethernet5       10.0.101.0/31        up         up              1500           
+Loopback0       10.255.255.11/32     up         up             65535           
+Management1     unassigned           up         up              1500           
+
+SP1(config-router-bgp)#int e5
+SP1(config-if-Et5)#no ip add
+SP1(config-if-Et5)#show ip int bri
+                                                                        Address
+Interface       IP Address           Status     Protocol         MTU    Owner  
+--------------- -------------------- ---------- ------------ ---------- -------
+Ethernet1       unassigned           up         up              1500           
+Ethernet2       unassigned           up         up              1500           
+Ethernet4       unassigned           up         up              1500           
+Ethernet5       unassigned           up         up              1500           
+Loopback0       10.255.255.11/32     up         up             65535           
+Management1     unassigned           up         up              1500           
+
+SP1(config-if-Et5)#show ipv6 int bri
+Interface  Status    MTU   IPv6 Address                 Addr State  Addr Source
+---------- ------- ------ ---------------------------- ------------ -----------
+Et1        up       1500   fe80::5200:ff:fe03:3766/64   up          link local 
+Et2        up       1500   fe80::5200:ff:fe03:3766/64   up          link local 
+Et4        up       1500   fe80::5200:ff:fe03:3766/64   up          link local 
+Et5        up       1500   fe80::5200:ff:fe03:3766/64   up          link local 
+
+SP1(config-if-Et5)#wr
+Copy completed successfully.
+```
+
+Rejections from the same Border1 link-local on Et5 from 12:21:48 to 12:24:40, then Established, the received Cease at 12:26:22, the retirement — with a small CLI note, `no neighbor UNDERLAY-EBGP` alone is `% Incomplete command`; deleting a peer group takes the full phrase — and SP1 joins SP2 at the destination: four Ethernets, four `unassigned`, one loopback.
+
+Border1's capture is the explanation, the DCI proof, and the wave's best lesson in one:
+
+```text
+Border1(config)#
+Border1(config)#
+Border1(config)#show run | b r b
+router bgp 65100
+   router-id 10.255.255.1
+   no bgp default ipv4-unicast
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN ebgp-multihop 3
+   neighbor EVPN send-community extended
+   neighbor UNDERLAY peer group
+   neighbor UNDERLAY remote-as 65000
+   neighbor UNDERLAY send-community
+   neighbor 10.0.101.0 peer group UNDERLAY
+   neighbor 10.0.102.0 peer group UNDERLAY
+   neighbor 10.0.103.0 remote-as 65099
+   neighbor 10.255.99.1 remote-as 65099
+   neighbor 10.255.99.1 update-source Loopback0
+   neighbor 10.255.99.1 ebgp-multihop 3
+   neighbor 10.255.99.1 send-community extended
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   !
+   address-family evpn
+      neighbor EVPN activate
+      neighbor EVPN next-hop-unchanged
+      neighbor 10.255.99.1 activate
+      neighbor 10.255.99.1 next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY activate
+      neighbor 10.0.103.0 activate
+      network 10.255.255.1/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+Border1(config)#router bgp 65100
+Border1(config-router-bgp)# show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.1, local AS number 65100
+Neighbor               AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.101.0          65000 Established   IPv4 Unicast            Negotiated              6          6
+10.0.102.0          65000 Established   IPv4 Unicast            Negotiated              6          6
+10.0.103.0          65099 Established   IPv4 Unicast            Negotiated              1          1
+10.255.99.1         65099 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.11       65000 Established   L2VPN EVPN              Negotiated             17         17
+10.255.255.12       65000 Established   L2VPN EVPN              Negotiated             17         17
+Border1(config-router-bgp)#neighbor interface Ethernet4-5 peer-group UNDERLAY-LL remote-as 65000
+Border1(config-router-bgp)#Aug  1 12:21:49 Border1 Bgp: %BGP-3-NOTIFICATION: sent to neighbor fe80::5200:ff:fe03:3766%Et5 (VRF default AS 65000) 6/5 (Cease/connection rejected) 0 bytes
+Aug  1 12:22:15 Border1 Bgp: %BGP-3-NOTIFICATION: sent to neighbor fe80::5200:ff:fe15:f4e8%Et4 (VRF default AS 65000) 6/5 (Cease/connection rejected) 0 bytes
+
+Border1(config-router-bgp)#
+Border1(config-router-bgp)#
+Border1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.1, local AS number 65100
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.101.0                        65000 Established   IPv4 Unicast            Negotiated              6          6
+10.0.102.0                        65000 Established   IPv4 Unicast            Negotiated              6          6
+10.0.103.0                        65099 Established   IPv4 Unicast            Negotiated              1          1
+10.255.99.1                       65099 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.11                     65000 Established   L2VPN EVPN              Negotiated             17         17
+10.255.255.12                     65000 Established   L2VPN EVPN              Negotiated             17         17
+Border1(config-router-bgp)#show run | b r b
+router bgp 65100
+   router-id 10.255.255.1
+   no bgp default ipv4-unicast
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN ebgp-multihop 3
+   neighbor EVPN send-community extended
+   neighbor UNDERLAY peer group
+   neighbor UNDERLAY remote-as 65000
+   neighbor UNDERLAY send-community
+   neighbor UNDERLAY-LL peer group
+   neighbor 10.0.101.0 peer group UNDERLAY
+   neighbor 10.0.102.0 peer group UNDERLAY
+   neighbor 10.0.103.0 remote-as 65099
+   neighbor 10.255.99.1 remote-as 65099
+   neighbor 10.255.99.1 update-source Loopback0
+   neighbor 10.255.99.1 ebgp-multihop 3
+   neighbor 10.255.99.1 send-community extended
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   neighbor interface Et4-5 peer-group UNDERLAY-LL remote-as 65000
+   !
+   address-family evpn
+      neighbor EVPN activate
+      neighbor EVPN next-hop-unchanged
+      neighbor 10.255.99.1 activate
+      neighbor 10.255.99.1 next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY activate
+      neighbor 10.0.103.0 activate
+      network 10.255.255.1/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+Border1(config-router-bgp)#no neighbor interface Et4-5 peer-group UNDERLAY-LL remote-as 65000
+Border1(config-router-bgp)#    neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL remote-as 65000
+   neighbor UNDERLAY-LL send-communityBorder1(config-router-bgp)#   neighbor UNDERLAY-LL remote-as 65000
+Border1(config-router-bgp)#   neighbor UNDERLAY-LL send-community
+Border1(config-router-bgp)#
+Border1(config-router-bgp)#
+Border1(config-router-bgp)#neighbor interface Et4-5 peer-group UNDERLAY-LL remote-as 65000
+Border1(config-router-bgp)#Aug  1 12:25:26 Border1 Bgp: %BGP-3-NOTIFICATION: sent to neighbor fe80::5200:ff:fe15:f4e8%Et4 (VRF default AS 65000) 6/5 (Cease/connection rejected) 0 bytes
+   address-family ipv4
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originateBorder1(config-router-bgp-af)#      neighbor UNDERLAY-LL activate
+Border1(config-router-bgp-af)#      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+Border1(config-router-bgp-af)#
+Border1(config-router-bgp-af)#
+Border1(config-router-bgp-af)#
+Border1(config-router-bgp-af)#show run | b r b
+router bgp 65100
+   router-id 10.255.255.1
+   no bgp default ipv4-unicast
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN ebgp-multihop 3
+   neighbor EVPN send-community extended
+   neighbor UNDERLAY peer group
+   neighbor UNDERLAY remote-as 65000
+   neighbor UNDERLAY send-community
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL remote-as 65000
+   neighbor UNDERLAY-LL send-community
+   neighbor 10.0.101.0 peer group UNDERLAY
+   neighbor 10.0.102.0 peer group UNDERLAY
+   neighbor 10.0.103.0 remote-as 65099
+   neighbor 10.255.99.1 remote-as 65099
+   neighbor 10.255.99.1 update-source Loopback0
+   neighbor 10.255.99.1 ebgp-multihop 3
+   neighbor 10.255.99.1 send-community extended
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   neighbor interface Et4-5 peer-group UNDERLAY-LL remote-as 65000
+   !
+   address-family evpn
+      neighbor EVPN activate
+      neighbor EVPN next-hop-unchanged
+      neighbor 10.255.99.1 activate
+      neighbor 10.255.99.1 next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY activate
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      neighbor 10.0.103.0 activate
+      network 10.255.255.1/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+Border1(config-router-bgp-af)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.1, local AS number 65100
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.101.0                        65000 Established   IPv4 Unicast            Negotiated              6          6
+10.0.102.0                        65000 Established   IPv4 Unicast            Negotiated              6          6
+10.0.103.0                        65099 Established   IPv4 Unicast            Negotiated              1          1
+10.255.99.1                       65099 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.11                     65000 Established   L2VPN EVPN              Negotiated             17         17
+10.255.255.12                     65000 Established   L2VPN EVPN              Negotiated             17         17
+fe80::5200:ff:fe03:3766%Et5       65000 Established   IPv4 Unicast            Negotiated              6          6
+fe80::5200:ff:fe15:f4e8%Et4       65000 Established   IPv4 Unicast            Negotiated              6          6
+Border1(config-router-bgp-af)#
+Border1(config-router-bgp-af)#
+Border1(config-router-bgp-af)#
+Border1(config-router-bgp-af)#no neighbor 10.0.101.0
+Border1(config-router-bgp)#Aug  1 12:26:22 Border1 Bgp: %BGP-3-NOTIFICATION: sent to neighbor 10.0.101.0 (VRF default AS 65000) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+Border1(config-router-bgp)#no neighbor 10.0.102.0
+Border1(config-router-bgp)#Aug  1 12:26:29 Border1 Bgp: %BGP-3-NOTIFICATION: sent to neighbor 10.0.102.0 (VRF default AS 65000) 6/3 (Cease/peer de-configured <Hard Reset>) 0 bytes
+
+Border1(config-router-bgp)#
+Border1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.1, local AS number 65100
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.103.0                        65099 Established   IPv4 Unicast            Negotiated              1          1
+10.255.99.1                       65099 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.11                     65000 Established   L2VPN EVPN              Negotiated             17         17
+10.255.255.12                     65000 Established   L2VPN EVPN              Negotiated             17         17
+fe80::5200:ff:fe03:3766%Et5       65000 Established   IPv4 Unicast            Negotiated              6          6
+fe80::5200:ff:fe15:f4e8%Et4       65000 Established   IPv4 Unicast            Negotiated              6          6
+Border1(config-router-bgp)#
+Border1(config-router-bgp)#
+Border1(config-router-bgp)#
+Border1(config-router-bgp)#int e4-5
+Border1(config-if-Et4-5)#no ip add
+Border1(config-if-Et4-5)#router bgp 65100
+Border1(config-router-bgp)#no neighbor UNDERLAY peer group
+Border1(config-router-bgp)#show run | b r b
+router bgp 65100
+   router-id 10.255.255.1
+   no bgp default ipv4-unicast
+   neighbor EVPN peer group
+   neighbor EVPN remote-as 65000
+   neighbor EVPN update-source Loopback0
+   neighbor EVPN ebgp-multihop 3
+   neighbor EVPN send-community extended
+   neighbor UNDERLAY-LL peer group
+   neighbor UNDERLAY-LL remote-as 65000
+   neighbor UNDERLAY-LL send-community
+   neighbor 10.0.103.0 remote-as 65099
+   neighbor 10.255.99.1 remote-as 65099
+   neighbor 10.255.99.1 update-source Loopback0
+   neighbor 10.255.99.1 ebgp-multihop 3
+   neighbor 10.255.99.1 send-community extended
+   neighbor 10.255.255.11 peer group EVPN
+   neighbor 10.255.255.12 peer group EVPN
+   neighbor interface Et4-5 peer-group UNDERLAY-LL remote-as 65000
+   !
+   address-family evpn
+      neighbor EVPN activate
+      neighbor EVPN next-hop-unchanged
+      neighbor 10.255.99.1 activate
+      neighbor 10.255.99.1 next-hop-unchanged
+   !
+   address-family ipv4
+      neighbor UNDERLAY-LL activate
+      neighbor UNDERLAY-LL next-hop address-family ipv6 originate
+      neighbor 10.0.103.0 activate
+      network 10.255.255.1/32
+!
+router multicast
+   ipv4
+      software-forwarding kernel
+   !
+   ipv6
+      software-forwarding kernel
+!
+end
+Border1(config-router-bgp)#show bgp summary 
+BGP summary information for VRF default
+Router identifier 10.255.255.1, local AS number 65100
+Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
+--------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
+10.0.103.0                        65099 Established   IPv4 Unicast            Negotiated              1          1
+10.255.99.1                       65099 Established   L2VPN EVPN              Negotiated              0          0
+10.255.255.11                     65000 Established   L2VPN EVPN              Negotiated             17         17
+10.255.255.12                     65000 Established   L2VPN EVPN              Negotiated             17         17
+fe80::5200:ff:fe03:3766%Et5       65000 Established   IPv4 Unicast            Negotiated              6          6
+fe80::5200:ff:fe15:f4e8%Et4       65000 Established   IPv4 Unicast            Negotiated              6          6
+Border1(config-router-bgp)#wr
+Copy completed successfully.
+Border1(config-router-bgp)#show ipv6 int bri
+Interface  Status    MTU   IPv6 Address                 Addr State  Addr Source
+---------- ------- ------ ---------------------------- ------------ -----------
+Et4        up       1500   fe80::5200:ff:fe6b:2e70/64   up          link local 
+Et5        up       1500   fe80::5200:ff:fe6b:2e70/64   up          link local 
+
+Border1(config-router-bgp)#show ip int bri
+                                                                        Address
+Interface       IP Address          Status     Protocol          MTU    Owner  
+--------------- ------------------- ---------- ------------- ---------- -------
+Ethernet3       10.0.103.1/31       up         up               1500           
+Ethernet4       unassigned          up         up               1500           
+Ethernet5       unassigned          up         up               1500           
+Loopback0       10.255.255.1/32     up         up              65535           
+Management1     unassigned          up         up               1500
+```
+
+The detour first. Border1 (its 7.2 prerequisites already in place — Et4 and Et5 hold link-locals from the start) arms `neighbor interface Ethernet4-5 peer-group UNDERLAY-LL remote-as 65000` — the range form, legal here because both uplinks face the same AS — **before staging the peer group**. EOS does not object; it silently auto-creates an empty `neighbor UNDERLAY-LL peer group`, visible in the next `show run`. And an interface neighbor bound to a peer group with no activated address family answers every incoming OPEN with `Cease/connection rejected`. Both spines, fully staged, knock every few seconds; Border1 rejects them for four minutes, with logs accumulating on both ends. The unblocking is visible in the sequence: the peer-group body goes in (`remote-as`, `send-community`), one more rejection lands at 12:25:26 — proof those alone are not enough — then `neighbor UNDERLAY-LL activate` plus the RFC 8950 next-hop line, and the very next summary shows both LL sessions Established at 6 NLRI. The lesson is the MOP's own step order, stated by counterexample: **stage the peer group completely, then arm**. And set the two detours side by side: a wrong port fails silently (wave 3), a half-staged peer group fails noisily (wave 4) — and make-before-break absorbed both, because the numbered sessions carried the fabric the whole time.
+
+Now the scope line. Through the entire wave — storm, retirement (`10.0.101.0` and `10.0.102.0` sent their Ceases at 12:26:22 and 12:26:29, matching the spines' logs to the second), `no neighbor UNDERLAY peer group` hygiene, `no ip add` on Et4-5 — the DCI machinery never moves: `10.0.103.0` (the route-server wire, numbered) stays Established at 1 NLRI, `10.255.99.1` (the route-server EVPN session) stays up untouched, and the final `show ip int bri` reads exactly like 7.1 said it would: **Et3 keeps `10.0.103.1/31` while Et4 and Et5 go unassigned**. The `show ipv6 int bri` above it lists only Et4 and Et5 — the DCI port never got `ipv6 enable` because it never needed it.
+
+And the watch item resolves — not with a fix, but with a confession. Border1 receives **17 EVPN NLRI from each spine** — site A's full table, 6 + 6 + 5 — while `10.255.99.1`, the DCI route server session, reads **0 NLRI received**. The reason is operational, not protocol: after the reboot, site B (Border2, SP31, Leaf31) was deliberately left powered off. The lab host's memory budget covers the devices this MOP actually touches — the same RAM arithmetic that made this a vEOS lab in the first place — and a site A underlay conversion does not need the second site lit. The route server is up with nobody behind it, so Established-and-empty is the *correct* state here, and the invariant that matters is the one the captures do show: the DCI sessions themselves never blinked. The three-wave paper trail still earns its keep as a lesson, though: an Established session at 0 NLRI cannot tell you whether the far side is broken or simply absent — only the far side's operator can. In production, wave 2's "go look" would have been a phone call, and the answer would have been "we turned it off."
+
+With that, the 7.1 table is complete: eight fabric links unnumbered, one DCI link numbered by design, and the only IPv4 addresses left in site A's underlay are the loopbacks that were always the point.
 
 ### 7.4 Verification, rollback, and what must not change
 

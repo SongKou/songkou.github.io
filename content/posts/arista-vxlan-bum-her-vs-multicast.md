@@ -3239,7 +3239,7 @@ Data plane: byte-for-byte identical to walk 1. Same tunnel, same VTEPs, same flo
 
 The sequencing below is the generic iBGP→eBGP procedure adapted to this lab's addressing; the gotchas are identical on other vendors, only CLI differs. Execute from pre-staged, rendered configs — not typed live.
 
-(A Nexus run would have been the natural companion — the images sit in the same EVE-NG library — but this topology needs ten switches plus hosts, and a Nexus 9000v wants roughly 9 GB of memory apiece: ninety-odd gigabytes of switches against this laptop's 64 GB. vEOS-lab runs the whole exercise in a fraction of that, which is why every capture in this section is Arista.)
+(A Nexus run would have been the natural companion — the images sit in the same EVE-NG library — but this topology needs ten switches plus hosts, and a Nexus 9000v wants roughly 9 GB of memory apiece: ninety-odd gigabytes of switches against this desktop's 64 GB. vEOS-lab runs the whole exercise in a fraction of that, which is why every capture in this section is Arista.)
 
 #### Phase 0 — preparation (no config changes)
 

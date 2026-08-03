@@ -291,6 +291,7 @@ interface Ethernet2
 
 Verification:
 
+{{< details "Leaf1 — show mlag, show mlag interfaces detail, … (45 lines)" >}}
 ```text
 show mlag                      ! State: Active, Peer-link up, negotiation status Connected
 show mlag interfaces detail    ! mlag 20 active-full on both peers
@@ -338,6 +339,7 @@ Current weight/Max weight: 1/16
      PeerEthernet4   Sun 20:33:04         LACP       Active      0      Unknown
 
 ```
+{{< /details >}}
 
 Two MLAG+VXLAN rules worth repeating because they fail silently otherwise:
 
@@ -420,6 +422,7 @@ show vxlan config-sanity detail ! VTEP-IP mismatch, MLAG inconsistency, VLAN-VNI
 
 Output:
 
+{{< details "Leaf3, Leaf1, vpc2 — show interfaces vxlan 1, show vxlan flood vtep, … (171 lines)" >}}
 ```text
 Leaf3(config-if-Vx1)#show interfaces vxlan 1
 Vxlan1 is up, line protocol is up (connected)
@@ -593,6 +596,7 @@ LPORT       : 20000
 RHOST:PORT  : 127.0.0.1:30000
 MTU         : 1500
 ```
+{{< /details >}}
 
 One detail in that capture is worth keeping honest: the first two `ping 192.168.20.100` attempts failed. They were taken while `Vxlan1` still pointed at the wrong source interface (`Loopback0` instead of `Loopback1`), so Leaf3 was flooding to 10.255.255.112 while the MLAG pair only decapsulated traffic addressed to their Loopback0 IPs. A VTEP only decapsulates VXLAN destined to its **configured source IP** — the symptom is exactly this: local MACs learn fine, `show vxlan address-table` stays empty on both ends. `show vxlan config-sanity detail` catches the mismatch immediately; after fixing the source interface, the same ping succeeds.
 
@@ -657,6 +661,7 @@ Border is the rendezvous point simply because its Loopback0 (10.255.255.1) is wh
 
 PIM itself comes up perfectly. Real output from Spine1:
 
+{{< details "SP1 — show ip pim neighbor, show ip pim rp (12 lines)" >}}
 ```text
 SP1#show ip pim neighbor
 PIM Neighbor Table for default VRF
@@ -671,9 +676,11 @@ Group: 224.0.0.0/4
   RP: 10.255.255.1
     Uptime: 0:18:43, Expires: never, Priority: 0, Override: False
 ```
+{{< /details >}}
 
 Every device sees all its PIM neighbors and agrees on the RP. On working hardware, the next step would be each VTEP joining its VNI groups, which shows up as `(*, 239.1.1.20)` entries rooted at the RP. Instead, on every single node:
 
+{{< details "Leaf1 — show ip mroute, show interfaces vxlan1 (21 lines)" >}}
 ```text
 Leaf1#show ip mroute
 PIM Sparse Mode Multicast Routing Table
@@ -697,6 +704,7 @@ Vxlan1 is down, line protocol is down (notconnect)
   Static VRF to VNI mapping is not configured
   MLAG Shared Router MAC is 0000.0000.0000
 ```
+{{< /details >}}
 
 The multicast routing table stays **empty on all six devices**. The leaves never originate a join for 239.1.1.10/20/30, `Vxlan1` reports `Replication/Flood Mode is not initialized yet` and stays down, and any traffic that needs BUM — starting with the very first ARP between `Switch` and VPC2 — dies at the ingress VTEP. (This capture was taken before the lab moved the VXLAN source to `Loopback1`, hence `Loopback0` in the output; the flood-mode and mroute behavior is identical either way.)
 
@@ -930,6 +938,7 @@ show vxlan config-sanity detail  ! VTEP-IP mismatch, MLAG inconsistency, VLAN-VN
 
 `show vxlan config-sanity detail` is the single most useful command in this whole post. It compares the local VTEP config against the MLAG peer and against what the remote VTEPs are advertising, and it catches the two mistakes that cost the most time in this lab: a VXLAN source interface that doesn't match what remote VTEPs are addressing, and the missing virtual VTEP IP covered in section 5.
 
+{{< details "Leaf1, Leaf3, SP2 — show bgp evpn summary, show bgp evpn route-type imet, … (297 lines)" >}}
 ```text
 
 Leaf1(config-router-bgp-af)#show bgp evpn summary  
@@ -1229,6 +1238,7 @@ Neighbor               AS Session State AFI/SAFI                AFI/SAFI State  
 10.255.255.22       65000 Established   L2VPN EVPN              Negotiated              9          9
 10.255.255.23       65000 Established   L2VPN EVPN              Negotiated              5          5
 ```
+{{< /details >}}
 
 What to look for, and what the lab confirmed:
 
@@ -1616,6 +1626,7 @@ show bgp evpn route-type mac-ip           ! Type-2 mac-ip routing
 ```
 Output:
 
+{{< details "vpc1, Linux2, vpc2 + — show ip, show bgp evpn route-type mac-ip, … (256 lines)" >}}
 ```text
 
 
@@ -1874,6 +1885,7 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
                                  -                     -       -       0       i
 ```
+{{< /details >}}
 
 In the routed path now, the packet leaves Leaf1 encapsulated in **VNI 50000** rather than VNI 1030, and Leaf3 routes it out of the IP-VRF into VLAN 30. Both directions use the same L3 VNI — hence "symmetric".
 
@@ -2340,6 +2352,7 @@ The captures below are from the actual bring-up, kept in full — this is the ba
 
 **R_VPC1** — address it, save, and test outward: gateway, same-VLAN across the DCI, routed across the DCI:
 
+{{< details "VPCS, r_vpc1_v10 — output (49 lines)" >}}
 ```text
 Press '?' to get help.
 
@@ -2391,9 +2404,11 @@ r_vpc1_v10> ping 192.168.20.100
 ^C
 r_vpc1_v10>
 ```
+{{< /details >}}
 
 A second round from the same R_VPC1 console, repeating the reachability set:
 
+{{< details "VPCS, r_vpc1_v10 — output (42 lines)" >}}
 ```text
 VPCS> ip 192.168.10.150/24 192.168.10.1
 Checking for duplicate address...
@@ -2438,6 +2453,7 @@ r_vpc1_v10> ping 192.168.30.30
 
 r_vpc1_v10>
 ```
+{{< /details >}}
 
 The TTLs tell the whole forwarding story on their own. `ttl=64` to 192.168.10.10: same VLAN, bridged end to end across the DCI — VPCS starts at 64 and no router touched it. `ttl=62` to .20.20 and .30.30: exactly two routed hops (ingress leaf SVI, egress leaf) — symmetric IRB through L3 VNI 50000, including into VLAN 30 which Leaf31 does not even carry. `ttl=253` to Linux2: an IOS-based host starting at 255, again two routed hops away. The first-packet timeouts are ARP glean and route-programming warm-up on first contact — normal, and gone on the retry.
 
@@ -2452,6 +2468,7 @@ Neighbor              AS Session State AFI/SAFI                AFI/SAFI State   
 10.255.31.11       65030 Established   L2VPN EVPN              Negotiated             21         21
 ```
 
+{{< details "Leaf31 — show bgp evpn route-type mac-ip (49 lines)" >}}
 ```text
 Leaf31(config)#show bgp evpn route-type mac-ip
 BGP routing table information for VRF default
@@ -2503,9 +2520,11 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
                                  10.255.255.112        -       100     0       65099 65000 i Or-ID: 10.255.31.1
 ```
+{{< /details >}}
 
 Read this table against walk 1 and every claim in it is visible. Every site A route carries AS path `65099 65000` — the DCI and site A ASNs, exactly as predicted — and a next hop of **10.255.255.112 or .113**, the real leaf VTEPs: three eBGP hops away and the next hop is still untouched, which is `next-hop-unchanged` doing its job on Border1, the DCI, and Border2's inbound iBGP default. The MLAG pair shows up as the same MAC advertised twice under RDs `...21:*` and `...22:*` with one shared next hop. And `Or-ID: 10.255.31.1` is SP31's reflection bookkeeping — the route entered site B at Border2 and was reflected, not re-originated.
 
+{{< details "Leaf31 — show bgp evpn route-type ip-prefix ipv4 (29 lines)" >}}
 ```text
 Leaf31(config)#show bgp evpn route-type ip-prefix ipv4
 BGP routing table information for VRF default
@@ -2537,9 +2556,11 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
                                  10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1
 ```
+{{< /details >}}
 
 The Type-5 table is why R_VPC1 can ping into VLAN 30: `192.168.30.0/24` arrives from three site A VTEPs even though Leaf31 has no VLAN 30 — routed reachability through the L3 VNI, no stretched bridge domain required.
 
+{{< details "Leaf31 — show bgp evpn route-type imet (31 lines)" >}}
 ```text
 Leaf31(config)#show bgp evpn route-type imet
 BGP routing table information for VRF default
@@ -2573,9 +2594,11 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.23:30 imet 10.255.255.113
                                  10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1
 ```
+{{< /details >}}
 
 The IMET view is the HER flood machinery: Leaf31's own Type-3s for VNIs 1010/1020, and the site A VTEPs advertising all three VNIs. The `:30` rows sit in the BGP table like everything else, but with no VNI 1030 configured on Leaf31 only 1010 and 1020 program flood-list entries — BUM for the two stretched VLANs crosses the DCI, VLAN 30's does not.
 
+{{< details "Leaf31 — show bgp evpn route-type mac-ip detail (113 lines)" >}}
 ```text
 Leaf31#show bgp evpn route-type mac-ip detail
 BGP routing table information for VRF default
@@ -2691,6 +2714,7 @@ BGP routing table entry for mac-ip 5000.0008.0001, Route Distinguisher: 10.255.2
       Extended Community: Route-Target-AS:1:20 TunnelEncap:tunnelTypeVxlan
       VNI: 1020 ESI: 0000:0000:0000:0000:0000
 ```
+{{< /details >}}
 
 The detail view is the architecture-post section 7.4 story on a live Arista switch: MAC-only Type-2s carry one RT (`1:10` — the bridge domain), MAC/IP Type-2s carry **two** (`1:10` and `1:50000` — bridge domain plus tenant VRF), alongside `TunnelEncap:tunnelTypeVxlan`, the router-MAC community, and both VNIs (`VNI: 1010 L3 VNI: 50000`). Those are the fields the migration must not disturb — and the RTs are the static ASN-free values that make Phase 1 a verification instead of a project. One contrast worth pinning here: in the *other* cross-site RT design — auto-derived `ASN:VNI` RTs plus `rewrite-evpn-rt-asn`, the NX-OS-idiomatic pattern — this RT would be rewritten at every eBGP hop and arrive looking locally derived; the [architecture post's section 12.3](/posts/vxlan-evpn-architecture/#123-multi-fabric-and-multi-site) traces that variant hop by hop. This lab's RTs contain no ASN and are configured identically in both sites, so they cross the DCI byte-identical while only the AS path grows — same architecture, the "explicit global RTs" option. For the record: explicit RD/RT is EOS's long-standing model and the only one this lab's 4.33.1.1F image supports, but newer EOS does add auto-derivation (automatic RDs in 4.33.2F for MPLS VPN and 4.34.1F for L2/L3 EVPN, with ASN:VNI-style auto RTs alongside) — a fabric built on those auto values inherits the same ASN coupling, and the same Phase 1 pinning duty, as NX-OS and FRR. EOS still has no `rewrite-evpn-rt-asn` equivalent, so across sites the explicit shared RT remains the Arista answer either way.
 
@@ -2706,6 +2730,7 @@ Neighbor              AS Session State AFI/SAFI                AFI/SAFI State   
 10.255.31.21       65030 Established   L2VPN EVPN              Negotiated              8          8
 ```
 
+{{< details "SP31 — show bgp evpn route-type mac-ip (49 lines)" >}}
 ```text
 SP31# show bgp evpn route-type mac-ip
 BGP routing table information for VRF default
@@ -2757,7 +2782,9 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.22:20 mac-ip 5000.0008.8014 192.168.20.100
                                  10.255.255.112        -       100     0       65099 65000 i
 ```
+{{< /details >}}
 
+{{< details "SP31 — show bgp evpn route-type ip-prefix ipv4 (29 lines)" >}}
 ```text
 SP31#show bgp evpn route-type ip-prefix ipv4
 BGP routing table information for VRF default
@@ -2789,7 +2816,9 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
                                  10.255.255.113        -       100     0       65099 65000 i
 ```
+{{< /details >}}
 
+{{< details "SP31 — show bgp evpn route-type imet (31 lines)" >}}
 ```text
 SP31#show bgp evpn route-type imet
 BGP routing table information for VRF default
@@ -2823,7 +2852,9 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.23:30 imet 10.255.255.113
                                  10.255.255.113        -       100     0       65099 65000 i
 ```
+{{< /details >}}
 
+{{< details "SP31 — show bgp evpn route-type mac-ip detail (101 lines)" >}}
 ```text
 SP31#show bgp evpn route-type mac-ip detail
 BGP routing table information for VRF default
@@ -2927,6 +2958,7 @@ BGP routing table entry for mac-ip 5000.0008.0001, Route Distinguisher: 10.255.2
       Extended Community: Route-Target-AS:1:20 TunnelEncap:tunnelTypeVxlan
       VNI: 1020 ESI: 0000:0000:0000:0000:0000
 ```
+{{< /details >}}
 
 Two SP31-only details: `(Received from a RR-client)` on every entry — the reflector serving its two clients — and the session counters up top: 33 NLRI from Border2 (the entire remote site plus re-advertisements) against 8 from Leaf31. Site B's whole view of site A funnels through one iBGP session.
 
@@ -2943,6 +2975,7 @@ Neighbor              AS Session State AFI/SAFI                AFI/SAFI State   
 10.255.99.1        65099 Established   L2VPN EVPN              Negotiated             29         29
 ```
 
+{{< details "Border2 — show bgp evpn route-type mac-ip (37 lines)" >}}
 ```text
 Border2#show bgp evpn route-type mac-ip
 BGP routing table information for VRF default
@@ -2982,7 +3015,9 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
                                  10.255.255.112        -       100     0       65099 65000 i
 ```
+{{< /details >}}
 
+{{< details "Border2 — show bgp evpn route-type ip-prefix ipv4 (29 lines)" >}}
 ```text
 Border2#show bgp evpn route-type ip-prefix ipv4
 BGP routing table information for VRF default
@@ -3014,7 +3049,9 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
                                  10.255.255.113        -       100     0       65099 65000 i
 ```
+{{< /details >}}
 
+{{< details "Border2 — show bgp evpn route-type imet (31 lines)" >}}
 ```text
 Border2#show bgp evpn route-type imet
 BGP routing table information for VRF default
@@ -3048,7 +3085,9 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.23:30 imet 10.255.255.113
                                  10.255.255.113        -       100     0       65099 65000 i
 ```
+{{< /details >}}
 
+{{< details "Border2 — show ip bgp (31 lines)" >}}
 ```text
 Border2#show ip bgp
 BGP routing table information for VRF default
@@ -3082,6 +3121,7 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      10.255.255.112/32      10.0.104.0            0       -          100     0       65099 65000 i
  * >      10.255.255.113/32      10.0.104.0            0       -          100     0       65099 65000 i
 ```
+{{< /details >}}
 
 The `show ip bgp` table is the inter-site underlay in its entirety: loopbacks and /31s, nothing else — no tenant prefixes, no host routes. Site A's VTEPs (10.255.255.112/.113) arrive with AS path `65099 65000` via the DCI, and site B's own loopbacks are the locally originated `i` entries that Border2 sends the other way. This is the "what actually crosses the DCI" list from 6.1, printed by the router itself.
 
@@ -3099,6 +3139,7 @@ Neighbor              AS Session State AFI/SAFI                AFI/SAFI State   
 10.255.255.1       65000 Established   L2VPN EVPN              Negotiated             29         29
 ```
 
+{{< details "DCI — show bgp evpn route-type mac-ip (37 lines)" >}}
 ```text
 DCI(config)#show bgp evpn route-type mac-ip
 BGP routing table information for VRF default
@@ -3138,7 +3179,9 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.22:20 mac-ip 5000.0008.0001
                                  10.255.255.112        -       100     0       65000 i
 ```
+{{< /details >}}
 
+{{< details "DCI — show bgp evpn route-type ip-prefix ipv4 (29 lines)" >}}
 ```text
 DCI(config)#show bgp evpn route-type ip-prefix ipv4
 BGP routing table information for VRF default
@@ -3170,7 +3213,9 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
                                  10.255.255.113        -       100     0       65000 i
 ```
+{{< /details >}}
 
+{{< details "DCI — show bgp evpn route-type imet (31 lines)" >}}
 ```text
 DCI(config)#show bgp evpn route-type imet
 BGP routing table information for VRF default
@@ -3204,6 +3249,7 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.23:30 imet 10.255.255.113
                                  10.255.255.113        -       100     0       65000 i
 ```
+{{< /details >}}
 
 On the DCI every path is exactly one AS deep — `65000 i` from site A, `65030 i` from site B — because this is where the two sites meet; the DCI prepends its own 65099 only on the way out, which is why the same routes show `65099 65000` once they land in site B. Next hops are already the leaf VTEPs here, confirming Border1 passed them through unchanged. And note what this device does *not* have: no `interface Vxlan1`, no VRFs, no import RTs — it holds and relays all 29+6 EVPN routes purely as a control-plane speaker, the EOS behavior that replaces the `retain route-target all` knob other platforms need.
 
@@ -3540,6 +3586,7 @@ show ip route 10.255.255.11/32     ! now B E [200/0] - BGP owns this leaf's unde
 
 **The interim state, captured live.** Everything below was taken at exactly this point of the first run — Leaf1 rebuilt in AS 65101, Leaf2 and Leaf3 still iBGP — which makes it walk 2 recorded from four vantage points: a site B host, the migrated leaf, the pivot spine, and an unmigrated leaf. First the host view, taken from R_VPC1 across the DCI while the fabric was mid-migration:
 
+{{< details "r_vpc1_v10 — output (29 lines)" >}}
 ```text
 r_vpc1_v10> ping 192.168.10.10
 
@@ -3571,11 +3618,13 @@ r_vpc1_v10> ping 192.168.30.30
 84 bytes from 192.168.30.30 icmp_seq=4 ttl=62 time=362.515 ms
 84 bytes from 192.168.30.30 icmp_seq=5 ttl=62 time=21.980 ms
 ```
+{{< /details >}}
 
 Two things in the host view deserve a note. First, nothing blinked: R_VPC1 still reaches VPC1 bridged (`ttl=64`) — and VPC1 sits *behind the leaf that was just rebuilt* — plus the routed targets (`ttl=62`) and Linux2 (`ttl=253`), all mid-migration. Second, the one failure is not a failure: `192.168.10.100` is VPC1's retired address from the section 1–5 era, so nothing answers its ARP in the current build — it is kept here precisely so nobody diffs an old capture and panics.
 
 Next, the migrated leaf itself:
 
+{{< details "Leaf1 — show bgp summary, show bgp evpn route-type mac-ip, … (169 lines)" >}}
 ```text
 Leaf1#show bgp summary 
 BGP summary information for VRF default
@@ -3747,6 +3796,7 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  *  ec    RD: 10.255.255.23:30 imet 10.255.255.113
                                  10.255.255.113        -       100     0       65000 i
 ```
+{{< /details >}}
 
 Leaf1's tables are the migrated world, and three details in them matter:
 
@@ -3756,6 +3806,7 @@ Leaf1's tables are the migrated world, and three details in them matter:
 
 The pivot spine next — this is where both control planes coexist:
 
+{{< details "SP1 — show ip route 10.255.255.112, show bgp summary, … (207 lines)" >}}
 ```text
 !!on spine check what's the next hop for the ANYCAST IP FOR LEAF1/2
 SP1(config-router-bgp)#show ip route 10.255.255.112
@@ -3965,11 +4016,13 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.23:30 imet 10.255.255.113
                                  10.255.255.113        -       100     0       i
 ```
+{{< /details >}}
 
 SP1's summary table is the whole interim design in six rows: `10.255.255.21` Established at AS **65101** — a dynamic listen-range peer with no neighbor statement behind it — sitting beside `.22`, `.23`, and `.1` still at AS 65000 under the RR function, plus the new underlay session to `10.0.11.1`. Two control planes, one switch, zero redistribution between them. In its EVPN table the origin of every path is readable at a glance: Leaf1's routes carry `65101`, the unmigrated leaves' carry an empty AS path with `Or-ID`/`C-LST` reflection bookkeeping (many arriving twice — the second copy via the spine–spine iBGP session), and site B's carry `65099 65030`. The spine advertises all of it to both populations — the interworking the runbook promised, visible. (The `% Invalid input` line stays in the capture as a small reminder: on EOS the `route-type` keyword is mandatory.)
 
 Last, the best witness of all — Leaf3, still iBGP, completely untouched:
 
+{{< details "Leaf3 — show bgp evpn route-type mac-ip 192.168.10.10 detail, show bgp evpn route-type ip-prefix ipv4, … (123 lines)" >}}
 ```text
 Leaf3#show bgp evpn route-type mac-ip 192.168.10.10 detail 
 BGP routing table information for VRF default
@@ -4095,9 +4148,11 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.23:30 imet 10.255.255.113
                                  -                     -       -       0       i
 ```
+{{< /details >}}
 
 Leaf3's detail view of VPC1's MAC/IP is the single best proof that the interim state works: the same host visible through both worlds at once — under RD `...21:10` with AS path `65101` (Leaf1's eBGP advertisement, ECMP'd through both spines) and under RD `...22:10` as an iBGP `Local` path with `Originator`/`Cluster list` (Leaf2's reflected copy) — same next hop 10.255.255.112, same RTs `1:10` + `1:50000`, same VNIs `1010`/`50000`. Whichever copy best-path picks, the frame lands on the same MLAG VTEP. One thing these outputs cannot show is what the spines' RIB is doing underneath the anycast VTEP — so it was checked directly, and the answer is *not* the Cisco-trained guess:
 
+{{< details "SP1, SP2 — show ip route 10.255.255.112 (42 lines)" >}}
 ```text
 SP1(config-router-bgp)#show ip route 10.255.255.112
 
@@ -4142,11 +4197,13 @@ Source Codes:
            via 10.0.22.1, Ethernet1
            via 10.0.21.1, Ethernet2
 ```
+{{< /details >}}
 
 Both spines still hold the **OSPF** route — `[110/20]`, ECMP through both members — even though Leaf1's eBGP underlay is up and advertising the same /32. Two facts explain it, and together they invert the Cisco-trained prediction. First, **EOS gives all BGP routes administrative distance 200 by default** (no 20/200 eBGP/iBGP split), so OSPF at 110 outranks the new eBGP route in the RIB, full stop. Second, at the moment of this capture Leaf1 had not yet run `no router ospf 1`, so Leaf1's own OSPF advertisement of .112 is still one of the two ECMP paths. The pair's real sequence is therefore: **two-way ECMP while the migrated leaf still speaks OSPF → all inbound through Leaf2, the *unmigrated* member, once Leaf1 drops OSPF** (Leaf2's 110 beats Leaf1's 200) **→ ECMP again only when Leaf2 finishes and the eBGP paths are all that remain.** For the dual-homed `Switch`/Linux2 that is the whole inbound story; its *outbound* never changes — the LACP hash keeps using both Po20 members, whichever leaf receives a frame forwards it, and bridging keeps no flow state, so the asymmetry is fine.
 
 And the far end — Leaf31 in site B, which nobody touched:
 
+{{< details "Leaf31 — show bgp summary, show bgp evpn route-type mac-ip 192.168.10.10 detail, … (100 lines)" >}}
 ```text
 Leaf31#show bgp summary 
 BGP summary information for VRF default
@@ -4249,6 +4306,7 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
                                  10.255.255.113        -       100     0       65099 65000 i Or-ID: 10.255.31.1 C-LST 
 Leaf31#
 ```
+{{< /details >}}
 
 From site B, the entire migration is visible as exactly one thing: an extra ASN. VPC1's MAC/IP arrives twice as always — the MLAG pair's two RDs — but Leaf1's copy now reads `65099 65000 65101` while Leaf2's still reads `65099 65000`. (65000 appears once, not twice, even though both the spines and Border1 sit in it — the spine-to-Border1 leg is still iBGP, so only Border1's eBGP hop toward the DCI prepends it.) The detail view makes "exactly one thing" literal: apart from the AS path, the two copies are attribute-for-attribute identical — `Route-Target-AS:1:10` and `1:50000`, `TunnelEncap:tunnelTypeVxlan`, the same `EvpnRouterMac`, `VNI: 1010 L3 VNI: 50000` — the static RTs crossing the DCI untouched mid-migration, exactly as Phase 1 intended. Same next hop 10.255.255.112 on both copies, the same three VTEPs in every IMET route, flood lists unchanged — and Leaf31 itself untouched, its `show bgp summary` still the same single iBGP session to SP31 it has had since bring-up. This is the section 6.1 contract holding at the far end of the design: the remote site can *read* that site A is renumbering, but cannot *feel* it. Run the 3.3 list, undrain, and take Leaf2 next.
 
@@ -4285,6 +4343,7 @@ ping 192.168.10.150                ! from VPC1: across the DCI to site B
 
 First, Leaf2's own table (note `local AS number 65102` in the header):
 
+{{< details "Leaf2 — show bgp evpn route-type imet, show bgp evpn route-type ip-prefix ipv4 (90 lines)" >}}
 ```text
 Leaf2#show bgp evpn route-type imet 
 BGP routing table information for VRF default
@@ -4377,11 +4436,13 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  *  ec    RD: 10.255.255.23:50000 ip-prefix 192.168.30.0/24
                                  10.255.255.113        -       100     0       65000 i
 ```
+{{< /details >}}
 
 With per-member ASNs there is **no AS-path rejection between the members**: Leaf1's routes — RD `...21:*`, path `65000 65101` — are accepted (65102 is nowhere in that path) and sit in the table **flag-less**, invalidated only by the next-hop-is-local rule. The end state looks like the shared-ASN design, but for a weaker reason, and the useless copies stay in the table to be re-evaluated on every churn instead of being dropped at the door.
 
 Second, the spine's view of the pair:
 
+{{< details "SP1 — show bgp evpn route-type mac-ip, show bgp evpn route-type imet, … (160 lines)" >}}
 ```text
 SP1(config-router-bgp)#show bgp evpn route-type mac-ip 
 BGP routing table information for VRF default
@@ -4544,11 +4605,13 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
                                  10.255.255.113        -       100     0       i Or-ID: 10.255.255.23 C-LST: 10.255.255.12 
 SP1(config-router-bgp)#
 ```
+{{< /details >}}
 
 The anycast VTEP now stands behind **two different AS paths** — `65101 i` on Leaf1's copies, `65102 i` on Leaf2's. Everything is valid, but ECMP toward 10.255.255.112 is now hostage to `bestpath as-path multipath-relax`: the spines have it from Phase 2, so the split works *here* — but every future eBGP speaker that should load-balance toward the pair has to remember the same knob forever. With a shared ASN the two paths are identical and ECMP needs no favors.
 
 Third, the remote-site view — captured twice a few minutes apart, which accidentally produced a before/after of Leaf2's cutover:
 
+{{< details "Leaf31 — show bgp evpn route-type mac-ip 192.168.10.10 detail, show bgp evpn route-type mac-ip 192.168.20.100 detail (58 lines)" >}}
 ```text
 Leaf31#show bgp evpn route-type mac-ip 192.168.10.10 detail 
 BGP routing table information for VRF default
@@ -4609,6 +4672,7 @@ BGP routing table entry for mac-ip 5000.0008.8014 192.168.20.100, Route Distingu
       VNI: 1020 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
 Leaf31#
 ```
+{{< /details >}}
 
 In the first run the `...22:10` copy still reads `65099 65000` (Leaf2 mid-window, still iBGP); in the second, `65099 65000 65102`. Leaf31 now sees one host, one VTEP, one MLAG pair — behind **two ASNs**. Nothing breaks, but every AS-path analysis from here on treats the pair as two devices, and the plan has quietly burned 65102, the number reserved for Leaf3.
 
@@ -4616,6 +4680,7 @@ That is the case for the shared pair ASN, stated by the fabric itself: the same 
 
 **The pair, corrected — Leaf2 retaken at 65101.** Same commands as the detour, and every difference the shared ASN promised shows up on cue. Leaf2's own view first:
 
+{{< details "Leaf2 — show bgp summary, show bgp evpn route-type mac-ip, … (123 lines)" >}}
 ```text
 Leaf2#show bgp summary 
 BGP summary information for VRF default
@@ -4741,11 +4806,13 @@ BGP routing table entry for mac-ip 0050.7966.6810 192.168.10.150, Route Distingu
       VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
 Leaf2#
 ```
+{{< /details >}}
 
 Three proofs in Leaf2's tables. The summary says `local AS number 65101`, and — the quiet one — **EVPN NLRI accepted is down to 9 per spine**: Leaf1's advertisements are no longer among them. That is why the route-type views contain **no `RD ...21:*` entries at all**: with both members in 65101, Leaf1's routes arrive carrying `65000 65101`, eBGP finds the receiver's own AS in the path, and drops them at the door — compare the detour, where the same routes lingered flag-less on next-hop grounds. And the R_VPC1 detail now reads `valid, external`: site B reachable over two clean eBGP ECMP paths, one per spine, RTs and VNIs untouched as always.
 
 The spines' session tables:
 
+{{< details "SP1, SP2 — show bgp evpn summary, show bgp summary (34 lines)" >}}
 ```text
 SP1(config-router-bgp)# show bgp evpn summary
 BGP summary information for VRF default
@@ -4782,11 +4849,13 @@ Neighbor               AS Session State AFI/SAFI                AFI/SAFI State  
 10.255.255.22       65101 Established   L2VPN EVPN              Negotiated              8          8
 10.255.255.23       65000 Established   L2VPN EVPN              Negotiated              5          5
 ```
+{{< /details >}}
 
 The pair is coherent again from the spines' seats: `.21` and `.22` both Established at **65101** with symmetric `PfxRcd 8/8`, the underlay /31 pairs at 65101 beneath them — and note the `m - Under maintenance` status code in the summary header, EOS's reminder of which peers are quiesced (none, here).
 
 Then the capture that earns its place in the runbook:
 
+{{< details "SP1, SP2 — show ip route 10.255.255.112 (41 lines)" >}}
 ```text
 SP1(config-router-bgp)# show ip route 10.255.255.112
 
@@ -4830,11 +4899,13 @@ Source Codes:
            via 10.0.22.1, Ethernet1
            via 10.0.21.1, Ethernet2
 ```
+{{< /details >}}
 
 **Both spines still route 10.255.255.112 via OSPF — `[110/20]`, ECMP through both members — after both members migrated.** Nothing is wrong; this is EOS's BGP distance of 200 again. Neither leaf has run `no router ospf 1` yet, so the eBGP copies stay benched and the RIB never budged through either window. Which reveals a sequencing option walk 2 did not promise: **rebuild both MLAG members' BGP first, then remove OSPF from both — and the single-member funnel never happens at all.** The RIB steps from two-way OSPF ECMP straight to two-way eBGP ECMP. The price is a longer ships-in-the-night period per pair; the prize is skipping the asymmetric window entirely. (On NX-OS this trick does not exist — eBGP at distance 20 seizes the RIB the moment the first member's session opens.) The step still owed on both leaves is `no router ospf 1`, after which this same command should show two `B E [200/0]` paths.
 
 SP1's EVPN view of the corrected pair:
 
+{{< details "SP1 — show bgp summary, show bgp evpn route-type mac-ip, … (171 lines)" >}}
 ```text
 SP1(config-router-bgp)#show bgp summary 
 BGP summary information for VRF default
@@ -5008,11 +5079,13 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >      RD: 10.255.255.23:30 imet 10.255.255.113
                                  10.255.255.113        -       100     0       i
 ```
+{{< /details >}}
 
 This closes the case the detour opened: every pair route — both RDs — now carries the identical path `65101 i`, so ECMP toward the pair no longer depends on `multipath-relax`, and the AS path maps one-to-one onto the logical device again.
 
 And the verdict from site B:
 
+{{< details "Leaf31 — show bgp summary, show bgp evpn route-type mac-ip, … (124 lines)" >}}
 ```text
 Leaf31#show bgp summary 
 BGP summary information for VRF default
@@ -5139,6 +5212,7 @@ BGP routing table entry for mac-ip 0050.7966.6802 192.168.10.10, Route Distingui
       VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
 Leaf31#
 ```
+{{< /details >}}
 
 Both copies of VPC1 are back to `65099 65000 65101` — one host, one VTEP, one pair, **one ASN** — and the detail view is attribute-identical on both RDs, down to the router MAC. Put this next to the same command in the detour and the whole argument for the shared pair ASN is two captures long.
 
@@ -5146,6 +5220,7 @@ Both copies of VPC1 are back to `65099 65000 65101` — one host, one VTEP, one 
 
 **Leaf3, retaken with its own RDs.** The four `rd` statements corrected — the `(config-router-bgp-vrf-TENANT_A)#` prompt is the fix still warm — and the same commands re-run:
 
+{{< details "Leaf3 — show bgp summary, show bgp evpn route-type mac-ip, … (161 lines)" >}}
 ```text
 Leaf3(config-router-bgp-vrf-TENANT_A)#show bgp summary 
 BGP summary information for VRF default
@@ -5309,11 +5384,13 @@ BGP routing table entry for mac-ip 0050.7966.6810 192.168.10.150, Route Distingu
       VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
 Leaf3#end
 ```
+{{< /details >}}
 
 Leaf3's identity is its own again: every local route — MAC/IP, Type-5, IMET — sits under `RD 10.255.255.23:*` with next hop `-`. The pair arrives as distinct `Ec`/`ec` routes per NLRI (two RDs, two spines) carrying `65000 65101`, and site B as `65000 65099 65030`, flagged `external`. With that, **all three leaves are migrated**: the site A leaf tier is fully eBGP.
 
 The spine, where the collision had lived:
 
+{{< details "SP1 — show bgp summary, show bgp evpn route-type mac-ip, … (164 lines)" >}}
 ```text
 SP1(config-router-bgp)#show bgp summary 
 BGP summary information for VRF default
@@ -5480,11 +5557,13 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
                                  10.255.255.113        -       100     0       65102 i
 SP1(config-router-bgp)#
 ```
+{{< /details >}}
 
 SP1's Type-5 table is the un-merge, printed. `192.168.20.0/24` and `192.168.30.0/24` now exist as **separate routes per leaf** — `.21:50000` and `.22:50000` behind 10.255.255.112 with `65101 i`, `.23:50000` behind 10.255.255.113 with `65102 i` — where the reused RD had fused them into one NLRI with mixed next hops. The summary reads like the ASN plan itself: `.21`/`.22` at 65101, `.23` at 65102, three underlay sessions beneath. And the IMET view is the full flood matrix again — three VNIs, three site A identities, plus site B — every next hop a VTEP.
 
 And site B, where the collision had done its silent damage:
 
+{{< details "Leaf31 — show bgp evpn route-type mac-ip, show bgp evpn route-type ip-prefix ipv4, … (112 lines)" >}}
 ```text
 Leaf31#
 Leaf31#show bgp evpn route-type mac-ip 
@@ -5599,6 +5678,7 @@ BGP routing table entry for mac-ip 0050.7966.680b 192.168.30.30, Route Distingui
       Extended Community: Route-Target-AS:1:30 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:50:00:00:72:81
       VNI: 1030 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
 ```
+{{< /details >}}
 
 This is the restoration that matters most, because this was the invisible loss: **site B can see Leaf3 again.** The `.23:50000` prefixes for VLANs 20 and 30 are back in Leaf31's table behind `.113` with path `65099 65000 65102`, and the host details carry the full attribute set — both RTs, both VNIs, router MAC — under Leaf3's own RD. From across the DCI, site A's leaf tier now reads `65101`/`65102`: one device short of walk 3's final AS path. Border1 is next.
 
@@ -5680,6 +5760,7 @@ A fair question here, fresh from the 3.2 lesson: why not delete the old neighbor
 
 **Phase 4, captured.** The cutover applied — Border1 rebuilt as 65100, the spines retired and re-peered, the DCI updated in place. The spine's overlay view first:
 
+{{< details "SP1 — show bgp evpn route-type mac-ip, show bgp evpn route-type ip-prefix ipv4, … (154 lines)" >}}
 ```text
 SP1(config-router-bgp)#show bgp evpn route-type mac-ip 
 show bgp evpn route-type ip-prefix ipv4
@@ -5836,11 +5917,13 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
 
 SP1(config-router-bgp)#
 ```
+{{< /details >}}
 
 Site B's routes now carry `65100 65099 65030` — Border1's new ASN in the path, the inward half of walk 3. A quieter change rides along: these routes used to appear as `Ec`/`ec` pairs (two iBGP reflections), and now show an eBGP best with an iBGP shadow via Spine2 — external and internal paths do not ECMP together, so the pairing is gone. Site A's own routes sit untouched at `65101`/`65102`.
 
 The same spine's RIB:
 
+{{< details "SP1 — show ip route (68 lines)" >}}
 ```text
 SP1(config-router-bgp)#show ip route
 
@@ -5911,9 +5994,11 @@ Gateway of last resort is not set
  O        10.255.255.113/32 [110/20]
            via 10.0.13.1, Ethernet4
 ```
+{{< /details >}}
 
 Everything south of Border1 — the site B loopbacks, the DCI, Border1's own `10.255.255.1/32` — is now `B E [200/0]` via `10.0.101.1`: the OSPF externals that Border1's old `redistribute bgp` used to provide died with its OSPF process, and direct eBGP replaced them. Two details worth a pause: the leaf loopbacks are *still* OSPF — `no router ospf 1` on the leaves remains Phase 3's open item, so the AD-200 finale is still owed — and every site B route lists exactly **one** next hop, via Ethernet5. The next capture explains why:
 
+{{< details "Border1 — show bgp summary, show bgp evpn route-type mac-ip, … (151 lines)" >}}
 ```text
 Border1(config)#show bgp summary
 BGP summary information for VRF default
@@ -6067,11 +6152,13 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  *  ec    RD: 10.255.255.23:30 imet 10.255.255.113
                                  10.255.255.113        -       100     0       65000 65102 i
 ```
+{{< /details >}}
 
 Two proofs and one problem. The proofs: the DCI sessions — underlay and overlay — re-established at 65100 with nothing but the in-place `remote-as` change (the update-don't-delete argument, vindicated), and both spine overlay sessions Established through the listen range, 25 NLRI each, no neighbor statements behind them. The problem, in plain sight: **`10.0.102.0`, the Spine2 underlay session, is stuck in `Connect`.** A session that never leaves Connect means TCP itself is not completing, and the checklist runs in order: the far end's neighbor pair (the Phase 4 spine visit), then the transport underneath. In this lab the config checked out on both ends — the root cause was the *virtual lab itself*, an EVE-NG fault on that emulated wire, the kind of failure no `show bgp` output can explain. Which is a better lesson than a typo would have been: **Connect-state debugging starts below BGP** — prove the /31 actually forwards before touching neighbor statements, doubly so in emulated labs where the wire is software too. Until the link passes traffic, Border1's underlay is single-homed through Spine1 — the RIB above already showed it — and one link failure severs the sites. The 3.3 discipline applies to borders too: this row is exactly what verify-before-undrain exists to catch.
 
 The far end, and the finish line:
 
+{{< details "Leaf31 — show bgp evpn route-type mac-ip, show bgp evpn route-type ip-prefix ipv4, … (159 lines)" >}}
 ```text
 Leaf31#show bgp evpn route-type mac-ip 
 show bgp evpn route-type ip-prefix ipv4
@@ -6233,11 +6320,13 @@ BGP routing table entry for mac-ip 0050.7966.680b 192.168.30.30, Route Distingui
       VNI: 1030 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
 Leaf31#
 ```
+{{< /details >}}
 
 **And there it is.** Leaf31 — untouched, in another autonomous system, three eBGP domains away — now shows every site A host behind AS path **`65099 65100 65000 65101`** or **`…65102`**: route server, border tier, spine tier, originating leaf. Walk 3's predicted path, character for character, with the next hops still the same two VTEPs and the RTs still the same `1:*` values. The migration's externally visible change is complete, and it is exactly one attribute wide.
 
 And the mirror from inside site A:
 
+{{< details "Leaf3 — show bgp evpn route-type mac-ip, show bgp evpn route-type ip-prefix ipv4, … (166 lines)" >}}
 ```text
 Leaf3#show bgp evpn route-type mac-ip 
 show bgp evpn route-type ip-prefix ipv4
@@ -6406,6 +6495,7 @@ BGP routing table entry for mac-ip 0050.7966.6810 192.168.10.150, Route Distingu
       Extended Community: Route-Target-AS:1:10 Route-Target-AS:1:50000 TunnelEncap:tunnelTypeVxlan EvpnRoute8
       VNI: 1010 L3 VNI: 50000 ESI: 0000:0000:0000:0000:0000
 ```
+{{< /details >}}
 
 Leaf3 reads site B behind `65000 65100 65099 65030` — the same four-tier chain in the opposite direction, ECMP'd `external` through both spines, attributes intact. Site A is now eBGP everywhere with its border carrying the site ASN. What remains: the Spine2 underlay fix above, the leaves' OSPF removal, and Phase 6's cleanup.
 
@@ -6421,6 +6511,7 @@ no router ospf 1
 
 The RIBs afterwards, on every site A device — kept in full, because this is the state the whole migration was aiming at:
 
+{{< details "Leaf1, Leaf2, Leaf3 + — show ip route (320 lines)" >}}
 ```text
 
 Leaf1(config)#show ip route
@@ -6743,6 +6834,7 @@ Gateway of last resort is not set
            via 10.0.101.0, Ethernet5
 
 ```
+{{< /details >}}
 
 Read the spines first, because this is the capture the section has been promising since walk 2: **`10.255.255.112/32` as `B E [200/0]` with two paths, one per MLAG member, on both spines.** The RIB stepped from two-way OSPF ECMP straight to two-way eBGP ECMP — because both members migrated before either dropped OSPF, the single-member funnel never existed on this fabric. And there is not one `O` route left on any site A device: the underlay is BGP end to end, one routing protocol, distance 200 everywhere.
 
@@ -6765,6 +6857,7 @@ no router ospf 1
 
 The end state, from both spines — session tables first, then the running configuration that remains:
 
+{{< details "SP1, SP2 — show bgp summary (30 lines)" >}}
 ```text
 SP1(config-router-bgp-af)#show bgp summary 
 BGP summary information for VRF default
@@ -6797,11 +6890,13 @@ Neighbor               AS Session State AFI/SAFI                AFI/SAFI State  
 10.255.255.23       65102 Established   L2VPN EVPN              Negotiated              5          5
 SP2(config-router-bgp-af)#
 ```
+{{< /details >}}
 
 SP1's table is the finished design in eight rows: four underlay sessions (65101 twice, 65102, 65100) and four overlay sessions, every one eBGP, every overlay peer a dynamic listen-range entry — no route reflection, no iBGP, nothing left of AS 65000 except the spines' own membership. SP2's table tells two smaller truths. `10.0.102.1 Active` is the familiar dead lab wire. But **`10.255.255.11 65000 Active` is a decommission miss**: the Phase 6 removal ran on SP1 — its config below is clean — while SP2 still carries the spine-spine neighbor. This is exactly how missed cleanup announces itself: not as a failure, but as a session parked in `Active` forever, its transport gone since Phase 5. Finish the job with `no neighbor 10.255.255.11` on SP2.
 
 The dead wire's final-state blast radius is also visible by absence: SP2 has **no session to Border1 at all** — no underlay (the wire), and no overlay either, because Border1 can no longer reach `10.255.255.12`: the only path that loopback had left was the broken link, and leaf-relayed copies arrive carrying `65000` and die to loop prevention. Until the wire heals, every inter-site route and packet rides SP1 alone; when it heals, both sessions are already configured on both ends, and the symmetry returns by itself.
 
+{{< details "SP1, SP2 — show run | b r b (67 lines)" >}}
 ```text
 SP1(config-router-bgp-af)#show run | b r b
 router bgp 65000
@@ -6871,6 +6966,7 @@ router bgp 65000
       network 10.255.255.12/32
 !
 ```
+{{< /details >}}
 
 The configuration that remains is the point: it is the Phase 2 scaffold minus the scaffolding — the listen range, the two peer groups, `next-hop-unchanged`, the per-neighbor underlay entries, one `network` statement, and nothing else. One line from the published Phase 2 block is absent in the lab's running config — `bgp bestpath as-path multipath-relax` — and nothing missed it, because after the corrections every ECMP set in site A carries identical AS paths (the pair shares 65101). Keep it anyway: it costs nothing, and it is what protects any future design where equal-cost paths cross different ASNs.
 
@@ -7045,6 +7141,7 @@ Close the wave with the invariants: `show bgp evpn summary` identical to the pre
 
 Wave 1 ran live on this fabric. Leaf1's side, end to end — the interface neighbors going in, and the overlap forming in real time:
 
+{{< details "Leaf1 — show bgp summary (25 lines)" >}}
 ```text
 Leaf1(config-router-bgp-af)#exit
 Leaf1(config-router-bgp)#neighbor interface Ethernet1 peer-group UNDERLAY-LL remote-as 65000
@@ -7072,9 +7169,11 @@ Neighbor                             AS Session State AFI/SAFI                AF
 fe80::5200:ff:fe03:3766%Et1       65000 Established   IPv4 Unicast            Negotiated              5          5
 fe80::5200:ff:fe15:f4e8%Et2       65000 Established   IPv4 Unicast            Negotiated              5          5
 ```
+{{< /details >}}
 
 The first summary catches the link-local sessions still in `Connect` — the `Configured` AFI/SAFI state means the neighbor statement exists but neighbor discovery hasn't yet handed BGP a peer address — and one refresh later both are `Established` at five NLRI each, **alongside** the untouched /31 pair. Four underlay sessions on two wires: make-before-break in its most literal form. The full neighbor detail, taken mid-overlap:
 
+{{< details "Leaf1 — show ip bgp nei (499 lines)" >}}
 ```text
 Leaf1(config-router-bgp)#show ip bgp nei
 BGP neighbor is 10.0.11.0, remote AS 65000, external link
@@ -7576,11 +7675,13 @@ TCP Socket Information:
     TCP Throughput: 8.88 Mbps
     Advertised Recv Window (rcv_space): 14480
 ```
+{{< /details >}}
 
 Three things in there are worth the scroll. The numbered sessions still announce `member of peer-group UNDERLAY` — the old world, alive and captured minutes before its retirement. `AS path loop detection: 1` on each underlay session and `4` on each overlay session — section 6's MLAG same-AS rejection, no longer a migration anecdote but a steady-state counter, quietly incrementing on every UPDATE that carries 65101 back to Leaf1. And on the EVPN sessions, `TTL is 3` with next-hop-self `10.255.255.112` — the overlay's fingerprints, byte-identical to the section 6 end state, exactly as the scope table promised.
 
 Then the pre-retirement route check — and a correction the lab made to this MOP's own draft:
 
+{{< details "Leaf1 — show ip route 10.255.255.11/32, show ip route 10.255.255.11, … (84 lines)" >}}
 ```text
 Leaf1(config-router-bgp)#show ip route 10.255.255.11/32 
 
@@ -7667,11 +7768,13 @@ Source Codes:
 
 Leaf1(config-if-Et1-2)#
 ```
+{{< /details >}}
 
 `B E 10.255.255.11/32 [200/0] via 10.0.11.0` — still the numbered next hop, and still that Arista `[200/0]`. During the overlap the RIB does **not** double: the link-local session offers an otherwise-equal eBGP path, and EOS keeps the oldest one — the numbered session's — as best. The "doubled paths" this MOP's verification step originally predicted turns out to be a session-table fact, not a RIB fact (the comment above has been corrected accordingly); the RIB flip is the retirement's job. And so it lands: the numbered neighbors go down as `Cease/peer de-configured <Hard Reset>` — a dismantling, not a failure — `no ip address` strips both uplinks in one range command (typos preserved: `int et-2` is not a valid range, `no ip` on its own is not a command), and the closing lookup is the state this whole section exists to produce: **an IPv4 route whose next hop is `fe80::5200:ff:fe03:3766` on Ethernet1**.
 
 The spine side of the same wave:
 
+{{< details "SP1, SP2 — show bgp summary, show lldp nei (78 lines)" >}}
 ```text
 SP1(config-router-bgp)#show bgp summary 
 BGP summary information for VRF default
@@ -7752,6 +7855,7 @@ Neighbor                             AS Session State AFI/SAFI                AF
 fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
 SP2(config-router-bgp)#
 ```
+{{< /details >}}
 
 Three notes from up here. The ordering shows in the summaries: SP1's first snapshot has both `10.0.11.1` and `fe80::...%Et1` Established — the overlap seen from above — and its second has the numbered session in `Connect`, because Leaf1 retired its side first and a half-deconfigured session is indistinguishable from a broken one. That is why the MOP retires both ends inside the same step. Second, `show lldp nei` right before `no ip address`: the question the /31 table used to answer — *which wire is Et1?* — now gets answered by LLDP and interface names instead of IPAM, which is the quiet operational shift an unnumbered fabric commits you to. Third, two artifacts of the reboot that preceded this test: SP2's `10.0.102.1` session to Border1 is **Established** — the wire that was dead through Phases 4–6 came back with the host, closing that saga — while the spines' EVPN sessions to Border1 (`10.255.255.1`) sit Established at **0 NLRI**, meaning site B's routes are not arriving yet. Most plausibly the second site is still converging after the reboot; but Established-and-empty is also exactly what a broken import looks like, so it stays on the checklist for a re-check before this wave's soak is called clean.
 
@@ -7759,6 +7863,7 @@ Three notes from up here. The ordering shows in the summaries: SP1's first snaps
 
 Wave 2 — the MLAG pair's second member — ran next, and this time the captures cover both ends of every wire. Leaf2 first:
 
+{{< details "Leaf2 — show bgp summary, show lldp nei, … (263 lines)" >}}
 ```text
 Leaf2(config-if-Et1-2)# router bgp 65101
 Leaf2(config-router-bgp)#   neighbor UNDERLAY-LL peer group
@@ -8024,6 +8129,7 @@ fe80::5200:ff:fe03:3766%Et2       65000 Established   IPv4 Unicast            Ne
 fe80::5200:ff:fe15:f4e8%Et1       65000 Established   IPv4 Unicast            Negotiated              5          5
 Leaf2(config-if-Et1-2)#
 ```
+{{< /details >}}
 
 The staging shows its own harmlessness: with the `UNDERLAY-LL` peer group in place but no interface neighbors yet, `show bgp summary` still lists exactly the four old sessions — configuration without effect, which is what a make-before-break step should look like until the moment you arm it. Then `show lldp nei` as pre-flight, and it earns its place: Leaf2's wires are *crossed* relative to Leaf1 — Et1 lands on SP2 and Et2 on SP1 — precisely the kind of per-device detail the interface-neighbor commands depend on and the /31 table used to encode. The two `show run | b r b` snapshots bracket the change and double as rollback records, and the second one holds a small EOS surprise: the two separate `neighbor interface Ethernet1` / `Ethernet2` commands come back folded into one line, `neighbor interface Et1-2 peer-group UNDERLAY-LL remote-as 65000` — the config model treats consecutive interface neighbors as a range.
 
@@ -8031,6 +8137,7 @@ Then the notifications, and the ordering lesson runs in reverse this time: Leaf2
 
 The spine captures for this wave rewind further than wave 1's did — each opens with that spine's wave-1 half, frames the earlier paste didn't include. SP2:
 
+{{< details "SP2 — show bgp summary, show run | b r b, … (291 lines)" >}}
 ```text
 Copy completed successfully.
 SP2(config-if-Et1-4)#router bgp 65000
@@ -8324,11 +8431,13 @@ Et4        up       1500   fe80::5200:ff:fe15:f4e8/64   up          link local
 
 SP2(config-if-Et1)#
 ```
+{{< /details >}}
 
 SP2's opening is its side of wave 1: `UNDERLAY-LL` staged, `neighbor interface Ethernet2` armed toward Leaf1, and Leaf1's Cease arriving at `11:12:59` — the receiving end of the very log line Leaf1's wave-1 capture shows being sent at `11:12:58`, the two ends of one wire logging the same event a second apart. Then the familiar sequence: the `Connect` ghost, the retirement, the release. Its wave-2 half opens with a small CLI-mode lesson — `neighbor interface ...` pasted while still in `config-if-Et2` gets `% Invalid input`; the command only exists under `router bgp` — and one line in its running config is notable for being *absent*: the stale `neighbor 10.255.255.11` that Phase 6 left behind is gone. That leftover is now off the books.
 
 And SP1, whose capture likewise replays its wave-1 half — the pre-change summary with no fe80 entries at all, the pre-change running config, the received side of Leaf1's `11:12:53` Cease — before its wave-2 half:
 
+{{< details "SP1 — show bgp summary, show run | b r b, … (313 lines)" >}}
 ```text
 Copy completed successfully.
 SP1(config-router-bgp-af)#show bgp summary 
@@ -8644,11 +8753,13 @@ Ethernet5       10.0.101.0/31        up         up              1500
 Loopback0       10.255.255.11/32     up         up             65535           
 Management1     unassigned           up         up              1500
 ```
+{{< /details >}}
 
 The bookkeeping at the bottom is the halfway mark made visible: on both spines `show ip int bri` is half-unnumbered — the Leaf1 and Leaf2 ports `unassigned`, the Leaf3 and Border1 /31s still in place, waves 3 and 4's work sitting right there as addressing. SP1's running config shows the same `Et1-2` range folding as Leaf2's, and each spine, like each leaf, presents one link-local address on all its ports. The invariants held through both waves: the EVPN sessions never moved, and their NLRI counts — 5/5 on the leaves, 6/6/5 across the spines' view of site A — are byte-identical from the first capture to the last. One watch item survives: Border1's EVPN sessions (`10.255.255.1`) still show **0 NLRI** at `11:21`, nine minutes after wave 1 first flagged it — "still converging after the reboot" is wearing thin as an explanation, and site B earns its investigation before this MOP's soak is called clean.
 
 Wave 3 — Leaf3, the single-homed leaf, `remote-as 65102` — and this wave earned the section its best mistake. The captures arrived by device, not by time; the timestamps will re-order them for us. SP2 first:
 
+{{< details "SP2 — show lldp nei, show bgp summary, … (105 lines)" >}}
 ```text
 SP2(config-if-Et1)#
 SP2(config-if-Et1)#show lldp nei
@@ -8756,11 +8867,13 @@ fe80::5200:ff:fe72:8b31%Et3       65102 Established   IPv4 Unicast            Ne
 fe80::5200:ff:fed5:5dc0%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
 fe80::5200:ff:fed7:ee0b%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
 ```
+{{< /details >}}
 
 SP2's run is the wave script working as written: LLDP confirms its Leaf3 wire is Et3, the arm lands, and the first summary catches the LL session freshly Established at **0 NLRI** — the moment after the OPEN, before the first UPDATE batch — alongside the still-live numbered `10.0.23.1`. The running config now reads as a roster, `Et1-2` at 65101 and `Et3` at 65102, the per-interface `remote-as` carrying what the /31 table used to. Retire at `12:13:37`, release, done. One chronology note: Leaf3 had already armed its own interface neighbors by this point — its received Ceases match the spines' sent ones to the second — which is why SP2's LL session comes up Established immediately rather than sitting in `Connect`.
 
 Then SP1, and the detour:
 
+{{< details "SP1 — show lldp nei, show bgp summary, … (156 lines)" >}}
 ```text
 SP1(config-router-bgp)#show lldp nei
 Last table change time   : 1:54:25 ago
@@ -8919,11 +9032,13 @@ fe80::5200:ff:fe72:8b31%Et4       65102 Established   IPv4 Unicast            Ne
 fe80::5200:ff:fed5:5dc0%Et2       65101 Established   IPv4 Unicast            Negotiated              2          2
 fe80::5200:ff:fed7:ee0b%Et1       65101 Established   IPv4 Unicast            Negotiated              2          2
 ```
+{{< /details >}}
 
 `neighbor interface Ethernet3 peer-group UNDERLAY-LL remote-as 65102` — on the spine whose Leaf3 wire is **Et4**. SP1's own LLDP table, printed seconds earlier, lists Et1, Et2, Et4, Et5 and no Et3 at all. And look at the failure mode: nothing. No error, no `Connect` row, no log — an interface neighbor on a port with nobody behind it simply never discovers a peer, so it never appears in the summary. The two byte-identical `show bgp summary` outputs in a row are the operator noticing that nothing is happening. The fix is symmetric — `no neighbor interface Ethernet3 ...`, arm Et4, session up — but the lesson deserves stating: a numbered neighbor with a wrong address at least shows up as a visibly dead `Active`/`Connect` row you can stare at; a wrong-port interface neighbor **fails silently**. SP2 has Leaf3 on Et3, SP1 has it on Et4 — the crossed-port trap is exactly why the 7.1 table has a which-wire column and why LLDP runs before every arm step. That asymmetry is part of the price of giving up per-link addresses, and LLDP is the compensating control.
 
 Leaf3's own capture is the longest, because it starts further back: this is the first device in the wave list that needed the section 7.2 prerequisites applied live — and it shows the whole `show run` before and after:
 
+{{< details "Leaf3 — show bgp summary, show lldp nei, … (520 lines)" >}}
 ```text
 Leaf3#show bgp summary 
 BGP summary information for VRF default
@@ -9446,6 +9561,7 @@ Et4           SP1                      Ethernet4           120
 
 Leaf3(config-if-Et3-4)#
 ```
+{{< /details >}}
 
 The prerequisites go in exactly as 7.2 lists them — `ipv6 unicast-routing`, `ip routing ipv6 interfaces`, `ipv6 enable` on Et3-4 — and the full running config proves them in place. That same config shows something else worth a cleanup ticket: `ip ospf network point-to-point` and `ip ospf area 0.0.0.0` still sitting on Et3, Et4, and both loopbacks. Phase 5 removed the OSPF *process*; the orphaned interface statements stayed behind, inert but misleading to the next reader. Then the by-now-familiar wave: staging, LLDP, arm, the received Ceases (spines moved first again), `no neighbor UNDERLAY peer group` hygiene, the config folding to `neighbor interface Et3-4`, the `ent e3-4` typo, release, and one link-local address (`fe80::5200:ff:fe72:8b31`) on every port. No Vlan4094 in Leaf3's interface table and none needed — single-homed, its own VTEP at `10.255.255.113`, nothing MLAG to protect.
 
@@ -9453,6 +9569,7 @@ Two route-count observations in Leaf3's summaries reward the arithmetic. First, 
 
 Wave 4 — Border1, `remote-as 65100`, the wave with the sharpest scope line: the spine uplinks (Et4 to SP2, Et5 to SP1) convert, the DCI link (Et3) does not. It also produced the section's second detour, and where wave 3's was silent, this one is loud. SP2's frame first:
 
+{{< details "SP2 — show bgp summary, show run | b r b, … (171 lines)" >}}
 ```text
 SP2(config-if-Et3)#router bgp 65000
 SP2(config-router-bgp)#neighbor interface Ethernet4 peer-group UNDERLAY-LL remote-as 65100
@@ -9626,11 +9743,13 @@ Copy completed successfully.
 SP2(config-if-Et4)#
 SP2(config-if-Et4)#
 ```
+{{< /details >}}
 
 The log tells the story before the summaries do: for over three minutes SP2 receives `Cease/connection rejected` from `fe80::5200:ff:fe6b:2e70%Et4` — Border1's link-local — at 8, 10, 77-second intervals. SP2's own side is fully staged and blameless; the far end keeps slamming the door. (Hold that thought for Border1's capture, which explains it.) At 12:25-something the rejections stop, the summary shows the LL session Established at 2 NLRI, and the wave resumes its familiar shape: Border1 retires the numbered pair from its side first (`10.0.102.1` Cease received at 12:26:29, the `Connect` ghost appears), and then SP2 does something no earlier wave could: `no neighbor 10.0.102.1` **and** `no neighbor UNDERLAY-EBGP peer group` — with the last numbered neighbor gone, the entire numbered scaffold comes down. The closing `show ip int bri` is the end state this MOP promised: **every Ethernet on SP2 unassigned**, Loopback0 the only IPv4 address on the box.
 
 SP1, same storm, same ending:
 
+{{< details "SP1 — show lldp nei, show run | b r b, … (221 lines)" >}}
 ```text
 SP1(config-if-Et4)#
 SP1(config-if-Et4)#
@@ -9854,11 +9973,13 @@ Et5        up       1500   fe80::5200:ff:fe03:3766/64   up          link local
 SP1(config-if-Et5)#wr
 Copy completed successfully.
 ```
+{{< /details >}}
 
 Rejections from the same Border1 link-local on Et5 from 12:21:48 to 12:24:40, then Established, the received Cease at 12:26:22, the retirement — with a small CLI note, `no neighbor UNDERLAY-EBGP` alone is `% Incomplete command`; deleting a peer group takes the full phrase — and SP1 joins SP2 at the destination: four Ethernets, four `unassigned`, one loopback.
 
 Border1's capture is the explanation, the DCI proof, and the wave's best lesson in one:
 
+{{< details "Border1 — show run | b r b, show bgp summary, … (288 lines)" >}}
 ```text
 Border1(config)#
 Border1(config)#
@@ -10149,6 +10270,7 @@ Ethernet5       unassigned          up         up               1500
 Loopback0       10.255.255.1/32     up         up              65535           
 Management1     unassigned          up         up               1500
 ```
+{{< /details >}}
 
 The detour first. Border1 (its 7.2 prerequisites already in place — Et4 and Et5 hold link-locals from the start) arms `neighbor interface Ethernet4-5 peer-group UNDERLAY-LL remote-as 65000` — the range form, legal here because both uplinks face the same AS — **before staging the peer group**. EOS does not object; it silently auto-creates an empty `neighbor UNDERLAY-LL peer group`, visible in the next `show run`. And an interface neighbor bound to a peer group with no activated address family answers every incoming OPEN with `Cease/connection rejected`. Both spines, fully staged, knock every few seconds; Border1 rejects them for four minutes, with logs accumulating on both ends. The unblocking is visible in the sequence: the peer-group body goes in (`remote-as`, `send-community`), one more rejection lands at 12:25:26 — proof those alone are not enough — then `neighbor UNDERLAY-LL activate` plus the RFC 8950 next-hop line, and the very next summary shows both LL sessions Established at 6 NLRI. The lesson is the MOP's own step order, stated by counterexample: **stage the peer group completely, then arm**. And set the two detours side by side: a wrong port fails silently (wave 3), a half-staged peer group fails noisily (wave 4) — and make-before-break absorbed both, because the numbered sessions carried the fabric the whole time.
 
@@ -10263,6 +10385,7 @@ The four failures that cost the most time here, and the command that catches eac
 
 And the final state of the lab — `show vxlan config-sanity detail` on all three leaves with everything in this post applied, every check green, including the `Routing` row that failed back in section 5.3:
 
+{{< details "Leaf1, Leaf2, Leaf3 — show vxlan config-sanity detail (103 lines)" >}}
 ```text
 
 Leaf1#show vxlan config-sanity detail
@@ -10368,3 +10491,4 @@ MLAG peer is not connected
                                                   
 Leaf3#
 ```
+{{< /details >}}

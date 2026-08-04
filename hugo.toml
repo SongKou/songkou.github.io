@@ -6,6 +6,10 @@ title = 'Council of Elrond'
 #canonifyURLs = true
 theme = "m10c"
 
+[services]
+  [services.googleAnalytics]
+    ID = 'G-ZV6MFVSTPD'
+
 [params]
   author= "Song Kou"
   description = "ignorance more frequently begets confidence than does knowledge"

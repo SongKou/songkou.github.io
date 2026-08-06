@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="400" viewBox="0 0 1080 400" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="an" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1F3B5C"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="400" fill="#ffffff"/>
+  <text x="40" y="36" font-size="20" font-weight="bold" fill="#2C2C2A">AlltoAll &#8212; rank i sends its j-th chunk to rank j: a distributed transpose</text>
+
+  <!-- input columns: column = source rank color, rows = destination index -->
+  <g stroke="#8A8880" stroke-width="0.8">
+    <rect x="110" y="90" width="78" height="40" fill="#57A64A"/>
+    <rect x="110" y="134" width="78" height="40" fill="#57A64A" opacity="0.8"/>
+    <rect x="110" y="178" width="78" height="40" fill="#57A64A" opacity="0.6"/>
+    <rect x="110" y="222" width="78" height="40" fill="#57A64A" opacity="0.45"/>
+    <rect x="205" y="90" width="78" height="40" fill="#E05C7A"/>
+    <rect x="205" y="134" width="78" height="40" fill="#E05C7A" opacity="0.8"/>
+    <rect x="205" y="178" width="78" height="40" fill="#E05C7A" opacity="0.6"/>
+    <rect x="205" y="222" width="78" height="40" fill="#E05C7A" opacity="0.45"/>
+    <rect x="300" y="90" width="78" height="40" fill="#E67E22"/>
+    <rect x="300" y="134" width="78" height="40" fill="#E67E22" opacity="0.8"/>
+    <rect x="300" y="178" width="78" height="40" fill="#E67E22" opacity="0.6"/>
+    <rect x="300" y="222" width="78" height="40" fill="#E67E22" opacity="0.45"/>
+    <rect x="395" y="90" width="78" height="40" fill="#3A7BD5"/>
+    <rect x="395" y="134" width="78" height="40" fill="#3A7BD5" opacity="0.8"/>
+    <rect x="395" y="178" width="78" height="40" fill="#3A7BD5" opacity="0.6"/>
+    <rect x="395" y="222" width="78" height="40" fill="#3A7BD5" opacity="0.45"/>
+  </g>
+  <g font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">
+    <text x="149" y="115">A0</text><text x="149" y="159">A1</text><text x="149" y="203">A2</text><text x="149" y="247">A3</text>
+    <text x="244" y="115">B0</text><text x="244" y="159">B1</text><text x="244" y="203">B2</text><text x="244" y="247">B3</text>
+    <text x="339" y="115">C0</text><text x="339" y="159">C1</text><text x="339" y="203">C2</text><text x="339" y="247">C3</text>
+    <text x="434" y="115">D0</text><text x="434" y="159">D1</text><text x="434" y="203">D2</text><text x="434" y="247">D3</text>
+  </g>
+  <g font-size="11" fill="#5F5E5A" text-anchor="middle">
+    <text x="149" y="285">GPU0</text>
+    <text x="244" y="285">GPU1</text>
+    <text x="339" y="285">GPU2</text>
+    <text x="434" y="285">GPU3</text>
+  </g>
+
+  <line x1="505" y1="180" x2="588" y2="180" stroke="#1F3B5C" stroke-width="4" marker-end="url(#an)"/>
+  <text x="548" y="160" font-size="12" font-weight="bold" fill="#1F3B5C" text-anchor="middle">AlltoAll</text>
+
+  <!-- output columns: rank j collects the j-th chunk from every source (row = source rank) -->
+  <g stroke="#8A8880" stroke-width="0.8">
+    <rect x="620" y="90" width="78" height="40" fill="#57A64A"/>
+    <rect x="620" y="134" width="78" height="40" fill="#E05C7A"/>
+    <rect x="620" y="178" width="78" height="40" fill="#E67E22"/>
+    <rect x="620" y="222" width="78" height="40" fill="#3A7BD5"/>
+    <rect x="715" y="90" width="78" height="40" fill="#57A64A" opacity="0.8"/>
+    <rect x="715" y="134" width="78" height="40" fill="#E05C7A" opacity="0.8"/>
+    <rect x="715" y="178" width="78" height="40" fill="#E67E22" opacity="0.8"/>
+    <rect x="715" y="222" width="78" height="40" fill="#3A7BD5" opacity="0.8"/>
+    <rect x="810" y="90" width="78" height="40" fill="#57A64A" opacity="0.6"/>
+    <rect x="810" y="134" width="78" height="40" fill="#E05C7A" opacity="0.6"/>
+    <rect x="810" y="178" width="78" height="40" fill="#E67E22" opacity="0.6"/>
+    <rect x="810" y="222" width="78" height="40" fill="#3A7BD5" opacity="0.6"/>
+    <rect x="905" y="90" width="78" height="40" fill="#57A64A" opacity="0.45"/>
+    <rect x="905" y="134" width="78" height="40" fill="#E05C7A" opacity="0.45"/>
+    <rect x="905" y="178" width="78" height="40" fill="#E67E22" opacity="0.45"/>
+    <rect x="905" y="222" width="78" height="40" fill="#3A7BD5" opacity="0.45"/>
+  </g>
+  <g font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">
+    <text x="659" y="115">A0</text><text x="659" y="159">B0</text><text x="659" y="203">C0</text><text x="659" y="247">D0</text>
+    <text x="754" y="115">A1</text><text x="754" y="159">B1</text><text x="754" y="203">C1</text><text x="754" y="247">D1</text>
+    <text x="849" y="115">A2</text><text x="849" y="159">B2</text><text x="849" y="203">C2</text><text x="849" y="247">D2</text>
+    <text x="944" y="115">A3</text><text x="944" y="159">B3</text><text x="944" y="203">C3</text><text x="944" y="247">D3</text>
+  </g>
+  <g font-size="11" fill="#5F5E5A" text-anchor="middle">
+    <text x="659" y="285">GPU0</text>
+    <text x="754" y="285">GPU1</text>
+    <text x="849" y="285">GPU2</text>
+    <text x="944" y="285">GPU3</text>
+  </g>
+
+  <text x="40" y="330" font-size="12" fill="#5F5E5A">Columns become rows &#8212; the P&#215;P block matrix transposed. No shared result and no reduction: pure data rearrangement (MoE dispatch/combine).</text>
+  <text x="40" y="352" font-size="12" fill="#5F5E5A">Fixed-size API (not AlltoAllV), no in-place support: separate send/recv buffers, peak 2&#215;P&#215;N&#215;S per rank.</text>
+</svg>

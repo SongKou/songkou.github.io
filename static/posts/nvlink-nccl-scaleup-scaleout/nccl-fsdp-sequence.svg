@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="440" viewBox="0 0 900 440" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="900" height="440" fill="#ffffff"/>
+  <text x="40" y="36" font-size="20" font-weight="bold" fill="#2C2C2A">FSDP = the AllReduce identity split open in time</text>
+
+  <!-- lifelines -->
+  <g stroke="#C9C7BF" stroke-width="1.5" stroke-dasharray="5 4">
+    <line x1="150" y1="112" x2="150" y2="400"/>
+    <line x1="350" y1="112" x2="350" y2="400"/>
+    <line x1="550" y1="112" x2="550" y2="400"/>
+    <line x1="750" y1="112" x2="750" y2="400"/>
+  </g>
+  <g>
+    <rect x="105" y="78" width="90" height="34" rx="6" fill="#1F3B5C"/>
+    <rect x="305" y="78" width="90" height="34" rx="6" fill="#1F3B5C"/>
+    <rect x="505" y="78" width="90" height="34" rx="6" fill="#1F3B5C"/>
+    <rect x="705" y="78" width="90" height="34" rx="6" fill="#1F3B5C"/>
+  </g>
+  <g font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">
+    <text x="150" y="100">GPU0</text>
+    <text x="350" y="100">GPU1</text>
+    <text x="550" y="100">GPU2</text>
+    <text x="750" y="100">GPU3</text>
+  </g>
+
+  <!-- phase 1: AllGather -->
+  <rect x="90" y="140" width="720" height="64" rx="8" fill="#EAF3EA" stroke="#57A64A" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="450" y="166" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">AllGather parameter shards</text>
+  <text x="450" y="188" font-size="11" fill="#5F5E5A" text-anchor="middle">every GPU briefly holds the FULL weights of this layer</text>
+
+  <text x="450" y="240" font-size="12" font-style="italic" fill="#5F5E5A" text-anchor="middle">compute forward / backward for the layer, then release the gathered weights</text>
+
+  <!-- phase 2: ReduceScatter -->
+  <rect x="90" y="266" width="720" height="64" rx="8" fill="#FDEEF1" stroke="#E05C7A" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="450" y="292" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">ReduceScatter gradients</text>
+  <text x="450" y="314" font-size="11" fill="#5F5E5A" text-anchor="middle">each GPU keeps only the gradient shard it owns</text>
+
+  <text x="450" y="372" font-size="12" fill="#2C2C2A" text-anchor="middle" font-weight="bold">parameters and gradients stay sharded between the two halves</text>
+  <text x="450" y="394" font-size="12" fill="#5F5E5A" text-anchor="middle">AllReduce &#8801; ReduceScatter + AllGather &#8212; FSDP simply runs the two halves at different moments</text>
+
+  <text x="40" y="426" font-size="11" fill="#5F5E5A">Repeated per layer, forward and backward &#8212; medium-size messages at high call frequency, living or dying by communication/compute overlap.</text>
+</svg>

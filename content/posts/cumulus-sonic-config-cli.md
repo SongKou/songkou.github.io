@@ -7,6 +7,7 @@ tags = ['Cumulus Linux', 'NVUE', 'SONiC', 'Jinja2', 'Automation', 'asyncio', 'RE
 +++
 
 > **Note:** this post documents `cumulus_sonic_cli.py`, a standalone Python script I wrote to manage **Cumulus Linux 5.x (NVUE)** and **SONiC** switches from a single vendor-neutral YAML per device. The full source is at the bottom of the post.
+> **Note:** This is a demo script so it doesn't include classes. in production env, need to put functions in different classes, eg: populate interface list class, class to login device, class to combine yaml files, etc. and the yaml file also need to have a common yaml so common params can be shared by all devices. eg: interface MTU, VNI-VLAN/RT mapping, bgp password, TACACS/SNMP/SYSLOG/QOS, etc. 
 
 ## 1. What the tool does
 

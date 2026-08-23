@@ -74,9 +74,21 @@ The base VXLAN header is eight bytes. Its most important fields are:
 - UDP destination port **4789** is the IANA-assigned default. Early products used other ports, so the destination port can be configurable.
 - The UDP source port should be derived from inner-packet fields. This creates flow entropy for ECMP while keeping packets from one flow on a stable path. RFC 7348 recommends the dynamic/private range 49152-65535. [RFC 7348, Section 5](https://www.rfc-editor.org/rfc/rfc7348.html#section-5)
 
+![VXLAN header bit layout: 8-bit flags with the I bit, 24 reserved bits, 24-bit VNI, 8 reserved bits, and the 50-byte IPv4 encapsulation overhead](/posts/vxlan-evpn-architecture/vxlan-header-fields.svg)
+
+The figure's byte-by-byte example uses VNI 10100 (`0x002774`), so the eight header bytes on the wire are `08 00 00 00 00 27 74 00`. The first byte is worth reading closely, because it is the one value that never changes in ordinary VXLAN traffic:
+
+```
+bit:    0 1 2 3 4 5 6 7
+flag:   R R R R I R R R
+value:  0 0 0 0 1 0 0 0   = 0b00001000 = 0x08
+```
+
+The I flag occupies bit 4 (counting from 0 at the left), which carries the weight 2^3 = 8 within the byte. With every reserved bit sent as zero, a valid VXLAN header therefore always starts with `0x08`: I = 1, "the VNI field is valid". A receiving VTEP that sees anything else in this byte must treat the VNI as invalid and drop the packet. This is also why Wireshark displays the VXLAN flags as `0x0800`: it decodes the flags byte together with the first reserved byte as a single 16-bit field, and `08 00` is simply the I flag followed by eight zero reserved bits. Bytes 4 through 6 then carry the VNI most-significant byte first (`00 27 74` = 10100), and byte 7 is reserved.
+
 For an IPv4 underlay without optional headers, VXLAN adds 50 bytes before the outer FCS: 14 bytes outer Ethernet, 20 bytes IPv4, 8 bytes UDP, and 8 bytes VXLAN. An IPv6 underlay adds 70 bytes before optional extension headers. A fabric transporting a 1500-byte inner Ethernet frame therefore commonly uses a physical MTU of at least 1550 bytes for IPv4, with operational headroom often rounded higher.
 
-VTEPs must not fragment VXLAN packets. Intermediate IPv4 routers technically can fragment them, but a receiving VTEP may discard fragments. The reliable design is an end-to-end underlay MTU that accommodates the complete encapsulated frame and validation with both ordinary and DF-bit test traffic. [RFC 7348, Section 4](https://www.rfc-editor.org/rfc/rfc7348.html#section-4)
+> **VTEPs must not fragment VXLAN packets.** Intermediate IPv4 routers technically can fragment them, but a receiving VTEP may discard fragments. The reliable design is an end-to-end underlay MTU that accommodates the complete encapsulated frame and validation with both ordinary and DF-bit test traffic. [RFC 7348, Section 4](https://www.rfc-editor.org/rfc/rfc7348.html#section-4)
 
 ### 2.2 Virtual Tunnel End Point
 

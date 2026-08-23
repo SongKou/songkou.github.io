@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="860" viewBox="0 0 1280 860" font-family="Inter,Segoe UI,Arial,sans-serif">
+<rect width="1280" height="860" fill="#07111f"/>
+<defs><filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/></filter></defs>
+<text x="64" y="62" font-size="34" font-weight="750" fill="#e5eef9">The 8-byte VXLAN header (RFC 7348)</text>
+<text x="64" y="94" font-size="18" fill="#9fb0c5">Two 32-bit words: a flags byte with the I bit, a 24-bit VNI, and reserved bits sent as zero</text>
+
+<!-- ===== Bit-field view ===== -->
+<g font-size="13" fill="#6b7f96" text-anchor="middle">
+<text x="128" y="134">0</text><text x="380" y="134">7</text><text x="404" y="134">8</text>
+<text x="656" y="134">15</text><text x="680" y="134">16</text><text x="932" y="134">23</text>
+<text x="956" y="134">24</text><text x="1208" y="134">31</text>
+</g>
+<g stroke="#2a3c52" stroke-width="1">
+<line x1="116" y1="140" x2="1220" y2="140"/>
+<line x1="392" y1="136" x2="392" y2="144"/><line x1="668" y1="136" x2="668" y2="144"/><line x1="944" y1="136" x2="944" y2="144"/>
+</g>
+<g filter="url(#shadow)">
+<rect x="116" y="154" width="276" height="104" rx="10" fill="#101e31" stroke="#38bdf8" stroke-width="2"/>
+<rect x="392" y="154" width="828" height="104" rx="10" fill="#0d1828" stroke="#49627e" stroke-width="2"/>
+</g>
+<g font-size="20" font-weight="700" text-anchor="middle">
+<text x="133" y="197" fill="#9fb0c5">R</text><text x="168" y="197" fill="#9fb0c5">R</text>
+<text x="203" y="197" fill="#9fb0c5">R</text><text x="238" y="197" fill="#9fb0c5">R</text>
+<text x="273" y="197" fill="#fbbf24">I</text><text x="308" y="197" fill="#9fb0c5">R</text>
+<text x="343" y="197" fill="#9fb0c5">R</text><text x="378" y="197" fill="#9fb0c5">R</text>
+</g>
+<rect x="258" y="174" width="30" height="30" rx="5" fill="none" stroke="#fbbf24" stroke-width="2"/>
+<text x="254" y="234" text-anchor="middle" font-size="15" font-weight="600" fill="#38bdf8">Flags (8 bits)</text>
+<text x="254" y="250" text-anchor="middle" font-size="12" fill="#9fb0c5">I = 1 → VNI valid</text>
+<text x="806" y="203" text-anchor="middle" font-size="23" font-weight="700" fill="#e5eef9">Reserved (24 bits)</text>
+<text x="806" y="236" text-anchor="middle" font-size="14" fill="#9fb0c5">Transmitted as zero, ignored on receipt</text>
+
+<g filter="url(#shadow)">
+<rect x="116" y="272" width="828" height="104" rx="10" fill="#0f2a22" stroke="#34d399" stroke-width="2"/>
+<rect x="944" y="272" width="276" height="104" rx="10" fill="#0d1828" stroke="#49627e" stroke-width="2"/>
+</g>
+<text x="530" y="321" text-anchor="middle" font-size="23" font-weight="750" fill="#34d399">VXLAN Network Identifier — VNI (24 bits)</text>
+<text x="530" y="354" text-anchor="middle" font-size="14" fill="#9fb0c5">2^24 = 16,777,216 segments, before implementation reservations</text>
+<text x="1082" y="321" text-anchor="middle" font-size="21" font-weight="700" fill="#e5eef9">Reserved (8 bits)</text>
+<text x="1082" y="354" text-anchor="middle" font-size="14" fill="#9fb0c5">Sent as zero</text>
+<text x="104" y="212" text-anchor="end" font-size="13" fill="#6b7f96">word 0</text>
+<text x="104" y="330" text-anchor="end" font-size="13" fill="#6b7f96">word 1</text>
+
+<!-- ===== Byte-by-byte view ===== -->
+<text x="64" y="430" font-size="22" font-weight="700" fill="#e5eef9">Byte by byte — example: VNI 10100 = 0x002774</text>
+<g font-size="13" fill="#6b7f96" text-anchor="middle">
+<text x="185" y="456">Byte 0</text><text x="319" y="456">Byte 1</text><text x="453" y="456">Byte 2</text><text x="587" y="456">Byte 3</text>
+<text x="721" y="456">Byte 4</text><text x="855" y="456">Byte 5</text><text x="989" y="456">Byte 6</text><text x="1123" y="456">Byte 7</text>
+</g>
+<g filter="url(#shadow)">
+<rect x="120" y="464" width="130" height="96" rx="8" fill="#101e31" stroke="#38bdf8" stroke-width="2"/>
+<rect x="254" y="464" width="130" height="96" rx="8" fill="#0d1828" stroke="#49627e" stroke-width="2"/>
+<rect x="388" y="464" width="130" height="96" rx="8" fill="#0d1828" stroke="#49627e" stroke-width="2"/>
+<rect x="522" y="464" width="130" height="96" rx="8" fill="#0d1828" stroke="#49627e" stroke-width="2"/>
+<rect x="656" y="464" width="130" height="96" rx="8" fill="#0f2a22" stroke="#34d399" stroke-width="2"/>
+<rect x="790" y="464" width="130" height="96" rx="8" fill="#0f2a22" stroke="#34d399" stroke-width="2"/>
+<rect x="924" y="464" width="130" height="96" rx="8" fill="#0f2a22" stroke="#34d399" stroke-width="2"/>
+<rect x="1058" y="464" width="130" height="96" rx="8" fill="#0d1828" stroke="#49627e" stroke-width="2"/>
+</g>
+<g font-size="26" font-weight="750" text-anchor="middle" font-family="Consolas,Menlo,monospace">
+<text x="185" y="503" fill="#fbbf24">08</text><text x="319" y="503" fill="#9fb0c5">00</text>
+<text x="453" y="503" fill="#9fb0c5">00</text><text x="587" y="503" fill="#9fb0c5">00</text>
+<text x="721" y="503" fill="#34d399">00</text><text x="855" y="503" fill="#34d399">27</text>
+<text x="989" y="503" fill="#34d399">74</text><text x="1123" y="503" fill="#9fb0c5">00</text>
+</g>
+<g font-size="13" text-anchor="middle">
+<text x="185" y="528" fill="#38bdf8" font-weight="600">Flags</text><text x="185" y="546" fill="#9fb0c5" font-size="12">0b00001000</text>
+<text x="319" y="528" fill="#9fb0c5">Reserved</text><text x="453" y="528" fill="#9fb0c5">Reserved</text><text x="587" y="528" fill="#9fb0c5">Reserved</text>
+<text x="721" y="528" fill="#34d399" font-weight="600">VNI [23:16]</text>
+<text x="855" y="528" fill="#34d399" font-weight="600">VNI [15:8]</text>
+<text x="989" y="528" fill="#34d399" font-weight="600">VNI [7:0]</text>
+<text x="1123" y="528" fill="#9fb0c5">Reserved</text>
+<text x="319" y="546" fill="#6b7f96">bits 8–15</text><text x="453" y="546" fill="#6b7f96">bits 16–23</text><text x="587" y="546" fill="#6b7f96">bits 24–31</text>
+<text x="721" y="546" fill="#6b7f96">0x00</text><text x="855" y="546" fill="#6b7f96">0x27</text><text x="989" y="546" fill="#6b7f96">0x74</text>
+<text x="1123" y="546" fill="#6b7f96">bits 56–63</text>
+</g>
+<text x="64" y="590" font-size="14" fill="#9fb0c5">On the wire, right after the UDP header: 08 00 00 00 00 27 74 00 — this is what a packet capture decodes as VXLAN, VNI 10100.</text>
+
+<!-- ===== Encapsulation overhead ===== -->
+<text x="64" y="640" font-size="22" font-weight="700" fill="#e5eef9">Where it sits: 50 bytes of IPv4 overhead before the original frame</text>
+<g filter="url(#shadow)">
+<rect x="64"  y="660" width="196" height="76" rx="10" fill="#101e31" stroke="#49627e" stroke-width="2"/>
+<rect x="270" y="660" width="280" height="76" rx="10" fill="#101e31" stroke="#49627e" stroke-width="2"/>
+<rect x="560" y="660" width="160" height="76" rx="10" fill="#101e31" stroke="#38bdf8" stroke-width="2"/>
+<rect x="730" y="660" width="160" height="76" rx="10" fill="#0f2a22" stroke="#34d399" stroke-width="2.5"/>
+<rect x="900" y="660" width="316" height="76" rx="10" fill="#1a1530" stroke="#a78bfa" stroke-width="2"/>
+</g>
+<text x="162" y="691" text-anchor="middle" font-size="17" font-weight="650" fill="#e5eef9">Outer Ethernet</text>
+<text x="410" y="691" text-anchor="middle" font-size="17" font-weight="650" fill="#e5eef9">Outer IPv4</text>
+<text x="640" y="691" text-anchor="middle" font-size="17" font-weight="650" fill="#e5eef9">UDP</text>
+<text x="810" y="691" text-anchor="middle" font-size="17" font-weight="650" fill="#34d399">VXLAN</text>
+<text x="1058" y="691" text-anchor="middle" font-size="17" font-weight="650" fill="#e5eef9">Original Ethernet frame</text>
+<text x="162" y="717" text-anchor="middle" font-size="14" fill="#9fb0c5">14 bytes</text>
+<text x="410" y="717" text-anchor="middle" font-size="14" fill="#9fb0c5">20 bytes · src/dst = VTEPs</text>
+<text x="640" y="717" text-anchor="middle" font-size="14" fill="#9fb0c5">8 bytes · dst 4789</text>
+<text x="810" y="717" text-anchor="middle" font-size="14" fill="#9fb0c5">8 bytes · VNI</text>
+<text x="1058" y="717" text-anchor="middle" font-size="14" fill="#9fb0c5">up to 1500 bytes (+ inner payload)</text>
+<g stroke="#fbbf24" stroke-width="2" fill="none">
+<path d="M64 756 v12 h826 v-12"/><path d="M477 768 v10"/>
+</g>
+<text x="477" y="800" text-anchor="middle" font-size="16" font-weight="650" fill="#fbbf24">14 + 20 + 8 + 8 = 50 bytes (IPv6 underlay: 70 bytes)</text>
+<text x="64" y="838" font-size="15" fill="#9fb0c5">Inner 1500-byte frame + 50 = 1550 → underlay MTU must be at least 1550 bytes for IPv4; VTEPs must not fragment.</text>
+</svg>

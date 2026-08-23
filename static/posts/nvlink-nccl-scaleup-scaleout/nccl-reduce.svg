@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="800" viewBox="0 0 1080 800" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="an" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1F3B5C"/>
+    </marker>
+    <linearGradient id="sumgrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#57A64A"/>
+      <stop offset="0.33" stop-color="#E05C7A"/>
+      <stop offset="0.66" stop-color="#E67E22"/>
+      <stop offset="1" stop-color="#3A7BD5"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="800" fill="#ffffff"/>
+  <text x="40" y="36" font-size="20" font-weight="bold" fill="#2C2C2A">Reduce &#8212; every rank contributes, only the root receives the reduced result</text>
+
+  <!-- ===== numeric view ===== -->
+  <!-- input ranks -->
+  <g stroke="#4A4A46" stroke-width="2" fill="#ffffff">
+    <circle cx="180" cy="120" r="24"/>
+    <circle cx="420" cy="120" r="24"/>
+    <circle cx="660" cy="120" r="24"/>
+    <circle cx="900" cy="120" r="24"/>
+  </g>
+  <g font-size="16" font-weight="bold" fill="#2C2C2A" text-anchor="middle">
+    <text x="180" y="126">0</text>
+    <text x="420" y="126">1</text>
+    <text x="660" y="126">2</text>
+    <text x="900" y="126">3</text>
+  </g>
+  <g fill="#F5F5F3" stroke="#8A8880" stroke-width="1.5">
+    <rect x="220" y="104" width="36" height="32"/><rect x="258" y="104" width="36" height="32"/>
+    <rect x="460" y="104" width="36" height="32"/><rect x="498" y="104" width="36" height="32"/>
+    <rect x="700" y="104" width="36" height="32"/><rect x="738" y="104" width="36" height="32"/>
+    <rect x="940" y="104" width="36" height="32"/><rect x="978" y="104" width="36" height="32"/>
+  </g>
+  <g font-size="15" font-weight="bold" fill="#2C2C2A" text-anchor="middle">
+    <text x="238" y="125">5</text><text x="276" y="125">1</text>
+    <text x="478" y="125">2</text><text x="516" y="125">3</text>
+    <text x="718" y="125">7</text><text x="756" y="125">8</text>
+    <text x="958" y="125">4</text><text x="996" y="125">2</text>
+  </g>
+
+  <!-- arrows in -->
+  <g stroke="#1F3B5C" stroke-width="2.5" marker-end="url(#an)">
+    <line x1="185" y1="150" x2="465" y2="246"/>
+    <line x1="422" y1="150" x2="512" y2="246"/>
+    <line x1="658" y1="150" x2="568" y2="246"/>
+    <line x1="895" y1="150" x2="615" y2="246"/>
+  </g>
+
+  <!-- center op -->
+  <rect x="400" y="250" width="280" height="46" rx="10" fill="#1F3B5C"/>
+  <text x="540" y="279" font-size="16" font-weight="bold" fill="#ffffff" text-anchor="middle">Reduce (sum), root = rank 0</text>
+
+  <!-- single arrow out, to the root -->
+  <g stroke="#1F3B5C" stroke-width="2.5" marker-end="url(#an)">
+    <line x1="465" y1="300" x2="185" y2="352"/>
+  </g>
+
+  <!-- output ranks -->
+  <g stroke="#4A4A46" stroke-width="2" fill="#ffffff">
+    <circle cx="180" cy="390" r="24"/>
+    <circle cx="420" cy="390" r="24"/>
+    <circle cx="660" cy="390" r="24"/>
+    <circle cx="900" cy="390" r="24"/>
+  </g>
+  <g font-size="16" font-weight="bold" fill="#2C2C2A" text-anchor="middle">
+    <text x="180" y="396">0</text>
+    <text x="420" y="396">1</text>
+    <text x="660" y="396">2</text>
+    <text x="900" y="396">3</text>
+  </g>
+  <g stroke="#8A8880" stroke-width="1.5">
+    <rect x="220" y="374" width="36" height="32" fill="#F2C4CE"/><rect x="258" y="374" width="36" height="32" fill="#CBE6C0"/>
+  </g>
+  <g fill="none" stroke="#C9C7BF" stroke-width="1.5" stroke-dasharray="4 3">
+    <rect x="460" y="374" width="36" height="32"/><rect x="498" y="374" width="36" height="32"/>
+    <rect x="700" y="374" width="36" height="32"/><rect x="738" y="374" width="36" height="32"/>
+    <rect x="940" y="374" width="36" height="32"/><rect x="978" y="374" width="36" height="32"/>
+  </g>
+  <g font-size="15" font-weight="bold" fill="#2C2C2A" text-anchor="middle">
+    <text x="238" y="395">18</text><text x="276" y="395">14</text>
+  </g>
+  <text x="160" y="430" font-size="11" fill="#5F5E5A">root</text>
+  <text x="540" y="445" font-size="12" fill="#5F5E5A" text-anchor="middle">element-wise: 5+2+7+4 = 18,  1+3+8+2 = 14 &#8212; but only rank 0 holds [18, 14]; ranks 1&#8211;3 receive nothing</text>
+
+  <line x1="60" y1="470" x2="1020" y2="470" stroke="#D3D1C7" stroke-width="1.5" stroke-dasharray="6 5"/>
+
+  <!-- ===== tensor view ===== -->
+  <text x="40" y="505" font-size="13" fill="#5F5E5A">The same operation at tensor scale &#8212; per-GPU values A/B/C/D merged into one sum that lands on the root only:</text>
+
+  <g stroke="#8A8880" stroke-width="1">
+    <rect x="120" y="530" width="72" height="180" fill="#57A64A"/>
+    <rect x="215" y="530" width="72" height="180" fill="#E05C7A"/>
+    <rect x="310" y="530" width="72" height="180" fill="#E67E22"/>
+    <rect x="405" y="530" width="72" height="180" fill="#3A7BD5"/>
+  </g>
+  <g font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">
+    <text x="156" y="626">A</text>
+    <text x="251" y="626">B</text>
+    <text x="346" y="626">C</text>
+    <text x="441" y="626">D</text>
+  </g>
+  <g font-size="11" fill="#5F5E5A" text-anchor="middle">
+    <text x="156" y="730">GPU0 (root)</text>
+    <text x="251" y="730">GPU1</text>
+    <text x="346" y="730">GPU2</text>
+    <text x="441" y="730">GPU3</text>
+  </g>
+
+  <line x1="505" y1="620" x2="588" y2="620" stroke="#1F3B5C" stroke-width="4" marker-end="url(#an)"/>
+  <text x="548" y="600" font-size="12" font-weight="bold" fill="#1F3B5C" text-anchor="middle">Reduce</text>
+
+  <rect x="620" y="530" width="72" height="180" fill="url(#sumgrad)" stroke="#8A8880" stroke-width="1"/>
+  <g fill="none" stroke="#C9C7BF" stroke-width="1.5" stroke-dasharray="4 3">
+    <rect x="715" y="530" width="72" height="180"/>
+    <rect x="810" y="530" width="72" height="180"/>
+    <rect x="905" y="530" width="72" height="180"/>
+  </g>
+  <g font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">
+    <text x="656" y="586">A</text><text x="656" y="602">+</text><text x="656" y="618">B</text><text x="656" y="634">+</text><text x="656" y="650">C</text><text x="656" y="666">+</text><text x="656" y="682">D</text>
+  </g>
+  <g font-size="11" fill="#5F5E5A" text-anchor="middle">
+    <text x="656" y="730">GPU0 (root)</text>
+    <text x="751" y="730">GPU1</text>
+    <text x="846" y="730">GPU2</text>
+    <text x="941" y="730">GPU3</text>
+  </g>
+
+  <text x="40" y="775" font-size="12" fill="#5F5E5A">Same arithmetic as AllReduce, one destination: the root argument is a rank number, not a CUDA device id &#8212; e.g. aggregating loss or token counts to rank 0 for logging.</text>
+</svg>

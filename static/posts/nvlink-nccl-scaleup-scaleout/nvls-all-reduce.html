@@ -1,0 +1,1734 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+
+<title>NVLS all-reduce on 4 GPUs</title>
+<style>:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: var(--border-radius-lg, 12.5px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 17'%3E%3Cpath d='M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z'/%3E%3C/svg%3E");
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html > body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive > .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align="right"]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align="center"]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: superellipse(1.5);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget > :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress {
+  display: flex;
+  height: 6px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 6px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls > .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls > .form-label > :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type="file"] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type="file"]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type="file"]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: superellipse(1.5);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type="checkbox"]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: "";
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type="radio"]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: "";
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed="true"],
+  [aria-selected="true"],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed="true"], [aria-selected="true"], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget > svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: 16px !important;
+  height: 16px !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html>body{padding:0}</style>
+</head>
+<body>
+<div id="nccl-nvls-allreduce-4gpu" class="nvls-viz">
+  <div class="nvls-top">
+    <div>
+      <h2>NVLS all-reduce · 4 GPUs</h2>
+      <div class="nvls-key text-small" aria-label="A, B, C, and D are the reductions of chunks a, b, c, and d across GPU 0 through GPU 3">
+        <span class="nvls-key-item"><span class="nvls-key-dot nvls-a"></span><code>A = ⊕aᵢ</code></span>
+        <span class="nvls-key-item"><span class="nvls-key-dot nvls-b"></span><code>B = ⊕bᵢ</code></span>
+        <span class="nvls-key-item"><span class="nvls-key-dot nvls-c"></span><code>C = ⊕cᵢ</code></span>
+        <span class="nvls-key-item"><span class="nvls-key-dot nvls-d"></span><code>D = ⊕dᵢ</code></span>
+        <span><code>⊕</code> = selected NCCL reduction</span>
+      </div>
+      <div class="nvls-key text-small" aria-label="UC is each GPU's local backing replica. MC is one multicast address mapped over all four replicas.">
+        <span><code>UC</code> = per-GPU backing replica</span>
+        <span><code>MC</code> = one multicast address over 4 replicas</span>
+        <span>3rd-gen NVSwitch · NVLink 4+</span>
+      </div>
+    </div>
+    <div class="viz-controls" aria-label="Step controls">
+      <button id="nvls-prev" type="button" class="btn btn-ghost">Previous</button>
+      <button id="nvls-next" type="button" class="btn btn-primary">Next</button>
+    </div>
+  </div>
+
+  <div class="nvls-status">
+    <span id="nvls-phase" class="viz-badge">Input</span>
+    <span id="nvls-step-label">Step 0 of 4 · One tensor per GPU</span>
+  </div>
+
+  <div id="nvls-stage" class="nvls-stage">
+    <svg id="nvls-svg" role="img" aria-label="Four GPUs connected to an NVSwitch NVLink SHARP fabric"></svg>
+  </div>
+
+  <div id="nvls-summary" class="nvls-summary text-small text-muted" aria-live="polite"></div>
+  <div class="nvls-note text-small text-muted">One logical chunk group; NCCL pipelines and overlaps these phases across chunks and channels. Registered buffers can bypass staging copies.</div>
+</div>
+
+<style>
+  #nccl-nvls-allreduce-4gpu {
+    width: 100%;
+    color: var(--foreground);
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  #nccl-nvls-allreduce-4gpu h2 {
+    margin: 0;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-key {
+    display: flex;
+    align-items: center;
+    gap: 6px 12px;
+    flex-wrap: wrap;
+    margin-top: 5px;
+    color: var(--muted-foreground);
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-key-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-key-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-a { background: var(--viz-series-1); }
+  #nccl-nvls-allreduce-4gpu .nvls-b { background: var(--viz-series-2); }
+  #nccl-nvls-allreduce-4gpu .nvls-c { background: var(--viz-series-3); }
+  #nccl-nvls-allreduce-4gpu .nvls-d { background: var(--viz-series-4); }
+
+  #nccl-nvls-allreduce-4gpu .nvls-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    font-weight: 500;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-stage {
+    width: 100%;
+    margin-top: 2px;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-stage svg {
+    display: block;
+    width: 100%;
+    overflow: visible;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-domain {
+    fill: color-mix(in srgb, var(--muted) 12%, transparent);
+    stroke: var(--border);
+    stroke-width: 1px;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-switch {
+    fill: color-mix(in srgb, var(--viz-series-6) 9%, transparent);
+    stroke: var(--border);
+    stroke-width: 1px;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-lane {
+    stroke-width: 1px;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-node {
+    fill: color-mix(in srgb, var(--muted) 46%, transparent);
+    stroke: var(--border);
+    stroke-width: 1px;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-action {
+    fill: color-mix(in srgb, var(--accent) 58%, transparent);
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-domain-label,
+  #nccl-nvls-allreduce-4gpu .nvls-switch-label,
+  #nccl-nvls-allreduce-4gpu .nvls-gpu-label,
+  #nccl-nvls-allreduce-4gpu .nvls-owner-label,
+  #nccl-nvls-allreduce-4gpu .nvls-slot-label,
+  #nccl-nvls-allreduce-4gpu .nvls-chip-label,
+  #nccl-nvls-allreduce-4gpu .nvls-action-label,
+  #nccl-nvls-allreduce-4gpu .nvls-lane-label,
+  #nccl-nvls-allreduce-4gpu .nvls-lane-detail,
+  #nccl-nvls-allreduce-4gpu .nvls-edge-label {
+    fill: var(--foreground);
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-domain-label,
+  #nccl-nvls-allreduce-4gpu .nvls-switch-label,
+  #nccl-nvls-allreduce-4gpu .nvls-gpu-label {
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-owner-label,
+  #nccl-nvls-allreduce-4gpu .nvls-slot-label,
+  #nccl-nvls-allreduce-4gpu .nvls-lane-detail {
+    fill: var(--muted-foreground);
+    font-size: 11px;
+    font-weight: 400;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-chip-label,
+  #nccl-nvls-allreduce-4gpu .nvls-action-label,
+  #nccl-nvls-allreduce-4gpu .nvls-lane-label,
+  #nccl-nvls-allreduce-4gpu .nvls-edge-label {
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-chip-label.is-hot,
+  #nccl-nvls-allreduce-4gpu .nvls-lane-label.is-hot {
+    font-weight: 500;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-edge {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-summary {
+    min-height: 1.5em;
+    margin-top: 3px;
+  }
+
+  #nccl-nvls-allreduce-4gpu .nvls-note {
+    margin-top: 2px;
+  }
+
+  @media (max-width: 520px) {
+    #nccl-nvls-allreduce-4gpu .viz-controls {
+      width: 100%;
+      justify-content: space-between;
+    }
+  }
+</style>
+
+<script>
+(() => {
+  const root = document.getElementById('nccl-nvls-allreduce-4gpu');
+  const svg = root.querySelector('#nvls-svg');
+  const stage = root.querySelector('#nvls-stage');
+  const previousButton = root.querySelector('#nvls-prev');
+  const nextButton = root.querySelector('#nvls-next');
+  const phaseLabel = root.querySelector('#nvls-phase');
+  const stepLabel = root.querySelector('#nvls-step-label');
+  const summary = root.querySelector('#nvls-summary');
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  const chunkColor = {
+    a: 'var(--viz-series-1)',
+    b: 'var(--viz-series-2)',
+    c: 'var(--viz-series-3)',
+    d: 'var(--viz-series-4)'
+  };
+
+  const chunkSurface = {
+    a: 'color-mix(in srgb, var(--viz-series-1) 16%, transparent)',
+    b: 'color-mix(in srgb, var(--viz-series-2) 16%, transparent)',
+    c: 'color-mix(in srgb, var(--viz-series-3) 16%, transparent)',
+    d: 'color-mix(in srgb, var(--viz-series-4) 16%, transparent)'
+  };
+
+  const hotSurface = {
+    a: 'color-mix(in srgb, var(--viz-series-1) 28%, transparent)',
+    b: 'color-mix(in srgb, var(--viz-series-2) 28%, transparent)',
+    c: 'color-mix(in srgb, var(--viz-series-3) 28%, transparent)',
+    d: 'color-mix(in srgb, var(--viz-series-4) 28%, transparent)'
+  };
+
+  const flowColor = {
+    mapping: 'var(--viz-series-5)',
+    nvls: 'var(--viz-series-6)'
+  };
+
+  const chunk = (id, label, hot = false) => ({ id, label, hot });
+  const gpu = (slot, items, action = '', actionId = null) => ({ slot, items, action, actionId });
+  const lane = (id, label, detail, hot = false) => ({ id, label, detail, hot });
+  const transfer = (from, to, label, direction = 'forward', offset = 0) => ({ from, to, label, direction, offset });
+
+  const localVector = (index, hot = false) => {
+    const subscript = '₀₁₂₃'[index];
+    return [
+      chunk('a', `a${subscript}`, hot),
+      chunk('b', `b${subscript}`, hot),
+      chunk('c', `c${subscript}`, hot),
+      chunk('d', `d${subscript}`, hot)
+    ];
+  };
+
+  const fullVector = (hot = false) => [
+    chunk('a', 'A', hot),
+    chunk('b', 'B', hot),
+    chunk('c', 'C', hot),
+    chunk('d', 'D', hot)
+  ];
+
+  const readyLanes = () => [
+    lane('a', 'MC lane a', 'mapping ready'),
+    lane('b', 'MC lane b', 'mapping ready'),
+    lane('c', 'MC lane c', 'mapping ready'),
+    lane('d', 'MC lane d', 'mapping ready')
+  ];
+
+  const mappedLanes = () => [
+    lane('a', 'a₀ · a₁ · a₂ · a₃', 'same offset · one MC view', true),
+    lane('b', 'b₀ · b₁ · b₂ · b₃', 'same offset · one MC view', true),
+    lane('c', 'c₀ · c₁ · c₂ · c₃', 'same offset · one MC view', true),
+    lane('d', 'd₀ · d₁ · d₂ · d₃', 'same offset · one MC view', true)
+  ];
+
+  const reduceLanes = () => [
+    lane('a', 'ld_reduce(a) → A', 'NVSwitch reduction', true),
+    lane('b', 'ld_reduce(b) → B', 'NVSwitch reduction', true),
+    lane('c', 'ld_reduce(c) → C', 'NVSwitch reduction', true),
+    lane('d', 'ld_reduce(d) → D', 'NVSwitch reduction', true)
+  ];
+
+  const broadcastLanes = () => [
+    lane('a', 'st(A) → 4 replicas', 'multicast write', true),
+    lane('b', 'st(B) → 4 replicas', 'multicast write', true),
+    lane('c', 'st(C) → 4 replicas', 'multicast write', true),
+    lane('d', 'st(D) → 4 replicas', 'multicast write', true)
+  ];
+
+  const idleLanes = () => [
+    lane('a', 'A published', 'fabric idle'),
+    lane('b', 'B published', 'fabric idle'),
+    lane('c', 'C published', 'fabric idle'),
+    lane('d', 'D published', 'fabric idle')
+  ];
+
+  const states = [
+    {
+      phase: 'Input',
+      title: 'Step 0 of 4 · One tensor per GPU',
+      summary: 'Teaching slice: GPU0 owns stripe a, GPU1 owns b, GPU2 owns c, and GPU3 owns d.',
+      switchSubtitle: 'Mappings ready · switch stores no result',
+      gpus: [
+        gpu('user send buffer', localVector(0)),
+        gpu('user send buffer', localVector(1)),
+        gpu('user send buffer', localVector(2)),
+        gpu('user send buffer', localVector(3))
+      ],
+      lanes: readyLanes(),
+      transfers: [],
+      mapping: false
+    },
+    {
+      phase: 'Scatter',
+      title: 'Step 1 of 4 · Local UC replicas',
+      summary: 'Each GPU locally stages its four stripes into its own UC backing replica; matching offsets are exposed through one MC address view.',
+      switchSubtitle: 'One MC view · 4 physical GPU replicas',
+      gpus: [
+        gpu('reduce UC replica', localVector(0, true), 'local stage only'),
+        gpu('reduce UC replica', localVector(1, true), 'local stage only'),
+        gpu('reduce UC replica', localVector(2, true), 'local stage only'),
+        gpu('reduce UC replica', localVector(3, true), 'local stage only')
+      ],
+      lanes: mappedLanes(),
+      transfers: [],
+      mapping: true
+    },
+    {
+      phase: 'NVLS reduce',
+      title: 'Step 2 of 4 · Reduced multicast loads',
+      summary: 'Each owner issues multimem.ld_reduce at the MC address; NVSwitch reduces four backing values and returns one result to that GPU.',
+      switchSubtitle: 'Reduce in fabric · return to issuer',
+      gpus: [
+        gpu('reduce UC replica', localVector(0), 'ld_reduce → A', 'a'),
+        gpu('reduce UC replica', localVector(1), 'ld_reduce → B', 'b'),
+        gpu('reduce UC replica', localVector(2), 'ld_reduce → C', 'c'),
+        gpu('reduce UC replica', localVector(3), 'ld_reduce → D', 'd')
+      ],
+      lanes: reduceLanes(),
+      transfers: [
+        transfer('s', 'g0', 'A', 'both', -8),
+        transfer('s', 'g1', 'B', 'both', 8),
+        transfer('s', 'g2', 'C', 'both', 8),
+        transfer('s', 'g3', 'D', 'both', -8)
+      ],
+      mapping: false
+    },
+    {
+      phase: 'NVLS broadcast',
+      title: 'Step 3 of 4 · Multicast stores',
+      summary: 'Each owner issues multimem.st at the MC address; NVSwitch writes that stripe to every GPU’s separate broadcast-UC replica.',
+      switchSubtitle: 'Each owner store fans out ×4',
+      gpus: [
+        gpu('broadcast UC replica', fullVector(true), 'multimem.st(A)', 'a'),
+        gpu('broadcast UC replica', fullVector(true), 'multimem.st(B)', 'b'),
+        gpu('broadcast UC replica', fullVector(true), 'multimem.st(C)', 'c'),
+        gpu('broadcast UC replica', fullVector(true), 'multimem.st(D)', 'd')
+      ],
+      lanes: broadcastLanes(),
+      transfers: [
+        transfer('g0', 's', 'A', 'forward', -8),
+        transfer('g1', 's', 'B', 'forward', 8),
+        transfer('g2', 's', 'C', 'forward', 8),
+        transfer('g3', 's', 'D', 'forward', -8)
+      ],
+      mapping: false
+    },
+    {
+      phase: 'Gather',
+      title: 'Step 4 of 4 · Complete result everywhere',
+      summary: 'Each GPU gathers from its own local broadcast replica; all receive [A, B, C, D] with no final cross-GPU exchange.',
+      switchSubtitle: 'Idle for this completed chunk group',
+      gpus: [
+        gpu('user receive buffer', fullVector(true)),
+        gpu('user receive buffer', fullVector(true)),
+        gpu('user receive buffer', fullVector(true)),
+        gpu('user receive buffer', fullVector(true))
+      ],
+      lanes: idleLanes(),
+      transfers: [],
+      mapping: false
+    }
+  ];
+
+  let currentStep = 0;
+  let lastWidth = 0;
+  let animationFrames = [];
+
+  function makeSvg(name, attributes = {}) {
+    const element = document.createElementNS(svgNS, name);
+    Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
+    return element;
+  }
+
+  function addMarker(defs, id, color) {
+    const marker = makeSvg('marker', {
+      id,
+      viewBox: '0 0 10 10',
+      refX: '8.5',
+      refY: '5',
+      markerWidth: '6',
+      markerHeight: '6',
+      orient: 'auto-start-reverse'
+    });
+    marker.appendChild(makeSvg('path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: color }));
+    defs.appendChild(marker);
+  }
+
+  function edgePoints(from, to, offset = 0) {
+    const dx = to.cx - from.cx;
+    const dy = to.cy - from.cy;
+    const fromScale = Math.min(
+      dx === 0 ? Infinity : (from.width / 2 + 5) / Math.abs(dx),
+      dy === 0 ? Infinity : (from.height / 2 + 5) / Math.abs(dy)
+    );
+    const toScale = Math.min(
+      dx === 0 ? Infinity : (to.width / 2 + 8) / Math.abs(dx),
+      dy === 0 ? Infinity : (to.height / 2 + 8) / Math.abs(dy)
+    );
+    const magnitude = Math.hypot(dx, dy) || 1;
+    const ox = -(dy / magnitude) * offset;
+    const oy = (dx / magnitude) * offset;
+    return {
+      start: { x: from.cx + dx * fromScale + ox, y: from.cy + dy * fromScale + oy },
+      end: { x: to.cx - dx * toScale + ox, y: to.cy - dy * toScale + oy }
+    };
+  }
+
+  function buildLayout(width) {
+    const compact = width < 560;
+    const margin = 8;
+    const nodeHeight = 140;
+
+    if (!compact) {
+      const switchWidth = Math.min(230, width * 0.34);
+      const gap = 18;
+      const nodeWidth = Math.min(190, (width - margin * 2 - switchWidth - gap * 2) / 2);
+      const leftX = margin + 12;
+      const rightX = width - margin - 12 - nodeWidth;
+      const topY = 62;
+      const bottomY = 228;
+      const switchHeight = 258;
+      const switchY = 78;
+      const entities = {
+        g0: { cx: leftX + nodeWidth / 2, cy: topY + nodeHeight / 2, width: nodeWidth, height: nodeHeight },
+        g1: { cx: leftX + nodeWidth / 2, cy: bottomY + nodeHeight / 2, width: nodeWidth, height: nodeHeight },
+        g2: { cx: rightX + nodeWidth / 2, cy: topY + nodeHeight / 2, width: nodeWidth, height: nodeHeight },
+        g3: { cx: rightX + nodeWidth / 2, cy: bottomY + nodeHeight / 2, width: nodeWidth, height: nodeHeight },
+        s: { cx: width / 2, cy: switchY + switchHeight / 2, width: switchWidth, height: switchHeight }
+      };
+      return {
+        compact,
+        height: 404,
+        nodeWidth,
+        nodeHeight,
+        domain: { x: margin, y: 32, width: width - margin * 2, height: 348 },
+        switchBox: { x: width / 2 - switchWidth / 2, y: switchY, width: switchWidth, height: switchHeight },
+        entities
+      };
+    }
+
+    const domainWidth = width - margin * 2;
+    const nodeWidth = (domainWidth - 12) / 2;
+    const topY = 58;
+    const switchY = 230;
+    const switchHeight = 186;
+    const bottomY = 448;
+    const leftX = margin;
+    const rightX = width - margin - nodeWidth;
+    const switchWidth = domainWidth - 12;
+    const entities = {
+      g0: { cx: leftX + nodeWidth / 2, cy: topY + nodeHeight / 2, width: nodeWidth, height: nodeHeight },
+      g1: { cx: rightX + nodeWidth / 2, cy: topY + nodeHeight / 2, width: nodeWidth, height: nodeHeight },
+      g2: { cx: leftX + nodeWidth / 2, cy: bottomY + nodeHeight / 2, width: nodeWidth, height: nodeHeight },
+      g3: { cx: rightX + nodeWidth / 2, cy: bottomY + nodeHeight / 2, width: nodeWidth, height: nodeHeight },
+      s: { cx: width / 2, cy: switchY + switchHeight / 2, width: switchWidth, height: switchHeight }
+    };
+    return {
+      compact,
+      height: 620,
+      nodeWidth,
+      nodeHeight,
+      domain: { x: margin, y: 28, width: domainWidth, height: 590 },
+      switchBox: { x: margin + 6, y: switchY, width: switchWidth, height: switchHeight },
+      entities
+    };
+  }
+
+  function renderDomain(layout) {
+    svg.appendChild(makeSvg('rect', {
+      class: 'nvls-domain',
+      x: layout.domain.x,
+      y: layout.domain.y,
+      width: layout.domain.width,
+      height: layout.domain.height,
+      rx: '12'
+    }));
+    const label = makeSvg('text', {
+      class: 'nvls-domain-label',
+      x: layout.domain.x + 12,
+      y: layout.domain.y + 22
+    });
+    label.textContent = 'One multicast team · NVSwitch domain';
+    svg.appendChild(label);
+  }
+
+  function renderGpu(entity, gpuIndex, state, width, height) {
+    const ownerId = ['a', 'b', 'c', 'd'][gpuIndex];
+    const group = makeSvg('g', {
+      'aria-label': `GPU${gpuIndex}, owns ${ownerId}, ${state.slot}: ${state.items.map((item) => item.label).join(', ')}${state.action ? `; ${state.action}` : ''}`
+    });
+    const x = entity.cx - width / 2;
+    const y = entity.cy - height / 2;
+    group.appendChild(makeSvg('rect', { class: 'nvls-node', x, y, width, height, rx: '12' }));
+
+    const gpuLabel = makeSvg('text', { class: 'nvls-gpu-label', x: x + 11, y: y + 22 });
+    gpuLabel.textContent = `GPU${gpuIndex}`;
+    group.appendChild(gpuLabel);
+
+    const ownerLabel = makeSvg('text', {
+      class: 'nvls-owner-label',
+      x: x + width - 11,
+      y: y + 21,
+      'text-anchor': 'end'
+    });
+    ownerLabel.textContent = `owns ${ownerId}`;
+    group.appendChild(ownerLabel);
+
+    const slotLabel = makeSvg('text', { class: 'nvls-slot-label', x: x + 11, y: y + 39 });
+    slotLabel.textContent = state.slot;
+    group.appendChild(slotLabel);
+
+    const gap = 6;
+    const chipWidth = (width - 20 - gap) / 2;
+    const chipHeight = 24;
+    state.items.forEach((item, index) => {
+      const column = index % 2;
+      const row = Math.floor(index / 2);
+      const chipX = x + 10 + column * (chipWidth + gap);
+      const chipY = y + 48 + row * (chipHeight + gap);
+      group.appendChild(makeSvg('rect', {
+        x: chipX,
+        y: chipY,
+        width: chipWidth,
+        height: chipHeight,
+        rx: '7',
+        fill: item.hot ? hotSurface[item.id] : chunkSurface[item.id],
+        stroke: item.hot ? chunkColor[item.id] : 'none',
+        'stroke-width': item.hot ? '1.5' : '0'
+      }));
+      const label = makeSvg('text', {
+        class: `nvls-chip-label${item.hot ? ' is-hot' : ''}`,
+        x: chipX + chipWidth / 2,
+        y: chipY + chipHeight / 2,
+        'text-anchor': 'middle',
+        'dominant-baseline': 'central'
+      });
+      label.textContent = item.label;
+      group.appendChild(label);
+    });
+
+    if (state.action) {
+      const actionX = x + 10;
+      const actionY = y + 112;
+      const actionWidth = width - 20;
+      group.appendChild(makeSvg('rect', {
+        class: 'nvls-action',
+        x: actionX,
+        y: actionY,
+        width: actionWidth,
+        height: 20,
+        rx: '6'
+      }));
+      if (state.actionId) {
+        group.appendChild(makeSvg('circle', {
+          cx: actionX + 10,
+          cy: actionY + 10,
+          r: '4',
+          fill: chunkColor[state.actionId]
+        }));
+      }
+      const actionLabel = makeSvg('text', {
+        class: 'nvls-action-label',
+        x: actionX + actionWidth / 2,
+        y: actionY + 10,
+        'text-anchor': 'middle',
+        'dominant-baseline': 'central'
+      });
+      actionLabel.textContent = state.action;
+      group.appendChild(actionLabel);
+    }
+
+    svg.appendChild(group);
+  }
+
+  function renderSwitch(layout, state) {
+    const box = layout.switchBox;
+    svg.appendChild(makeSvg('rect', {
+      class: 'nvls-switch',
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+      rx: '12'
+    }));
+
+    const title = makeSvg('text', { class: 'nvls-switch-label', x: box.x + 12, y: box.y + 22 });
+    title.textContent = 'NVSwitch · NVLink SHARP';
+    svg.appendChild(title);
+
+    const subtitle = makeSvg('text', { class: 'nvls-slot-label', x: box.x + 12, y: box.y + 39 });
+    subtitle.textContent = state.switchSubtitle;
+    svg.appendChild(subtitle);
+
+    const columns = layout.compact ? 2 : 1;
+    const rows = layout.compact ? 2 : 4;
+    const gap = 6;
+    const areaX = box.x + 10;
+    const areaY = box.y + 51;
+    const areaWidth = box.width - 20;
+    const areaHeight = box.height - 61;
+    const laneWidth = (areaWidth - gap * (columns - 1)) / columns;
+    const laneHeight = (areaHeight - gap * (rows - 1)) / rows;
+
+    state.lanes.forEach((item, index) => {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const x = areaX + column * (laneWidth + gap);
+      const y = areaY + row * (laneHeight + gap);
+      svg.appendChild(makeSvg('rect', {
+        class: 'nvls-lane',
+        x,
+        y,
+        width: laneWidth,
+        height: laneHeight,
+        rx: '8',
+        fill: item.hot ? hotSurface[item.id] : chunkSurface[item.id],
+        stroke: item.hot ? chunkColor[item.id] : 'var(--border)'
+      }));
+      svg.appendChild(makeSvg('circle', {
+        cx: x + 10,
+        cy: y + 13,
+        r: '4',
+        fill: chunkColor[item.id]
+      }));
+      const laneLabel = makeSvg('text', {
+        class: `nvls-lane-label${item.hot ? ' is-hot' : ''}`,
+        x: x + 19,
+        y: y + 14
+      });
+      laneLabel.textContent = item.label;
+      svg.appendChild(laneLabel);
+
+      const detail = makeSvg('text', {
+        class: 'nvls-lane-detail',
+        x: x + 10,
+        y: y + laneHeight - 8
+      });
+      detail.textContent = item.detail;
+      svg.appendChild(detail);
+    });
+  }
+
+  function renderEdgeLabel(path, label, color) {
+    const length = path.getTotalLength();
+    const point = path.getPointAtLength(length / 2);
+    const before = path.getPointAtLength(Math.max(0, length / 2 - 1));
+    const after = path.getPointAtLength(Math.min(length, length / 2 + 1));
+    const dx = after.x - before.x;
+    const dy = after.y - before.y;
+    const magnitude = Math.hypot(dx, dy) || 1;
+    const x = point.x - (dy / magnitude) * 10;
+    const y = point.y + (dx / magnitude) * 10;
+    const group = makeSvg('g');
+    group.appendChild(makeSvg('rect', {
+      x: x - 17,
+      y: y - 11,
+      width: 34,
+      height: 22,
+      rx: '5',
+      fill: 'var(--background)'
+    }));
+    group.appendChild(makeSvg('circle', { cx: x - 9, cy: y, r: '4', fill: color }));
+    const text = makeSvg('text', {
+      class: 'nvls-edge-label',
+      x: x + 4,
+      y,
+      'text-anchor': 'middle',
+      'dominant-baseline': 'central'
+    });
+    text.textContent = label;
+    group.appendChild(text);
+    svg.appendChild(group);
+  }
+
+  function animatePacket(path, color) {
+    if (reducedMotion.matches) return;
+    const packet = makeSvg('circle', { r: '5', fill: color, 'aria-hidden': 'true' });
+    svg.appendChild(packet);
+    const length = path.getTotalLength();
+    const startedAt = performance.now();
+    const duration = 650;
+    function frame(now) {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const point = path.getPointAtLength(length * eased);
+      packet.setAttribute('cx', point.x);
+      packet.setAttribute('cy', point.y);
+      if (progress < 1) {
+        const frameId = requestAnimationFrame(frame);
+        animationFrames.push(frameId);
+      } else {
+        packet.remove();
+      }
+    }
+    const frameId = requestAnimationFrame(frame);
+    animationFrames.push(frameId);
+  }
+
+  function describeState(state) {
+    const operations = state.transfers.length
+      ? state.transfers.map((item) => `${item.label} moves between ${item.from} and ${item.to}`).join('; ')
+      : 'No cross-GPU transfer is active';
+    const holdings = state.gpus.map((item, index) => `GPU${index} ${item.slot} contains ${item.items.map((value) => value.label).join(', ')}`).join('; ');
+    return `${state.phase}. ${operations}. ${holdings}.`;
+  }
+
+  function draw(animate = false) {
+    animationFrames.forEach((frameId) => cancelAnimationFrame(frameId));
+    animationFrames = [];
+    svg.replaceChildren();
+
+    const state = states[currentStep];
+    const measuredWidth = Math.round(stage.getBoundingClientRect().width);
+    const width = Math.max(320, measuredWidth || 736);
+    const layout = buildLayout(width);
+    lastWidth = width;
+    svg.setAttribute('viewBox', `0 0 ${width} ${layout.height}`);
+    svg.setAttribute('height', String(layout.height));
+    svg.style.height = `${layout.height}px`;
+    svg.setAttribute('aria-label', describeState(state));
+
+    const svgTitle = makeSvg('title');
+    svgTitle.textContent = `${state.phase}: ${state.title}`;
+    svg.appendChild(svgTitle);
+    const svgDescription = makeSvg('desc');
+    svgDescription.textContent = state.summary;
+    svg.appendChild(svgDescription);
+
+    const defs = makeSvg('defs');
+    addMarker(defs, 'nvls4-arrow', flowColor.nvls);
+    svg.appendChild(defs);
+
+    renderDomain(layout);
+
+    const topology = [['g0', 's'], ['g1', 's'], ['g2', 's'], ['g3', 's']];
+    topology.forEach(([from, to]) => {
+      const points = edgePoints(layout.entities[from], layout.entities[to]);
+      svg.appendChild(makeSvg('path', {
+        class: 'nvls-edge',
+        d: `M ${points.start.x} ${points.start.y} L ${points.end.x} ${points.end.y}`,
+        stroke: state.mapping ? flowColor.mapping : 'var(--border)',
+        'stroke-width': state.mapping ? '2.5' : '1.5'
+      }));
+    });
+
+    const activePaths = state.transfers.map((item) => {
+      const points = edgePoints(layout.entities[item.from], layout.entities[item.to], item.offset);
+      const attributes = {
+        class: 'nvls-edge',
+        d: `M ${points.start.x} ${points.start.y} L ${points.end.x} ${points.end.y}`,
+        stroke: flowColor.nvls,
+        'stroke-width': '2.5'
+      };
+      if (item.direction === 'forward' || item.direction === 'both') attributes['marker-end'] = 'url(#nvls4-arrow)';
+      if (item.direction === 'both') attributes['marker-start'] = 'url(#nvls4-arrow)';
+      const path = makeSvg('path', attributes);
+      svg.appendChild(path);
+      return { path, item };
+    });
+
+    renderSwitch(layout, state);
+
+    ['g0', 'g1', 'g2', 'g3'].forEach((id, gpuIndex) => {
+      renderGpu(layout.entities[id], gpuIndex, state.gpus[gpuIndex], layout.nodeWidth, layout.nodeHeight);
+    });
+
+    activePaths.forEach(({ path, item }) => {
+      renderEdgeLabel(path, item.label, chunkColor[item.label.toLowerCase()]);
+      if (animate) animatePacket(path, chunkColor[item.label.toLowerCase()]);
+    });
+
+    phaseLabel.textContent = state.phase;
+    stepLabel.textContent = state.title;
+    summary.textContent = state.summary;
+    previousButton.disabled = currentStep === 0;
+    nextButton.disabled = currentStep === states.length - 1;
+  }
+
+  previousButton.addEventListener('click', () => {
+    if (currentStep > 0) {
+      currentStep -= 1;
+      draw(true);
+    }
+  });
+
+  nextButton.addEventListener('click', () => {
+    if (currentStep < states.length - 1) {
+      currentStep += 1;
+      draw(true);
+    }
+  });
+
+  const resizeObserver = new ResizeObserver((entries) => {
+    const nextWidth = Math.round(entries[0].contentRect.width);
+    if (nextWidth && Math.abs(nextWidth - lastWidth) > 1) draw(false);
+  });
+  resizeObserver.observe(stage);
+  draw(false);
+})();
+</script>
+
+<style>
+  /* pinned to the blog's m10c palette so the embed blends into the post */
+  :root {
+    color-scheme: dark;
+    --color-background-primary: #353b43;
+    --color-background-secondary: #3f464f;
+    --color-text-primary: #d6dde3;
+    --color-text-secondary: rgb(214 221 227 / 62%);
+    --color-text-info: #57cc8a;
+    --color-background-info: rgb(87 204 138 / 16%);
+    --color-border-primary: rgb(255 255 255 / 14%);
+    --color-border-secondary: rgb(255 255 255 / 10%);
+  }
+  html > body { padding: 6px 2px; }
+</style>
+<script>
+(() => {
+  const report = () => parent.postMessage(
+    { type: "embed-height", height: Math.ceil(document.body.getBoundingClientRect().height) }, "*");
+  new ResizeObserver(report).observe(document.body);
+  window.addEventListener("load", report);
+})();
+</script>
+</body>
+</html>

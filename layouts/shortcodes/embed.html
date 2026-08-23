@@ -1,0 +1,18 @@
+{{- /* Embed a self-contained HTML page from static/ in an auto-sizing iframe.
+       The page reports its height via postMessage {type:"embed-height", height}. */ -}}
+{{- $src := .Get "src" -}}
+{{- $title := .Get "title" | default "Embedded figure" -}}
+{{- $height := .Get "height" | default "640" -}}
+<div class="embed-frame" style="margin: 1.5em 0;">
+<iframe src="{{ $src }}" title="{{ $title }}" loading="lazy" scrolling="no" style="display: block; width: 100%; height: {{ $height }}px; border: 0; border-radius: 12px; overflow: hidden; background: transparent;"></iframe>
+</div>
+<script>
+(() => {
+  const frame = document.currentScript.previousElementSibling.querySelector("iframe");
+  window.addEventListener("message", (event) => {
+    if (event.source !== frame.contentWindow || !event.data || event.data.type !== "embed-height") return;
+    const height = Number(event.data.height);
+    if (Number.isFinite(height) && height > 0 && height < 10000) frame.style.height = Math.ceil(height) + "px";
+  });
+})();
+</script>

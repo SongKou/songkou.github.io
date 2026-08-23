@@ -1,0 +1,1490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+
+<title>Tree all-reduce on 4 GPUs</title>
+<style>:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: var(--border-radius-lg, 12.5px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 17'%3E%3Cpath d='M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z'/%3E%3C/svg%3E");
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html > body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive > .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align="right"]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align="center"]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: superellipse(1.5);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget > :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress {
+  display: flex;
+  height: 6px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 6px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls > .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls > .form-label > :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type="file"] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type="file"]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type="file"]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: superellipse(1.5);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type="checkbox"]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: "";
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type="radio"]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: "";
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed="true"],
+  [aria-selected="true"],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed="true"], [aria-selected="true"], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget > svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: 16px !important;
+  height: 16px !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html>body{padding:0}</style>
+</head>
+<body>
+<div id="nccl-tree-allreduce-4gpu" class="tree-viz">
+  <div class="tree-top">
+    <div>
+      <h2>Tree all-reduce · 4 GPUs</h2>
+      <div class="tree-key text-small" aria-label="A, B, C, and D are the reductions of chunks a, b, c, and d across GPU 0 through GPU 3">
+        <span class="tree-key-item"><span class="tree-key-dot tree-a"></span><code>A = ⊕aᵢ</code></span>
+        <span class="tree-key-item"><span class="tree-key-dot tree-b"></span><code>B = ⊕bᵢ</code></span>
+        <span class="tree-key-item"><span class="tree-key-dot tree-c"></span><code>C = ⊕cᵢ</code></span>
+        <span class="tree-key-item"><span class="tree-key-dot tree-d"></span><code>D = ⊕dᵢ</code></span>
+        <span>i = 0…3 · GPU0 = root</span>
+      </div>
+    </div>
+    <div class="viz-controls" aria-label="Step controls">
+      <button id="tree-prev" type="button" class="btn btn-ghost">Previous</button>
+      <button id="tree-next" type="button" class="btn btn-primary">Next</button>
+    </div>
+  </div>
+
+  <div class="tree-status">
+    <span id="tree-phase" class="viz-badge">Input</span>
+    <span id="tree-step-label">Step 0 of 4 · Local vectors</span>
+  </div>
+
+  <div id="tree-stage" class="tree-stage">
+    <svg id="tree-svg" role="img" aria-label="Four GPUs arranged as a reduction and broadcast tree"></svg>
+  </div>
+
+  <div id="tree-summary" class="tree-summary text-small text-muted" aria-live="polite"></div>
+</div>
+
+<style>
+  #nccl-tree-allreduce-4gpu {
+    width: 100%;
+    color: var(--foreground);
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  #nccl-tree-allreduce-4gpu h2 {
+    margin: 0;
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-key {
+    display: flex;
+    align-items: center;
+    gap: 6px 12px;
+    flex-wrap: wrap;
+    margin-top: 5px;
+    color: var(--muted-foreground);
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-key-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-key-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-a { background: var(--viz-series-1); }
+  #nccl-tree-allreduce-4gpu .tree-b { background: var(--viz-series-2); }
+  #nccl-tree-allreduce-4gpu .tree-c { background: var(--viz-series-3); }
+  #nccl-tree-allreduce-4gpu .tree-d { background: var(--viz-series-4); }
+
+  #nccl-tree-allreduce-4gpu .tree-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    font-weight: 500;
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-stage {
+    width: 100%;
+    margin-top: 2px;
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-stage svg {
+    display: block;
+    width: 100%;
+    overflow: visible;
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-node {
+    fill: color-mix(in srgb, var(--muted) 46%, transparent);
+    stroke: var(--border);
+    stroke-width: 1px;
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-gpu-label,
+  #nccl-tree-allreduce-4gpu .tree-root-label,
+  #nccl-tree-allreduce-4gpu .tree-chip-label,
+  #nccl-tree-allreduce-4gpu .tree-edge-label,
+  #nccl-tree-allreduce-4gpu .tree-node-status {
+    fill: var(--foreground);
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-gpu-label {
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-root-label,
+  #nccl-tree-allreduce-4gpu .tree-node-status {
+    fill: var(--muted-foreground);
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-chip-label,
+  #nccl-tree-allreduce-4gpu .tree-edge-label {
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-chip-label.is-hot {
+    font-weight: 500;
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-edge {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  #nccl-tree-allreduce-4gpu .tree-summary {
+    min-height: 1.5em;
+    margin-top: 3px;
+  }
+
+  @media (max-width: 520px) {
+    #nccl-tree-allreduce-4gpu .viz-controls {
+      width: 100%;
+      justify-content: space-between;
+    }
+  }
+</style>
+
+<script>
+(() => {
+  const root = document.getElementById('nccl-tree-allreduce-4gpu');
+  const svg = root.querySelector('#tree-svg');
+  const stage = root.querySelector('#tree-stage');
+  const previousButton = root.querySelector('#tree-prev');
+  const nextButton = root.querySelector('#tree-next');
+  const phaseLabel = root.querySelector('#tree-phase');
+  const stepLabel = root.querySelector('#tree-step-label');
+  const summary = root.querySelector('#tree-summary');
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  const chunkColor = {
+    a: 'var(--viz-series-1)',
+    b: 'var(--viz-series-2)',
+    c: 'var(--viz-series-3)',
+    d: 'var(--viz-series-4)'
+  };
+
+  const chunkSurface = {
+    a: 'color-mix(in srgb, var(--viz-series-1) 16%, transparent)',
+    b: 'color-mix(in srgb, var(--viz-series-2) 16%, transparent)',
+    c: 'color-mix(in srgb, var(--viz-series-3) 16%, transparent)',
+    d: 'color-mix(in srgb, var(--viz-series-4) 16%, transparent)'
+  };
+
+  const hotSurface = {
+    a: 'color-mix(in srgb, var(--viz-series-1) 28%, transparent)',
+    b: 'color-mix(in srgb, var(--viz-series-2) 28%, transparent)',
+    c: 'color-mix(in srgb, var(--viz-series-3) 28%, transparent)',
+    d: 'color-mix(in srgb, var(--viz-series-4) 28%, transparent)'
+  };
+
+  const phaseColor = {
+    Input: 'var(--border)',
+    Reduce: 'var(--viz-series-5)',
+    Broadcast: 'var(--viz-series-6)'
+  };
+
+  const chip = (id, label, hot = false) => ({ id, label, hot });
+  const gpu = (items, status = '') => ({ items, status });
+  const transfer = (from, to, label) => ({ from, to, label });
+  const localVector = (index) => [
+    chip('a', `a${'₀₁₂₃'[index]}`),
+    chip('b', `b${'₀₁₂₃'[index]}`),
+    chip('c', `c${'₀₁₂₃'[index]}`),
+    chip('d', `d${'₀₁₂₃'[index]}`)
+  ];
+  const fullVector = (hot = false) => [
+    chip('a', 'A', hot),
+    chip('b', 'B', hot),
+    chip('c', 'C', hot),
+    chip('d', 'D', hot)
+  ];
+
+  const states = [
+    {
+      phase: 'Input',
+      title: 'Step 0 of 4 · Local vectors',
+      summary: 'GPU0 is the root; GPU1 and GPU2 are its children, and GPU3 is below GPU2.',
+      nodes: [gpu(localVector(0)), gpu(localVector(1)), gpu(localVector(2)), gpu(localVector(3))],
+      transfers: []
+    },
+    {
+      phase: 'Reduce',
+      title: 'Step 1 of 4 · Reduction round 1 of 2',
+      summary: 'GPU1 → GPU0 and GPU3 → GPU2 run in parallel, producing the two subtree reductions V₀₁ and V₂₃.',
+      nodes: [
+        gpu([chip('a', 'a₀⊕a₁', true), chip('b', 'b₀⊕b₁', true), chip('c', 'c₀⊕c₁', true), chip('d', 'd₀⊕d₁', true)]),
+        gpu([], 'sent · inactive'),
+        gpu([chip('a', 'a₂⊕a₃', true), chip('b', 'b₂⊕b₃', true), chip('c', 'c₂⊕c₃', true), chip('d', 'd₂⊕d₃', true)]),
+        gpu([], 'sent · inactive')
+      ],
+      transfers: [transfer(1, 0, 'V₁'), transfer(3, 2, 'V₃')]
+    },
+    {
+      phase: 'Reduce',
+      title: 'Step 2 of 4 · Reduction round 2 of 2',
+      summary: 'GPU2 sends V₂₃ to GPU0; the root computes V₀₁ ⊕ V₂₃ = [A, B, C, D].',
+      nodes: [
+        gpu(fullVector(true)),
+        gpu([], 'inactive'),
+        gpu([], 'sent · inactive'),
+        gpu([], 'inactive')
+      ],
+      transfers: [transfer(2, 0, 'V₂₃')]
+    },
+    {
+      phase: 'Broadcast',
+      title: 'Step 3 of 4 · Broadcast round 1 of 2',
+      summary: 'GPU0 copies the full result to GPU1 and GPU2 in parallel; GPU2 will forward it to GPU3.',
+      nodes: [
+        gpu(fullVector()),
+        gpu(fullVector(true)),
+        gpu(fullVector(true)),
+        gpu([], 'waiting')
+      ],
+      transfers: [transfer(0, 1, 'T'), transfer(0, 2, 'T')]
+    },
+    {
+      phase: 'Broadcast',
+      title: 'Step 4 of 4 · Broadcast round 2 of 2',
+      summary: 'GPU2 forwards T to GPU3. All four GPUs now contain the same fully reduced [A, B, C, D].',
+      nodes: [
+        gpu(fullVector()),
+        gpu(fullVector()),
+        gpu(fullVector()),
+        gpu(fullVector(true))
+      ],
+      transfers: [transfer(2, 3, 'T')]
+    }
+  ];
+
+  let currentStep = 0;
+  let lastWidth = 0;
+  let animationFrames = [];
+
+  function makeSvg(name, attributes = {}) {
+    const element = document.createElementNS(svgNS, name);
+    Object.entries(attributes).forEach(([key, value]) => element.setAttribute(key, value));
+    return element;
+  }
+
+  function addMarker(defs, id, color) {
+    const marker = makeSvg('marker', {
+      id,
+      viewBox: '0 0 10 10',
+      refX: '8.5',
+      refY: '5',
+      markerWidth: '6',
+      markerHeight: '6',
+      orient: 'auto-start-reverse'
+    });
+    marker.appendChild(makeSvg('path', { d: 'M 0 0 L 10 5 L 0 10 z', fill: color }));
+    defs.appendChild(marker);
+  }
+
+  function edgePoints(from, to, nodeWidth, nodeHeight) {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const fromScale = Math.min(
+      dx === 0 ? Infinity : (nodeWidth / 2 + 6) / Math.abs(dx),
+      dy === 0 ? Infinity : (nodeHeight / 2 + 6) / Math.abs(dy)
+    );
+    const toScale = Math.min(
+      dx === 0 ? Infinity : (nodeWidth / 2 + 9) / Math.abs(dx),
+      dy === 0 ? Infinity : (nodeHeight / 2 + 9) / Math.abs(dy)
+    );
+    return {
+      start: { x: from.x + dx * fromScale, y: from.y + dy * fromScale },
+      end: { x: to.x - dx * toScale, y: to.y - dy * toScale }
+    };
+  }
+
+  function renderNode(position, gpuIndex, nodeState, nodeWidth, nodeHeight) {
+    const group = makeSvg('g', {
+      'aria-label': `GPU${gpuIndex}${gpuIndex === 0 ? ', root' : ''}: ${nodeState.status || nodeState.items.map((item) => item.label).join(', ')}`
+    });
+    group.appendChild(makeSvg('rect', {
+      class: 'tree-node',
+      x: position.x,
+      y: position.y,
+      width: nodeWidth,
+      height: nodeHeight,
+      rx: '12'
+    }));
+
+    const gpuLabel = makeSvg('text', {
+      class: 'tree-gpu-label',
+      x: position.x + 12,
+      y: position.y + 23
+    });
+    gpuLabel.textContent = `GPU${gpuIndex}`;
+    group.appendChild(gpuLabel);
+
+    if (gpuIndex === 0) {
+      const rootLabel = makeSvg('text', {
+        class: 'tree-root-label',
+        x: position.x + nodeWidth - 12,
+        y: position.y + 22,
+        'text-anchor': 'end'
+      });
+      rootLabel.textContent = 'root';
+      group.appendChild(rootLabel);
+    }
+
+    if (nodeState.items.length) {
+      const innerX = position.x + 10;
+      const gap = 6;
+      const chipWidth = (nodeWidth - 20 - gap) / 2;
+      const chipHeight = 28;
+      nodeState.items.forEach((item, index) => {
+        const column = index % 2;
+        const row = Math.floor(index / 2);
+        const x = innerX + column * (chipWidth + gap);
+        const y = position.y + 39 + row * (chipHeight + gap);
+        group.appendChild(makeSvg('rect', {
+          x,
+          y,
+          width: chipWidth,
+          height: chipHeight,
+          rx: '8',
+          fill: item.hot ? hotSurface[item.id] : chunkSurface[item.id],
+          stroke: item.hot ? chunkColor[item.id] : 'none',
+          'stroke-width': item.hot ? '1.5' : '0'
+        }));
+        const label = makeSvg('text', {
+          class: `tree-chip-label${item.hot ? ' is-hot' : ''}`,
+          x: x + chipWidth / 2,
+          y: y + chipHeight / 2,
+          'text-anchor': 'middle',
+          'dominant-baseline': 'central'
+        });
+        label.textContent = item.label;
+        group.appendChild(label);
+      });
+    } else {
+      const statusText = makeSvg('text', {
+        class: 'tree-node-status',
+        x: position.x + nodeWidth / 2,
+        y: position.y + nodeHeight / 2 + 10,
+        'text-anchor': 'middle',
+        'dominant-baseline': 'central'
+      });
+      statusText.textContent = nodeState.status;
+      group.appendChild(statusText);
+    }
+
+    svg.appendChild(group);
+  }
+
+  function renderEdgeLabel(path, label, color) {
+    const length = path.getTotalLength();
+    const point = path.getPointAtLength(length / 2);
+    const before = path.getPointAtLength(Math.max(0, length / 2 - 1));
+    const after = path.getPointAtLength(Math.min(length, length / 2 + 1));
+    const dx = after.x - before.x;
+    const dy = after.y - before.y;
+    const magnitude = Math.hypot(dx, dy) || 1;
+    const x = point.x - (dy / magnitude) * 12;
+    const y = point.y + (dx / magnitude) * 12;
+    const width = Math.max(40, [...label].length * 7 + 27);
+    const group = makeSvg('g');
+    group.appendChild(makeSvg('rect', {
+      x: x - width / 2,
+      y: y - 12,
+      width,
+      height: 24,
+      fill: 'var(--background)'
+    }));
+    group.appendChild(makeSvg('circle', {
+      cx: x - width / 2 + 10,
+      cy: y,
+      r: '4',
+      fill: color
+    }));
+    const text = makeSvg('text', {
+      class: 'tree-edge-label',
+      x: x + 4,
+      y,
+      'text-anchor': 'middle',
+      'dominant-baseline': 'central'
+    });
+    text.textContent = label;
+    group.appendChild(text);
+    svg.appendChild(group);
+  }
+
+  function animatePacket(path, color) {
+    if (reducedMotion.matches) return;
+    const packet = makeSvg('circle', {
+      r: '5',
+      fill: color,
+      'aria-hidden': 'true'
+    });
+    svg.appendChild(packet);
+    const length = path.getTotalLength();
+    const startedAt = performance.now();
+    const duration = 650;
+
+    function frame(now) {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const point = path.getPointAtLength(length * eased);
+      packet.setAttribute('cx', point.x);
+      packet.setAttribute('cy', point.y);
+      if (progress < 1) {
+        const frameId = requestAnimationFrame(frame);
+        animationFrames.push(frameId);
+      } else {
+        packet.remove();
+      }
+    }
+
+    const frameId = requestAnimationFrame(frame);
+    animationFrames.push(frameId);
+  }
+
+  function describeState(state) {
+    const transfers = state.transfers.length
+      ? state.transfers.map((item) => `GPU${item.from} sends ${item.label} to GPU${item.to}`).join('; ')
+      : 'No transfer yet';
+    const holdings = state.nodes.map((nodeState, gpuIndex) => {
+      const value = nodeState.status || nodeState.items.map((item) => item.label).join(', ');
+      return `GPU${gpuIndex} ${value}`;
+    }).join('; ');
+    return `${state.phase}. ${transfers}. ${holdings}.`;
+  }
+
+  function draw(animate = false) {
+    animationFrames.forEach((frameId) => cancelAnimationFrame(frameId));
+    animationFrames = [];
+    svg.replaceChildren();
+
+    const state = states[currentStep];
+    const measuredWidth = Math.round(stage.getBoundingClientRect().width);
+    const width = Math.max(320, measuredWidth || 736);
+    const compact = width < 560;
+    const margin = compact ? 8 : 20;
+    const columnGap = compact ? 12 : 90;
+    const nodeWidth = compact
+      ? Math.min(150, (width - margin * 2 - columnGap) / 2)
+      : Math.min(210, (width - margin * 2 - columnGap) / 2);
+    const nodeHeight = compact ? 130 : 116;
+    const topY = compact ? 52 : 56;
+    const levelGap = compact ? 78 : 90;
+    const middleY = topY + nodeHeight + levelGap;
+    const bottomY = middleY + nodeHeight + levelGap;
+    const height = bottomY + nodeHeight + 40;
+    const leftX = margin;
+    const rightX = width - margin - nodeWidth;
+    const rootX = (width - nodeWidth) / 2;
+
+    lastWidth = width;
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.setAttribute('height', String(height));
+    svg.style.height = `${height}px`;
+    svg.setAttribute('aria-label', describeState(state));
+
+    const defs = makeSvg('defs');
+    addMarker(defs, 'tree4-arrow-reduce', phaseColor.Reduce);
+    addMarker(defs, 'tree4-arrow-broadcast', phaseColor.Broadcast);
+    svg.appendChild(defs);
+
+    const positions = [
+      { x: rootX, y: topY },
+      { x: leftX, y: middleY },
+      { x: rightX, y: middleY },
+      { x: rightX, y: bottomY }
+    ];
+    const centers = positions.map((position) => ({
+      x: position.x + nodeWidth / 2,
+      y: position.y + nodeHeight / 2
+    }));
+
+    [[0, 1], [0, 2], [2, 3]].forEach(([from, to]) => {
+      const points = edgePoints(centers[from], centers[to], nodeWidth, nodeHeight);
+      svg.appendChild(makeSvg('path', {
+        class: 'tree-edge',
+        d: `M ${points.start.x} ${points.start.y} L ${points.end.x} ${points.end.y}`,
+        stroke: 'var(--border)',
+        'stroke-width': '1.5'
+      }));
+    });
+
+    const activePaths = state.transfers.map((item) => {
+      const color = phaseColor[state.phase];
+      const points = edgePoints(centers[item.from], centers[item.to], nodeWidth, nodeHeight);
+      const path = makeSvg('path', {
+        class: 'tree-edge',
+        d: `M ${points.start.x} ${points.start.y} L ${points.end.x} ${points.end.y}`,
+        stroke: color,
+        'stroke-width': '2.5',
+        'marker-end': `url(#tree4-arrow-${state.phase.toLowerCase()})`
+      });
+      svg.appendChild(path);
+      return { path, item, color };
+    });
+
+    positions.forEach((position, gpuIndex) => {
+      renderNode(position, gpuIndex, state.nodes[gpuIndex], nodeWidth, nodeHeight);
+    });
+
+    activePaths.forEach(({ path, item, color }) => {
+      renderEdgeLabel(path, item.label, color);
+      if (animate) animatePacket(path, color);
+    });
+
+    phaseLabel.textContent = state.phase;
+    stepLabel.textContent = state.title;
+    summary.textContent = state.summary;
+    previousButton.disabled = currentStep === 0;
+    nextButton.disabled = currentStep === states.length - 1;
+  }
+
+  previousButton.addEventListener('click', () => {
+    if (currentStep > 0) {
+      currentStep -= 1;
+      draw(true);
+    }
+  });
+
+  nextButton.addEventListener('click', () => {
+    if (currentStep < states.length - 1) {
+      currentStep += 1;
+      draw(true);
+    }
+  });
+
+  const resizeObserver = new ResizeObserver((entries) => {
+    const nextWidth = Math.round(entries[0].contentRect.width);
+    if (nextWidth && Math.abs(nextWidth - lastWidth) > 1) draw(false);
+  });
+  resizeObserver.observe(stage);
+  draw(false);
+})();
+</script>
+
+<style>
+  /* pinned to the blog's m10c palette so the embed blends into the post */
+  :root {
+    color-scheme: dark;
+    --color-background-primary: #353b43;
+    --color-background-secondary: #3f464f;
+    --color-text-primary: #d6dde3;
+    --color-text-secondary: rgb(214 221 227 / 62%);
+    --color-text-info: #57cc8a;
+    --color-background-info: rgb(87 204 138 / 16%);
+    --color-border-primary: rgb(255 255 255 / 14%);
+    --color-border-secondary: rgb(255 255 255 / 10%);
+  }
+  html > body { padding: 6px 2px; }
+</style>
+<script>
+(() => {
+  const report = () => parent.postMessage(
+    { type: "embed-height", height: Math.ceil(document.body.getBoundingClientRect().height) }, "*");
+  new ResizeObserver(report).observe(document.body);
+  window.addEventListener("load", report);
+})();
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 +++
 title = 'NCCL and NVLink Notes'
 date = 2026-08-05T21:00:00+08:00
-lastmod = 2026-08-20T09:00:00+08:00
+lastmod = 2026-08-23T18:00:00+08:00
 draft = false
 categories = ['Network']
 tags = ['NCCL', 'NVLink', 'NVSwitch', 'AllReduce', 'RoCEv2', 'AI Networking', 'GPU', 'GPUDirect RDMA', 'nccl-tests']
@@ -75,7 +75,11 @@ In PyTorch you call `torch.distributed.all_reduce()`, not `ncclAllReduce()`; `Pr
 
 These are not mutually exclusive: an HPC program can launch with MPI, exchange control information over MPI, and run the GPU data plane on NCCL.
 
-## 3. The vocabulary: rank, communicator, unique ID, stream, channel
+## 3. The vocabulary: rank, communicator, collective, unique ID, stream, channel
+
+The whole section in one picture — read the top row left to right (ranks are grouped into a communicator, which issues collectives), then the mechanics underneath (how the communicator is bootstrapped, what a call does on a CUDA stream, how the work splits into channels), and finally the contract every rank must honor:
+
+![NCCL vocabulary - rank, communicator, collective, bootstrap, stream, channel, and the hard contract](/posts/nvlink-nccl-scaleup-scaleout/nccl-vocabulary.svg)
 
 ### 3.1 Rank
 
@@ -91,11 +95,19 @@ They coincide in a simple data-parallel job, and diverge as soon as sub-groups e
 
 The **communicator** is NCCL's central object: a fixed set of ranks plus their topology, connections, channels, algorithms, and runtime state — a "communication room" with a membership list. Membership is fixed at initialization; every rank must enter the group's collectives in a consistent order; different communicators are independent; one process typically holds several (DP, TP, PP…). Initialization comes in three flavors: `ncclCommInitRank` (multi-process/multi-node, the common case), `ncclCommInitAll` (single process driving several GPUs), and `ncclCommInitRankConfig` (with extra configuration; capabilities evolve by version).
 
-### 3.3 Unique ID and bootstrap
+### 3.3 Collective
+
+A **collective** is an operation that *every* rank in the communicator takes part in: each rank calls the same function — `ncclAllReduce`, `ncclBroadcast`, … — against the same communicator, and the operation is only complete when all of them have. AllReduce is everyone doing AllReduce together; nobody is optional, and no rank can be a passive bystander. That is the contrast with point-to-point `Send`/`Recv`, where exactly two ranks are involved and the rest of the group is unaware. Three consequences follow directly:
+
+- Each rank issues the call on its *own* stream, so a collective is really one submission per rank that NCCL stitches into a single operation.
+- A rank that never makes its call stalls every other rank forever — which is why "one rank hung" presents as "the whole job hung".
+- The order in which collectives are issued must agree across ranks: NCCL matches them by position in the issue sequence (the API has no tags or ids) — the rule made precise in 3.7.
+
+### 3.4 Unique ID and bootstrap
 
 One process calls `ncclGetUniqueId()`, then distributes the `ncclUniqueId` to all others through a control plane *outside* NCCL — MPI broadcast, TCP socket, the PyTorch Store, or the rendezvous mechanism of Kubernetes or the job launcher. Everyone then calls `ncclCommInitRank()` with the same ID, a consistent `nranks`, and its own rank. The ID is how members of the same group find each other; during bootstrap NCCL exchanges node, GPU, NIC, and connection information, then builds the actual transport channels. The division of labor matters for debugging: **NCCL owns the data plane; member discovery, process launch, and ID distribution belong to the upper runtime.**
 
-### 3.4 CUDA streams: enqueued is not finished
+### 3.5 CUDA streams: enqueued is not finished
 
 NCCL calls take a CUDA stream, and when the call returns, **the operation has usually only been enqueued** — no data has necessarily moved:
 
@@ -113,11 +125,11 @@ subsequent dependent operations may continue
 
 To know a transfer finished: synchronize the stream, wait on a CUDA event recorded after it, or use the framework's async Work/Future interface. A separate communication stream lets communication overlap independent computation — but the dependency must then be expressed explicitly with events or stream waits.
 
-### 3.5 Channels
+### 3.6 Channels
 
 NCCL splits one operation across multiple **channels** — logical communication pipelines, each with its own rank ordering, peer connections, and work queues; lanes on a highway. Too few channels underutilize NVLink or NIC bandwidth; too many inflate kernel, synchronization, buffer, and connection overhead. NCCL picks the count automatically; `NCCL_MIN/MAX_NCHANNELS` exist for diagnostics and experiments, not for blind pinning in production.
 
-### 3.6 The hard contract
+### 3.7 The hard contract
 
 One rule explains most training hangs: **within a single collective, every rank must pass the same element count and datatype, enter the same operation, in the same order — and every rank must actually enter the call.** Violate it and behavior is undefined: hang, crash, or silently wrong numbers. When a job freezes "in communication", the first check is not a network counter; it is whether some rank skipped the call, reordered two collectives, or passed a mismatched shape.
 
@@ -137,6 +149,8 @@ NCCL's native interface has long covered five collectives — `AllReduce`, `AllG
 
 ![AllReduce - every rank contributes, every rank receives the full reduced result](/posts/nvlink-nccl-scaleup-scaleout/nccl-allreduce.svg)
 
+![Reduce - every rank contributes, only the root receives the reduced result](/posts/nvlink-nccl-scaleup-scaleout/nccl-reduce.svg)
+
 ![ReduceScatter - reduce all inputs, each rank keeps exactly one shard](/posts/nvlink-nccl-scaleup-scaleout/nccl-reducescatter.svg)
 
 ### 4.2 Collect-and-distribute family: Broadcast, Scatter, Gather, AllGather
@@ -147,6 +161,12 @@ This family does no arithmetic — it only moves data. The four members are dist
 - **Scatter** — the root holds P chunks and hands chunk *i* to rank *i* — distribution with slicing.
 - **Gather** — the reverse: every rank's chunk is collected **to the root only** — for example, pulling scattered eval results onto one card.
 - **AllGather** — every rank contributes its shard, and **every rank receives the full concatenation, ordered by rank index**. FSDP's other half: parameters live sharded; just before a layer computes, an AllGather temporarily reassembles the full weights, which are released after use. The cost is just as characteristic: the full tensor materializes on *every* rank, so AllGather timing is exactly the knob FSDP tunes to keep peak VRAM under control.
+
+![Broadcast - the root holds the full tensor, afterwards every rank holds an identical copy](/posts/nvlink-nccl-scaleup-scaleout/nccl-broadcast.svg)
+
+![Scatter - the root holds P chunks and hands chunk i to rank i](/posts/nvlink-nccl-scaleup-scaleout/nccl-scatter.svg)
+
+![Gather - every rank's chunk is collected onto the root only](/posts/nvlink-nccl-scaleup-scaleout/nccl-gather.svg)
 
 ![AllGather - every rank contributes its shard, every rank ends with the full set](/posts/nvlink-nccl-scaleup-scaleout/nccl-allgather.svg)
 
@@ -222,19 +242,162 @@ Rank 0 → Rank 1 → Rank 2 → Rank 3
 - **Phase 1 — ReduceScatter:** each rank sends a chunk to its neighbor; each received chunk is reduced with the local data and passed on. After P−1 steps, every rank holds one chunk of the final result.
 - **Phase 2 — AllGather:** each rank forwards its finished chunk around the ring; after another P−1 steps everyone has everything.
 
-Per-rank transfer volume is `2 × (P−1)/P × M` — approaching `2M` as P grows. For the 8-GPU, 14 GB-gradient example from section 1: ~24.5 GB through the links per rank per step, *more than the gradient tensor itself*, repeated every step. That is the "communication wall" of large-scale training. Ring's strengths: no central bottleneck, every link busy, fully pipelined — ideal for large bandwidth-dominated messages. Its weakness: about `2(P−1)` communication steps, so for small messages the accumulated latency dominates as P grows.
+Step through it on four GPUs. Assume each GPU starts with four chunks of its own data:
+
+```text
+GPU0 has [a₀, b₀, c₀, d₀]
+GPU1 has [a₁, b₁, c₁, d₁]
+GPU2 has [a₂, b₂, c₂, d₂]
+GPU3 has [a₃, b₃, c₃, d₃]
+```
+
+⊕ is the reduction, and the goal is for every GPU to end with `[A, B, C, D]`, where `A = a₀⊕a₁⊕a₂⊕a₃` and likewise for B, C, D. Watch the ring do it in three reduce-scatter hops followed by three all-gather hops — six steps in all — the two P−1 phases above, 2(P−1) together:
+
+{{< embed src="/posts/nvlink-nccl-scaleup-scaleout/ring-all-reduce.html" title="Ring all-reduce on 4 GPUs, step by step" height="640" >}}
+
+Per-rank transfer volume is `2 × (P−1)/P × M` — approaching `2M` as P grows. For the 8-GPU, 14 GB-gradient example from section 1: ~24.5 GB through the links per rank per step, *more than the gradient tensor itself*, repeated every step. That is the "communication wall" of large-scale training. Ring's strengths: no central bottleneck, every link busy, fully pipelined — ideal for large bandwidth-dominated messages on a modest number of nodes. Its weakness: about `2(P−1)` communication steps, so for small messages the accumulated latency dominates as P grows.
 
 ### 6.3 Tree
 
-Tree AllReduce reduces up and broadcasts down a tree of height ~log₂P, so it needs far fewer rounds than Ring — better for small, latency-sensitive messages. Real NCCL builds *multiple complementary trees* so different ranks and links share the load and the root does not become a hotspot; chunking, pipelining, and multiple channels keep it parallel. "Tree" does not mean all data funnels through one fixed root.
+Tree AllReduce reduces up and broadcasts down a tree, so its step count grows with the tree's height rather than with the rank count — better for small, latency-sensitive messages, and for large scale. What NCCL actually builds (since 2.4) is a **double binary tree across nodes**, with a chain through the GPUs inside each node (one chain per NIC). The tree's vertices are *nodes*, not GPUs, and the two trees are complementary: every node is an interior vertex in at most one of them (one node may be a leaf in both), and each tree carries half the data. That is what restores full bandwidth — a single binary tree would leave its leaves sending only during the reduce and receiving only during the broadcast, wasting half of every link. Chunking, pipelining, and multiple channels keep every link busy, and the two trees have different roots, so no node is a hotspot. "Tree" does not mean all data funnels through one fixed root — and in NCCL it is AllReduce-only. (How it compares to Ring in measured numbers is in 6.6.)
+
+Same four GPUs and the same starting data as the Ring walkthrough above, now arranged as a tree: GPU0 is the root, GPU1 and GPU2 are its children, and GPU3 hangs below GPU2. Round 1: GPU1→GPU0 and GPU3→GPU2 run in parallel, producing the subtree partials `V₀₁` and `V₂₃`. Round 2: GPU2 sends `V₂₃` up and the root computes `V₀₁ ⊕ V₂₃ = [A, B, C, D]`. Then the result is broadcast back down in two more rounds. Four steps instead of Ring's six — the logarithmic advantage. Two things this teaching tree simplifies: every hop carries a whole vector, where Ring's hops carry 1/P-sized chunks — which is exactly why real NCCL chunks and pipelines its trees; and it is a single tree drawn over GPUs, where NCCL runs two complementary trees between *nodes* with a chain inside each node:
+
+{{< embed src="/posts/nvlink-nccl-scaleup-scaleout/tree-all-reduce.html" title="Tree all-reduce on 4 GPUs, step by step" height="640" >}}
 
 ### 6.4 CollNet
 
-CollNet is the family of algorithm paths that use **network-side collective offload** — switches or fabric services that can aggregate during transmission — combining intra-node reduction, in-network aggregation, and intra-node distribution to cut the cost of cross-node collectives. Whether it is available depends on NCCL version, network hardware and drivers, the NCCL Net/CollNet plugin, Fabric Manager / SHARP / vendor components, and the current topology and scale. It is **not** a general software algorithm you can force on by setting an environment variable.
+CollNet is the family of algorithm paths that use **network-side collective offload** — switches or fabric services that can aggregate during transmission — combining intra-node reduction, in-network aggregation, and intra-node distribution to cut the cost of cross-node collectives. Whether it is available depends on NCCL version, network hardware and drivers, the NCCL Net/CollNet plugin, the SHARP Aggregation Manager (under UFM) or equivalent vendor components, and the current topology and scale. Setting `NCCL_COLLNET_ENABLE=1` is necessary but not sufficient: without the plugin, a SHARP-capable fabric, and at least two nodes, NCCL silently falls back to Ring and Tree.
+
+```text
+GPU reductions inside each node
+              ↓
+collective reduction across nodes
+              ↓
+distribution back to every local GPU
+```
+
+The key distinction is that CollNet hands the *inter-node* phase to a collective-network plugin. The plugin exposes operations such as an asynchronous `iallreduce()`. With NVIDIA SHARP, that collective is reduced inside the network switches; another CollNet plugin could implement it differently. CollNet itself is therefore an NCCL interface and algorithm family — not necessarily switch hardware.
+
+#### The four-GPU walkthrough: CollNetDirect
+
+The same four GPUs and starting data once more, now split across **two nodes** — Node A holds GPU0/GPU1, Node B holds GPU2/GPU3 — joined by two CollNet reduction *rails* (a rail is one head-GPU-to-HCA path into the fabric; defined fully below). Inside each node one GPU acts as the *head* for each rail:
+
+```text
+Node A                          Node B
+GPU0 = head 0                   GPU2 = head 0
+GPU1 = head 1                   GPU3 = head 1
+
+head / rail 0 owns a,b
+head / rail 1 owns c,d
+```
+
+Each GPU first scatters its non-owned slice to the matching local head; each head reduces its two local contributions and uploads a single node-level partial on its rail; the fabric reduces the two node partials *in the network* and hands `[A, B]` or `[C, D]` back to the heads; finally the heads exchange slices locally so every GPU assembles `[A, B, C, D]`. Four steps, and only **one** partial per node per rail ever crosses the inter-node link — that is the bandwidth saving the offload buys.
+
+> **Note:** this is a demo assignment — see "What the visualization intentionally simplifies" below for what real NCCL does with chunks, heads, and channels.
+
+{{< embed src="/posts/nvlink-nccl-scaleup-scaleout/collnet-all-reduce.html" title="CollNetDirect all-reduce across two nodes, step by step" height="640" >}}
+
+#### What a "head" actually means
+
+A head is a GPU rank selected by NCCL as the endpoint for a collective-capable NIC or network rail. It is not necessarily GPU0, and it is not a global root. For CollNetDirect:
+
+- NCCL discovers one or more heads in each node.
+- Every local GPU connects to the available heads.
+- Each head connects back to all its local peers.
+- Tensor chunks are striped across the heads.
+- NCCL rotates assignments so all GPUs do not target the same head simultaneously.
+
+In the source these concepts are represented by `nHeads`, `headRank`, `up`, `down`, and `shift` (`struct ncclDirect` in `src/include/device.h`).
+
+A **rail** is the logical path formed by corresponding heads and HCAs across nodes (HCA — Host Channel Adapter — is the RDMA-capable network adapter used for InfiniBand or RoCE between machines). Multi-rail SHARP deployments generally need equivalent HCA rails on every server so that they connect through corresponding parts of the fabric.
+
+#### CollNetDirect versus CollNetChain
+
+| Property | CollNetDirect | CollNetChain |
+|---|---|---|
+| Local topology | Multi-head fan-in / fan-out | Linear GPU chain |
+| Chunk ownership | Striped across several heads | One head per channel |
+| Local path depth | Shallow | Grows with GPUs per node |
+| NIC parallelism | Can use multiple rails concurrently | Channels may use different heads |
+| Main cost | Requires rich local connectivity | Serial local forwarding |
+| Natural fit | Dense NVLink/NVSwitch and balanced NIC topology | Less densely connected topology |
+
+CollNetChain reduces along a local chain, sends the node result through the collective network, then broadcasts back down the chain. CollNetDirect uses multiple heads to eliminate that long local chain. NCCL enables CollNetDirect only on NVSwitch systems, where the any-to-any intra-node bandwidth it relies on exists; CollNetChain is the option everywhere else. (CollNet arrived in NCCL 2.6; the Chain/Direct split in 2.14.)
+
+#### What the visualization intentionally simplifies
+
+The five displayed states are dependency stages for *one* set of chunks. A real NCCL operation does not globally finish every scatter before starting the network phase. NCCL:
+
+- splits the tensor across multiple channels;
+- further divides channels into chunks;
+- stripes chunks across multiple heads;
+- assigns separate CUDA thread groups to scatter, reduce, broadcast, and gather;
+- uses an asynchronous proxy to issue the network collectives.
+
+Consequently, while chunk *k* is being reduced by the network, chunk *k+1* may be undergoing local reduction and chunk *k+2* may already be scattering. This pipeline is essential for bandwidth.
+
+#### When CollNet performs well
+
+CollNetDirect is most attractive when:
+
+- the job spans multiple nodes (CollNet is never used on one node — `NCCL_COLLNET_NODE_THRESHOLD` defaults to 2);
+- a collective-network plugin such as the NVIDIA SHARP plugin (`nccl-rdma-sharp-plugins`) is installed, and `NCCL_COLLNET_ENABLE=1` is set — CollNet is off by default;
+- GPUDirect RDMA works correctly;
+- local GPU-to-GPU links are fast;
+- GPUs have well-balanced access to NICs;
+- matching HCA rails exist across the nodes;
+- messages are large enough to amortize setup and the local scatter/gather.
+
+The current NCCL cost model specifically notes that CollNetDirect needs every GPU to have a local NIC path to run at full speed; fewer heads can still support an all-reduce, but they concentrate the work on those heads.
 
 ### 6.5 NVLS
 
 On platforms with **NVLink SHARP (NVLS)** capability, part of the reduction executes inside the NVSwitch fabric itself, reducing the data shuttled redundantly between GPUs — for collectives within a node, and specific multi-node cases. Like CollNet it depends on the GPU generation, NVSwitch platform, driver, Fabric Manager, and NCCL version; a PCIe GPU server cannot obtain NVLS through software configuration.
+
+NVLS is an in-fabric reduction mechanism inside NVSwitch: a GPU initiates the operation, but NVSwitch hardware performs the cross-GPU reduction and multicast. That is the key difference from CollNetDirect:
+
+```text
+CollNetDirect : local GPU heads perform the node reduction
+NVLS          : NVSwitch performs the node reduction
+```
+
+NVLS requires a multicast-capable NVSwitch system — third-generation NVSwitch / NVLink 4 with Hopper or later — not merely a Hopper PCIe GPU. It arrived in NCCL 2.17 as an intra-node AllReduce (today it also serves AllGather and ReduceScatter); 2.18 added the multi-node forms — NVLS inside the node chained with IB SHARP between nodes (plain `NVLS`), and `NVLSTree` (NVLS inside the node, NCCL's double binary tree between nodes, AllReduce-only), which needs no IB SHARP at all. What it buys, in numbers, is in 6.6.
+
+#### The two hardware operations
+
+NVLS relies on CUDA multicast memory and two PTX operations:
+
+| Operation | Meaning |
+|---|---|
+| `multimem.ld_reduce` | Read the same address from every GPU replica, reduce those values in NVSwitch, and return one result |
+| `multimem.st` | Write one value to the same address on every GPU replica — a hardware multicast |
+
+A multicast address does not refer to one physically shared buffer. It refers to a multicast object backed by one physical memory replica on each participating GPU:
+
+```text
+         one multicast virtual address
+                      │
+        ┌──────┬──────┼──────┬──────┐
+        ▼      ▼      ▼      ▼      ▼
+      GPU0   GPU1   GPU2   GPU3   …
+    replica replica replica replica
+```
+
+CUDA creates the multicast group, adds the participating GPUs, binds each GPU's physical memory to it, and exposes a multicast virtual address (`cuMulticastCreate` → `cuMulticastAddDevice` → `cuMulticastBindMem` → mapped into each GPU's address space).
+
+#### The four-GPU walkthrough: NVLS
+
+The same four GPUs and starting data one last time, now hanging off a single NVSwitch. Every GPU keeps a local **UC** (unicast) backing replica of the buffer, and one **MC** (multicast) address is mapped over all four replicas at matching offsets. For the teaching slice, GPU0 *owns* stripe a, GPU1 owns b, GPU2 owns c, GPU3 owns d. The four steps:
+
+1. Each GPU stages its four stripes into its own UC replica.
+2. Each owner issues a `multimem.ld_reduce` at the MC address for its stripe — the switch reads that stripe from all four backing replicas, reduces them in the fabric, and returns one result to the issuing GPU.
+3. Each owner issues a `multimem.st` at the MC address — the switch writes the finished stripe into a second, receive-side UC replica on all four GPUs at once.
+4. Every GPU reads `[A, B, C, D]` from its own local replica.
+
+No GPU ever sends a chunk to another GPU — the reduction and the broadcast both happen inside the switch:
+
+{{< embed src="/posts/nvlink-nccl-scaleup-scaleout/nvls-all-reduce.html" title="NVLS all-reduce on 4 GPUs through NVSwitch, step by step" height="640" >}}
 
 ### 6.6 Don't pin the algorithm
 
@@ -242,20 +405,38 @@ NCCL builds a performance model from message size, rank count, node count, topol
 
 | Scenario | Direction that tends to win |
 |---|---|
-| Small messages, latency-sensitive | Tree + low-latency protocols |
-| Large messages, bandwidth-sensitive | Ring + more pipelined parallelism |
+| Small messages, latency-sensitive | Tree (the cost model picks LL / LL128 at those sizes) |
+| Large messages on few nodes, bandwidth-sensitive | Ring |
+| Hundreds of GPUs and up, any size | Tree (or NVLSTree) — ring latency and bandwidth both degrade with scale |
 | Network collective offload available | CollNet / the corresponding plugin path |
 | NVLink SHARP available | NVLS |
 
 These are rules of thumb, not rules — the heuristics change across versions. `NCCL_ALGO` is for A/B testing and fault isolation, not a standing optimization.
+
+#### Ring vs Tree vs CollNet vs NVLS at a glance
+
+The comparison below is rebuilt from primary sources — NVIDIA's NCCL 2.4 post on double binary trees, the NCCL user guide, the NCCL source's tuning model and release notes, and the Hopper/NVSwitch architecture posts — because the popular three-column version of this chart gets several things wrong (see the note at the end).
+
+![NCCL AllReduce algorithms compared - Ring, Tree, CollNet, NVLS](/posts/nvlink-nccl-scaleup-scaleout/nccl-algorithm-comparison.svg)
+
+- **Ring** — *Mechanism:* ranks form a ring (NCCL's rings run both inside and between nodes) and the data moves chunk by chunk through the two pipelined phases of 6.2, reduce-scatter then all-gather. *Strength:* bandwidth-optimal — each rank sends and receives only `2(P−1)/P` of the buffer and every link stays busy, so large messages run at line rate. *Weakness:* `2(P−1)` steps, so latency grows linearly with the rank count. In NVIDIA's Summit measurements (NCCL 2.3 rings against 2.4 trees) an 8-byte ring AllReduce went from ~180 µs at 96 GPUs to ~45 ms at 24,576, and even 64 MB ring bandwidth collapsed from ~19 GB/s to under 2 GB/s over the same range. *Applies to:* all five collectives; all three protocols, chosen by size. *Best for:* large messages on a modest number of nodes.
+- **Tree** — *Mechanism:* as 6.3 explains, a double binary tree over *nodes* with a chain through each node's GPUs; the two trees are complementary and each carries half the data. *Strength:* full bandwidth with logarithmic latency — latency ∝ (GPUs per node − 1) + log₂(nodes). On Summit the 8-byte AllReduce was ~180× faster than ring at 24,576 GPUs, and 64 MB bandwidth held at ~12–15 GB/s where rings had fallen below 2 GB/s. *Weakness:* the tuner models Tree at ~0.92× its ring-equivalent bandwidth, and on PCIe-only nodes NCCL's maintainers put it at ~2/3, because the intra-node chain shares the PCIe link with the NIC — which is why tuning switches to rings earlier there. *Applies to:* AllReduce only; all three protocols. *Best for:* small and medium messages, and anything at scale.
+- **CollNet** — *Mechanism:* the *inter-node* phase is handed to a network plugin (`ncclCollNet_t`; the only publicly available implementation is NVIDIA's SHARP plugin for Quantum InfiniBand switches). GPUs reduce inside the node first — a chain (CollNetChain) or an all-to-all across head GPUs (CollNetDirect) — then each head sends the node's partial once per NIC rail into the switches' SHARP aggregation tree, receives the result once, and redistributes it locally. It is **not** "every GPU to one switch in one hop": only the heads talk to the network, and only after local reduction. *Strength:* each node sends its data once and receives the result once, pipelined with the intra-node work, so it holds up at thousand-GPU scale. *Weakness:* needs a SHARP-capable InfiniBand fabric plus the plugin, and NCCL only runs CollNetDirect on NVSwitch nodes (6.4). *Applies to:* AllReduce, AllGather, ReduceScatter (Direct); AllReduce (Chain); multi-node only; Simple only. *Best for:* multi-node training on a SHARP fabric.
+- **NVLS (NVLink SHARP)** — *Mechanism:* SHARP ALUs inside third-generation NVSwitch do the arithmetic. Each GPU owns a 1/P slice and drives `multimem.ld_reduce` (the switch fetches that slice from every GPU's replica and returns the sum) followed by `multimem.st` (the switch multicasts the result back to every replica) — a reduce-scatter and all-gather performed *by the switch*, as the 6.5 walkthrough shows. *Strength:* the best intra-node latency and bandwidth: NCCL's maintainers quote single-node AllReduce **bus bandwidth** on DGX H100 rising from ~370 to ~480 GB/s once NVLS is used (the normalized nccl-tests figure of 12.1, not wire throughput — the wire rate is the 450 GB/s of section 9.1), and NVIDIA rates the H100 NVSwitch fabric at 450 GB/s for reductions, 3× the A100 generation. *Weakness:* Hopper-or-later GPUs on an NVSwitch (NVLink 4+) system only — HGX/DGX H100 and GB200 NVL72, where the domain grows to 72 GPUs; PCIe cards and bridge-connected NVLink get nothing. *Applies to:* AllReduce, AllGather, ReduceScatter (NVLSTree: AllReduce only); Simple only. *Multi-node:* NVLS inside the node chained with IB SHARP between nodes (plain `NVLS`), or with NCCL's double binary tree between nodes (`NVLSTree`, 2.18+), which needs no IB SHARP. On by default (`NCCL_NVLS_ENABLE=2`).
+
+How NCCL actually chooses between them: since 2.5 there is no size threshold (`NCCL_TREE_THRESHOLD` lived only in 2.4). A cost model estimates `time = latency × steps + bytes / bandwidth` for every algorithm × protocol pair from per-topology tables and runs the cheapest — which is why a single job routinely uses Tree and Ring with all three protocols across its different message sizes. The tendencies that fall out of it: trees for small and medium sizes and at scale, rings for large sizes on few nodes (and on non-NVLink systems, trees only for small sizes), NVLS whenever the hardware allows.
+
+> **What the popular three-column chart gets wrong** (the one this figure replaces): its third column, labeled "CollNet", describes **NVLS** — every GPU pushing to the NVSwitch chip, which does the sum — and claims it needs DGX-class NVSwitch hardware; CollNet proper is the InfiniBand SHARP path and needs no NVSwitch, while NVLS is the NVSwitch path. It states Tree runs at "half the bandwidth because only half the nodes work at each level" — true of one naive tree, not of NCCL's double binary tree, which delivers full bandwidth. It draws Tree as a binary tree over GPUs, where NCCL's tree is binary over *nodes* with a chain inside each node. It gives Ring "N−1 rounds" — that is one phase; AllReduce takes twice that, 2(P−1) in this post's notation. And it pairs each algorithm with fixed protocols and fixed message sizes ("Ring + Simple/LL128 for ≥ tens of MB, Tree + LL/LL128 for ≤ a few MB"), where NCCL's cost model picks the protocol per size for both algorithms — the one hard protocol rule is the Simple-only restriction on the offload algorithms, stated in section 7.
 
 ## 7. Protocols: Simple, LL, LL128
 
 Algorithms describe how communication is organized *between ranks*; protocols describe the format, granularity, and synchronization of the data *within each step*.
 
 - **Simple** — favors bandwidth: high payload ratio, efficient at link speed; the fixed overhead shows on small messages.
-- **LL (Low Latency)** — fine-grained data-plus-flag organization lets the receiver observe readiness sooner and skip some synchronization waits; the metadata costs bandwidth, so large messages run below Simple.
-- **LL128** — the compromise: a 128-byte line layout of data and flags that, on paths meeting its hardware requirements, keeps fine-grained pipelining while achieving much better effective bandwidth than LL.
+- **LL (Low Latency)** — every 8-byte store carries 4 bytes of data and a 4-byte flag, so the receiver sees readiness immediately and skips the synchronization waits; the flags cost half the bandwidth (LL tops out around 50% of peak), so NCCL uses it only for very small messages.
+- **LL128** — the compromise: a 128-byte line carries 120 bytes of data and an 8-byte flag, keeping fine-grained pipelining at ~95% of peak bandwidth. It relies on 128-byte stores being observed in order, so NCCL enables it only on paths where that holds — NVLink inside the node, and across the network when the NIC sits behind PCIe switches rather than a host bridge; Hopper and Blackwell extend that to the PXN and Grace C2C paths. Enabling it elsewhere can corrupt data, which is why the docs discourage touching `NCCL_PROTO` at all.
+
+Ring and Tree can each run all three protocols. The offload algorithms — CollNet, NVLS, and PAT (Parallel Aggregated Trees, the log-step AllGather/ReduceScatter algorithm added in 2.23) — are Simple-only.
 
 The selection space is two-dimensional, and the full execution plan wider still:
 
@@ -607,8 +788,10 @@ These are made for bisection-style fault isolation: if disabling P2P fixes the p
 
 | Variable | Effect |
 |---|---|
-| `NCCL_ALGO` | Restrict/exclude algorithms (Ring, Tree, CollNet, NVLS; values per version) |
+| `NCCL_ALGO` | Restrict/exclude algorithms: Ring, Tree, CollNetChain, CollNetDirect, NVLS, NVLSTree, PAT (versions vary; settable per collective since 2.24) |
 | `NCCL_PROTO` | Restrict/exclude protocols (Simple, LL, LL128) |
+| `NCCL_NVLS_ENABLE` | NVLink SHARP: `0` off; `2` (default) enable when the device reports multicast support; `1` enable without that check — neither fails on unsupported hardware, both fail if NVLS resources cannot be allocated |
+| `NCCL_COLLNET_ENABLE` | Enable the CollNet plugin path (default `0`) |
 | `NCCL_MIN_NCHANNELS` | Floor on the channel count |
 | `NCCL_MAX_NCHANNELS` | Ceiling on the channel count |
 
@@ -677,7 +860,7 @@ Rank 0: AllReduce(A) → AllGather(B)
 Rank 1: AllGather(B) → AllReduce(A)
 ```
 
-Ranks in one communicator must enter operations in a compatible order. Then check the rest of section 3.6's contract: element counts, datatypes, root rank consistency; a rank that skipped the collective on an exception; a conditional branch that only some ranks executed; multiple threads submitting to one communicator in nondeterministic order.
+Ranks in one communicator must enter operations in a compatible order. Then check the rest of section 3.7's contract: element counts, datatypes, root rank consistency; a rank that skipped the collective on an exception; a conditional branch that only some ranks executed; multiple threads submitting to one communicator in nondeterministic order.
 
 ### 15.3 `unhandled system error` and friends
 
@@ -746,7 +929,7 @@ lstopo                    ! visualize PCIe/NUMA relationships
 2. **"NVLink bandwidth = AllReduce bandwidth."** Nominal, unidirectional, bidirectional, per-GPU aggregate, algorithm, and bus bandwidth are six different numbers, and collectives add reduction, synchronization, chunking, and topology constraints. Never use a marketing spec as the expected benchmark value.
 3. **"Forcing Ring / adding channels is always faster."** Small messages often want Tree and low-latency protocols; extra channels cost overhead. Baseline on auto-selection and verify any forced setting with benchmarks.
 4. **"A stuck collective is an NCCL bug."** Inconsistent operation order between ranks, an exited process, mismatched tensor sizes, and divergent control flow are all more common (section 15.2).
-5. **"The call returned, so communication finished."** NCCL operations are asynchronous stream submissions (section 3.4); read results only after the stream dependency is satisfied.
+5. **"The call returned, so communication finished."** NCCL operations are asynchronous stream submissions (section 3.5); read results only after the stream dependency is satisfied.
 6. **"Fast microbenchmark ⇒ fast training."** End-to-end speed also hangs on overlap, message-size distribution, rank load balance, redundant synchronization in the framework, data loading and the CPU, and the topology mapping of the parallelism strategy.
 
 ## 17. Training traffic vs inference traffic
@@ -770,7 +953,7 @@ Inference uses the same primitives — TP's per-layer AllReduce/AllGather, PP's 
 Five layers, and you understand NCCL:
 
 1. **Communication semantics** — what AllReduce, AllGather, ReduceScatter, Broadcast, AlltoAll, and Send/Recv each solve (sections 4–5).
-2. **Communication organization** — how rank, communicator, channel, and CUDA stream structure an operation (section 3).
+2. **Communication organization** — how rank, communicator, collective, channel, and CUDA stream structure an operation (section 3).
 3. **Algorithms and protocols** — Ring/Tree/CollNet/NVLS decide the structure; Simple/LL/LL128 decide the transmission (sections 6–7).
 4. **Topology and transport** — how paths are chosen among NVLink, PCIe, shared memory, RDMA, socket (sections 8–9).
 5. **System-level performance** — the end-to-end number also depends on parallelism strategy, message granularity, overlap, NUMA binding, and the network fabric (sections 12–15).

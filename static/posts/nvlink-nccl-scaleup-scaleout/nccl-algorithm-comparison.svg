@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="640" viewBox="0 0 1100 640" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="1100" height="640" fill="#ffffff"/>
+
+  <text x="40" y="40" font-size="22" font-weight="bold" fill="#2C2C2A">NCCL AllReduce algorithms compared</text>
+  <text x="40" y="64" font-size="13" fill="#5F5E5A">What each algorithm actually does, where it wins, and what it needs &#8212; from NVIDIA's NCCL docs, blog posts, and the NCCL source</text>
+
+  <!-- ============ Ring ============ -->
+  <rect x="40" y="92" width="250" height="490" rx="18" fill="#EEF7EE" stroke="#2E7D32" stroke-width="2"/>
+  <rect x="54" y="106" width="222" height="44" rx="8" fill="#C8E6C9"/>
+  <text x="165" y="135" font-size="19" font-weight="bold" fill="#1B5E20" text-anchor="middle">Ring</text>
+
+  <text x="54" y="176" font-size="12" fill="#2C2C2A">
+    <tspan x="54" dy="0">Ranks form a ring; reduce-scatter</tspan>
+    <tspan x="54" dy="16">then all-gather, chunk by chunk,</tspan>
+    <tspan x="54" dy="16">fully pipelined (rings run both</tspan>
+    <tspan x="54" dy="16">intra- and inter-node)</tspan>
+  </text>
+
+  <text x="54" y="260" font-size="12" fill="#2E7D32">
+    <tspan x="54" dy="0" font-weight="bold">+ Bandwidth-optimal</tspan>
+    <tspan x="54" dy="16">each rank moves 2(P&#8722;1)/P of the</tspan>
+    <tspan x="54" dy="16">buffer and every link stays busy</tspan>
+    <tspan x="54" dy="16">&#8212; line rate on large messages</tspan>
+  </text>
+
+  <text x="54" y="344" font-size="12" fill="#C62828">
+    <tspan x="54" dy="0" font-weight="bold">&#8722; Latency grows linearly with P</tspan>
+    <tspan x="54" dy="16">2(P&#8722;1) steps; on Summit, ring</tspan>
+    <tspan x="54" dy="16">latency and bandwidth collapse</tspan>
+    <tspan x="54" dy="16">beyond a few hundred GPUs</tspan>
+  </text>
+
+  <rect x="54" y="462" width="222" height="104" rx="10" fill="#ffffff" stroke="#2E7D32" stroke-width="1.5"/>
+  <text x="165" y="486" font-size="12" font-weight="bold" fill="#1B5E20" text-anchor="middle">Best for: large messages,</text>
+  <text x="165" y="502" font-size="12" font-weight="bold" fill="#1B5E20" text-anchor="middle">few nodes</text>
+  <text x="165" y="524" font-size="11" fill="#2C2C2A" text-anchor="middle">all five collectives</text>
+  <text x="165" y="540" font-size="11" fill="#2C2C2A" text-anchor="middle">protocols: Simple / LL128 / LL</text>
+  <text x="165" y="556" font-size="11" fill="#2C2C2A" text-anchor="middle">(cost model picks by size)</text>
+
+  <!-- ============ Tree ============ -->
+  <rect x="302" y="92" width="250" height="490" rx="18" fill="#EAF2FB" stroke="#1565C0" stroke-width="2"/>
+  <rect x="316" y="106" width="222" height="44" rx="8" fill="#BBDEFB"/>
+  <text x="427" y="135" font-size="19" font-weight="bold" fill="#0D47A1" text-anchor="middle">Tree</text>
+
+  <text x="316" y="176" font-size="12" fill="#2C2C2A">
+    <tspan x="316" dy="0">Double binary tree across nodes</tspan>
+    <tspan x="316" dy="16">+ a chain inside each node; each node</tspan>
+    <tspan x="316" dy="16">is interior in at most one tree, and</tspan>
+    <tspan x="316" dy="16">each tree carries half the data</tspan>
+  </text>
+
+  <text x="316" y="260" font-size="12" fill="#2E7D32">
+    <tspan x="316" dy="0" font-weight="bold">+ Full bandwidth, log latency</tspan>
+    <tspan x="316" dy="16">latency &#8733; (GPUs/node &#8722; 1) + log&#8322; nodes;</tspan>
+    <tspan x="316" dy="16">8-byte AllReduce ~180&#215; faster than</tspan>
+    <tspan x="316" dy="16">ring at 24,576 GPUs (Summit)</tspan>
+  </text>
+
+  <text x="316" y="344" font-size="12" fill="#C62828">
+    <tspan x="316" dy="0" font-weight="bold">&#8722; One tree alone = half bandwidth</tspan>
+    <tspan x="316" dy="16">hence the double tree; still modeled</tspan>
+    <tspan x="316" dy="16">at ~0.92&#215; ring; ~2/3 on PCIe-only</tspan>
+    <tspan x="316" dy="16">nodes (maintainers); AllReduce only</tspan>
+  </text>
+
+  <rect x="316" y="462" width="222" height="104" rx="10" fill="#ffffff" stroke="#1565C0" stroke-width="1.5"/>
+  <text x="427" y="486" font-size="12" font-weight="bold" fill="#0D47A1" text-anchor="middle">Best for: small and medium</text>
+  <text x="427" y="502" font-size="12" font-weight="bold" fill="#0D47A1" text-anchor="middle">messages, and anything at scale</text>
+  <text x="427" y="524" font-size="11" fill="#2C2C2A" text-anchor="middle">AllReduce only</text>
+  <text x="427" y="540" font-size="11" fill="#2C2C2A" text-anchor="middle">protocols: Simple / LL128 / LL</text>
+  <text x="427" y="556" font-size="11" fill="#2C2C2A" text-anchor="middle">(cost model picks by size)</text>
+
+  <!-- ============ CollNet ============ -->
+  <rect x="564" y="92" width="250" height="490" rx="18" fill="#FDF3E7" stroke="#E67E22" stroke-width="2"/>
+  <rect x="578" y="106" width="222" height="44" rx="8" fill="#FFE0B2"/>
+  <text x="689" y="135" font-size="19" font-weight="bold" fill="#B9770E" text-anchor="middle">CollNet</text>
+
+  <text x="578" y="176" font-size="12" fill="#2C2C2A">
+    <tspan x="578" dy="0">Reduce inside the node first (chain</tspan>
+    <tspan x="578" dy="16">or all-to-all heads), then each head</tspan>
+    <tspan x="578" dy="16">sends one partial per NIC rail into</tspan>
+    <tspan x="578" dy="16">the IB SHARP aggregation tree</tspan>
+  </text>
+
+  <text x="578" y="260" font-size="12" fill="#2E7D32">
+    <tspan x="578" dy="0" font-weight="bold">+ Send once, receive once per node</tspan>
+    <tspan x="578" dy="16">pipelined with the intra-node work;</tspan>
+    <tspan x="578" dy="16">holds up at thousand-GPU scale</tspan>
+    <tspan x="578" dy="16">with one stream per NIC rail</tspan>
+  </text>
+
+  <text x="578" y="344" font-size="12" fill="#C62828">
+    <tspan x="578" dy="0" font-weight="bold">&#8722; Needs SHARP IB fabric + plugin</tspan>
+    <tspan x="578" dy="16">off by default, multi-node only,</tspan>
+    <tspan x="578" dy="16">Simple protocol only; CollNetDirect</tspan>
+    <tspan x="578" dy="16">enabled only on NVSwitch systems</tspan>
+  </text>
+
+  <rect x="578" y="462" width="222" height="104" rx="10" fill="#ffffff" stroke="#E67E22" stroke-width="1.5"/>
+  <text x="689" y="486" font-size="12" font-weight="bold" fill="#B9770E" text-anchor="middle">Best for: multi-node jobs on a</text>
+  <text x="689" y="502" font-size="12" font-weight="bold" fill="#B9770E" text-anchor="middle">SHARP-capable InfiniBand fabric</text>
+  <text x="689" y="524" font-size="11" fill="#2C2C2A" text-anchor="middle">NCCL_COLLNET_ENABLE=1 + plugin</text>
+  <text x="689" y="540" font-size="11" fill="#2C2C2A" text-anchor="middle">Direct: NVSwitch nodes &#183; Chain: others</text>
+  <text x="689" y="556" font-size="11" fill="#2C2C2A" text-anchor="middle">protocol: Simple only</text>
+
+  <!-- ============ NVLS ============ -->
+  <rect x="826" y="92" width="250" height="490" rx="18" fill="#F4EEF9" stroke="#6A1B9A" stroke-width="2"/>
+  <rect x="840" y="106" width="222" height="44" rx="8" fill="#E1BEE7"/>
+  <text x="951" y="135" font-size="19" font-weight="bold" fill="#4A148C" text-anchor="middle">NVLS (NVLink SHARP)</text>
+
+  <text x="840" y="176" font-size="12" fill="#2C2C2A">
+    <tspan x="840" dy="0">SHARP ALUs inside 3rd-gen NVSwitch</tspan>
+    <tspan x="840" dy="16">do the math: each GPU drives</tspan>
+    <tspan x="840" dy="16">multimem.ld_reduce / multimem.st on</tspan>
+    <tspan x="840" dy="16">a multicast mapping of all replicas</tspan>
+  </text>
+
+  <text x="840" y="260" font-size="12" fill="#2E7D32">
+    <tspan x="840" dy="0" font-weight="bold">+ Best intra-node latency and BW</tspan>
+    <tspan x="840" dy="16">DGX H100 AllReduce bus bandwidth</tspan>
+    <tspan x="840" dy="16">~370 &#8594; ~480 GB/s; 450 GB/s fabric</tspan>
+    <tspan x="840" dy="16">reduction rate, 3&#215; the A100 system</tspan>
+  </text>
+
+  <text x="840" y="344" font-size="12" fill="#C62828">
+    <tspan x="840" dy="0" font-weight="bold">&#8722; Hopper+ on NVSwitch only</tspan>
+    <tspan x="840" dy="16">HGX/DGX H100, GB200 NVL72 (72-GPU</tspan>
+    <tspan x="840" dy="16">domain); not PCIe or bridged NVLink;</tspan>
+    <tspan x="840" dy="16">Simple protocol only</tspan>
+  </text>
+
+  <rect x="840" y="462" width="222" height="104" rx="10" fill="#ffffff" stroke="#6A1B9A" stroke-width="1.5"/>
+  <text x="951" y="486" font-size="12" font-weight="bold" fill="#4A148C" text-anchor="middle">Best for: any NVSwitch system</text>
+  <text x="951" y="502" font-size="12" font-weight="bold" fill="#4A148C" text-anchor="middle">&#8212; on by default</text>
+  <text x="951" y="524" font-size="11" fill="#2C2C2A" text-anchor="middle">multi-node: NVLS + IB SHARP,</text>
+  <text x="951" y="540" font-size="11" fill="#2C2C2A" text-anchor="middle">or NVLSTree (NVLS + tree between nodes)</text>
+  <text x="951" y="556" font-size="11" fill="#2C2C2A" text-anchor="middle">protocol: Simple only</text>
+
+  <text x="40" y="606" font-size="11" fill="#5F5E5A">NCCL (2.5+) picks per algorithm &#215; protocol with a cost model, time = latency &#215; steps + bytes / bandwidth &#8212; there is no fixed size threshold (NCCL_TREE_THRESHOLD was 2.4-only).</text>
+  <text x="40" y="624" font-size="11" fill="#5F5E5A">Sources: NVIDIA "Massively Scale Your Deep Learning Training with NCCL 2.4", NCCL user guide (env), NCCL src/tuning, NCCL release notes, Hopper / NVSwitch architecture posts.</text>
+</svg>

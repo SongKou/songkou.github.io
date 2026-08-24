@@ -1,7 +1,7 @@
 +++
 title = 'NCCL and NVLink Notes'
 date = 2026-08-05T21:00:00+08:00
-lastmod = 2026-08-23T18:00:00+08:00
+lastmod = 2026-08-24T22:00:00+08:00
 draft = false
 categories = ['Network']
 tags = ['NCCL', 'NVLink', 'NVSwitch', 'AllReduce', 'RoCEv2', 'AI Networking', 'GPU', 'GPUDirect RDMA', 'nccl-tests']
@@ -113,7 +113,7 @@ A **collective** is an operation that *every* rank in the communicator takes par
 
 One process calls `ncclGetUniqueId()`, then distributes the `ncclUniqueId` to all others through a control plane *outside* NCCL — MPI broadcast, TCP socket, the PyTorch Store, or the rendezvous mechanism of Kubernetes or the job launcher. Everyone then calls `ncclCommInitRank()` with the same ID, a consistent `nranks`, and its own rank. The ID is how members of the same group find each other; during bootstrap NCCL exchanges node, GPU, NIC, and connection information, then builds the actual transport channels. The division of labor matters for debugging: **NCCL owns the data plane; member discovery, process launch, and ID distribution belong to the upper runtime.**
 
-After the ID exchange, bootstrap proceeds into connection establishment — the step-by-step sequence is section 8.6, after the topology discovery (section 8.1) that informs it.
+After the ID exchange, bootstrap proceeds into connection establishment — the full sequence, from ID distribution to buffer allocation, is section 8.6, and the topology discovery that informs it is section 8.1.
 
 ### 3.5 CUDA streams: enqueued is not finished
 
@@ -473,7 +473,7 @@ Three numbers explain why NCCL's first job is cartography:
 | PCIe Gen5 x16 | ~64 GB/s per direction (~128 GB/s bidir) | national highway |
 | NDR InfiniBand, per NIC | ~50 GB/s per direction (~100 GB/s bidir) | provincial road |
 
-(Conventions normalized as in section 9.1's fact-check note.) Roughly an order of magnitude separates NVLink from everything else — if traffic that should ride NVLink ends up on PCIe, performance does not degrade, it collapses. So before anything moves, NCCL works out how every GPU is physically connected.
+(Conventions labeled per section 9.1's fact-check note.) Roughly an order of magnitude separates NVLink from everything else — if traffic that should ride NVLink ends up on PCIe, performance does not degrade, it collapses. So before anything moves, NCCL works out how every GPU is physically connected.
 
 What a simplified two-socket server looks like from NCCL's point of view:
 
@@ -481,7 +481,7 @@ What a simplified two-socket server looks like from NCCL's point of view:
 
 The key observations NCCL must extract from this map:
 
-- **GPU0 and GPU1** share NUMA node 0 and PCIe Switch 0, and also have a direct NVLink — two candidate paths with a 10× bandwidth gap between them.
+- **GPU0 and GPU1** share NUMA node 0 and PCIe Switch 0, and also have a direct NVLink — two candidate paths roughly 7× apart in bandwidth (8.3).
 - **GPU2 and GPU3** mirror that under NUMA node 1.
 - **GPU1 and GPU2** are cross-NUMA, but the NVSwitch connects them at full NVLink speed — *lower* latency than PCIe despite crossing the socket boundary.
 - **GPU0 to GPU2/GPU3 over PCIe** would be the worst path in the box: cross-NUMA and cross-PCIe-switch, through the CPUs' UPI interconnect.
@@ -521,17 +521,6 @@ nvidia-smi topo -m     ! GPU/NIC connectivity matrix: NVLink, same PCIe switch,
                        ! across host bridge, across NUMA - exact legend per driver version
 ```
 
-Sample NCCL Topology discovery log:
-
-```text
-NCCL INFO: Topology detection started
-NCCL INFO: GPU 0: NVLink connected to GPU 2
-NCCL INFO: GPU 0: NVLink connected to GPU 3
-NCCL INFO: GPU 0: PCIe bus 0:...
-NCCL INFO: nvsPair[0]  GPU0<->GPU2: NVLink1, rate 900
-NCCL INFO: nvsPair[1]  GPU0<->GPU1: PIX, rate 64
-```
-
 ### 8.2 One interface, many roads: the transport ladder
 
 Discovery told NCCL what the map looks like; now the data has to actually travel. NCCL puts a **unified transport interface** over every physical link type, so an AllReduce that has passed through the algorithm layer never cares what it runs on — the transport layer picks the fastest implementation per GPU pair from the topology:
@@ -542,7 +531,7 @@ The selection logic, per pair, is a simple ladder: do the two GPUs share NVLink 
 
 ### 8.3 Inside the node: NVLink, then PCIe P2P
 
-When two GPUs in the same machine share NVLink, NCCL prefers it unconditionally. On an H100, NVLink 4.0 provides ~450 GB/s per direction (900 GB/s aggregate) — roughly **7× PCIe Gen5 x16** at matched conventions (the popular "14×" compares NVLink's bidirectional total against PCIe's one direction; section 9.1's fact-check note again). NCCL uses CUDA's P2P mechanism to read and write the peer GPU's memory directly — no CPU, no system memory on the path. *Analogy: an enclosed skybridge between two adjacent buildings — near, fast, and nobody goes outside.*
+When two GPUs in the same machine share NVLink, NCCL prefers it unconditionally. On an H100, NVLink 4.0 provides ~450 GB/s per direction (900 GB/s aggregate) — roughly **7× PCIe Gen5 x16** at matched conventions (the popular "14×" compares NVLink's bidirectional total against PCIe's one direction — the same convention mistake as 9.1's fact-check note). NCCL uses CUDA's P2P mechanism to read and write the peer GPU's memory directly — no CPU, no system memory on the path. *Analogy: an enclosed skybridge between two adjacent buildings — near, fast, and nobody goes outside.*
 
 Without NVLink (different-generation GPUs, or cards that only meet at a PCIe switch), NCCL falls back to **PCIe P2P** — the same CUDA P2P mechanism, running over the PCIe bus at ~64 GB/s per direction. *Analogy: the street between the buildings — it gets you there, slower than the skybridge.* When direct P2P is impossible (IOMMU, virtualization, container permissions), a **shared-host-memory** path steps in as the intermediary.
 
@@ -601,9 +590,9 @@ Everything above is "how do *two* GPUs talk". But a collective does not run on o
 
 Why channels earn their keep:
 
-**load balance** — a single ring touches only some links, more channels light up more parallel paths;
-**multiple NICs** — with two IB NICs per node NCCL typically builds at least two channels, each bound to its own NIC, which is what makes 8.5's multi-rail real;
-**NVSwitch topologies** — many channels are how the all-to-all bandwidth of the crossbar actually gets used and fully utilized.
+- **load balance** — a single ring touches only some links; more channels light up more parallel paths;
+- **multiple NICs** — with two IB NICs per node NCCL typically builds at least two channels, each bound to its own NIC, which is what makes 8.5's multi-rail real;
+- **NVSwitch topologies** — many channels are how the all-to-all bandwidth of the crossbar actually gets utilized.
 
 The channel count is chosen automatically from the topology; `NCCL_MIN_NCHANNELS` / `NCCL_MAX_NCHANNELS` exist for experiments (section 13.4 — their pre-2.5 names were `NCCL_MIN_NRINGS`/`NCCL_MAX_NRINGS`).
 
@@ -852,7 +841,7 @@ For a Ring AllReduce of M total bytes (M as in section 6.2), the per-rank traffi
 busbw = algbw × 2 × (P − 1) / P
 ```
 
-The factor differs per collective — nccl-tests' PERFORMANCE.md derives each one:
+The factor differs per collective — nccl-tests' PERFORMANCE.md derives each one (it writes *n* for the rank count this post calls P):
 
 | Collective | busbw factor on algbw | Why |
 |---|---|---|
@@ -873,6 +862,8 @@ all_reduce_perf   all_gather_perf    broadcast_perf   reduce_scatter_perf
 reduce_perf       alltoall_perf      alltoallv_perf   scatter_perf
 gather_perf       sendrecv_perf      hypercube_perf
 ```
+
+(`alltoallv_perf` exercises the variable-count pattern via the grouped-send/recv composition from section 4.3 — NCCL itself still has no AlltoAllV collective.)
 
 Building is one `make`; point it at non-default installs with `CUDA_HOME`/`NCCL_HOME`, and build with `make MPI=1 MPI_HOME=/path/to/mpi` for multi-node runs (MPI is how the tests span processes and nodes):
 
@@ -903,7 +894,7 @@ One environment variable of the suite itself deserves a network engineer's atten
 
 ### 12.3 Reading the output
 
-Each run prints a preamble (`nccl-tests version`, the parameter line, and a `# Using devices` block listing every rank's host, PID, and PCI bus id — worth a glance to confirm the rank↔GPU↔node mapping you intended), then one row per message size with two column groups, **out-of-place** and **in-place** (section 5.2's distinction), each holding `time`, `algbw`, `busbw`, and `#wrong`, and finally a footer:
+Each run prints three parts: a preamble, one row per message size, and a footer. The preamble — the nccl-tests version, the parameter line, and a `# Using devices` block with every rank's host, PID, and PCI bus id — is worth a glance to confirm the rank↔GPU↔node mapping you intended. Each data row holds two column groups, **out-of-place** and **in-place** (section 5.2's distinction), each with `time`, `algbw`, `busbw`, and `#wrong`. The footer:
 
 - `#wrong` and `Out of bounds values` are the correctness half: input buffers are generated by the suite's `verifiable` library, which "carefully craft[s] floating point input to produce exactly predictable output", so every received element is compared against the exact expected value — a nonzero count fails the run.
 - `Avg bus bandwidth` is the arithmetic mean of every busbw measurement in the run — a single regression-tracking number (and `NCCL_TESTS_MIN_BW` turns it into a pass/fail gate, useful in burn-in pipelines).
@@ -922,7 +913,7 @@ The header block, from a real capture (a two-node V100 run posted in [nccl-tests
 #        (B)    (elements)                       (us)  (GB/s)  (GB/s)            (us)  (GB/s)  (GB/s)
 ```
 
-And this particular capture is a **broken run**, diagnosable from the header alone — which is exactly why the issue was filed as "How to understand the result?": both processes report **Rank 0**, meaning the binary was not built with `MPI=1`, so each node ran its own independent single-GPU "collective" (the NCCL maintainer's reply in the thread says precisely that: "running two independent single GPU tests"). In the original paste the whole preamble even appears *twice* — each un-synchronized process printed its own — one more symptom of the same problem, elided above for readability. The data rows confirm it — `busbw` prints `0.00` because the AllReduce factor `2(n−1)/n` is *zero* at n=1, and the in-place half reports a nonsensical 2 TB/s "algbw" for what is a no-op. First lesson of reading nccl-tests output: check `# Using devices` before believing any number.
+And this particular capture is a **broken run**, diagnosable from the header alone — which is exactly why the issue was filed as "How to understand the result?": both processes report **Rank 0**, meaning the binary was not built with `MPI=1`, so each node ran its own independent single-GPU "collective" (the NCCL maintainer's reply in the thread says precisely that: "running two independent single GPU tests"). In the original paste the whole preamble even appears *twice* — each un-synchronized process printed its own — one more symptom of the same problem, elided above for readability. The data rows confirm it — `busbw` prints `0.00` because the AllReduce factor `2(n−1)/n` is *zero* at n=1, and the in-place half reports a nonsensical ~2,000,000 GB/s "algbw" — two petabytes per second — for what is a no-op. First lesson of reading nccl-tests output: check `# Using devices` before believing any number.
 
 A **healthy run at scale**, published in NVIDIA's [HPC-X user manual](https://networking-docs.nvidia.com/hpcxum/2200/nccl-rdma-sharp-plugins) — 1,024 GPUs across 128 nodes, IB SHARP/CollNet enabled (section 6.4 live):
 
@@ -1229,7 +1220,7 @@ When training is "slow" and the network is a suspect, in this order:
 ```text
 NCCL_DEBUG=INFO <job>              ! which collective, what sizes, which transport was chosen - answers are usually in here
 nvidia-smi topo -m                 ! NV# everywhere it should be
-all_reduce_perf -b 8 -e 8G -f 2    ! nccl-tests vs the recorded single-node baseline
+all_reduce_perf -b 8 -e 8G -f 2 -g 8   ! nccl-tests vs the recorded single-node baseline (without -g it runs 1 rank - a no-op, see 12.3)
 ib_write_bw / ib_send_bw           ! end-to-end RDMA bandwidth vs link theory, before blaming the model
 dcgm-exporter                      ! NVLink + NIC counters over time, not point samples
 ```

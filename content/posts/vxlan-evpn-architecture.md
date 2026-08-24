@@ -1400,12 +1400,20 @@ In Model B (eBGP everywhere, ASNs as above):
 4. The Pod-2 spines (AS 65020) apply it again.
 5. The Pod-2 leaf (AS 65211) rewrites the RT inbound to `65211:10100` — now equal to its own auto-derived import RT — and installs the route with next hop `10.0.1.11` and AS path `65020 65000 65010 65111`.
 
+The walkthrough below steps the same route through both models hop by hop. Toggle the model and click through the tiers: amber marks what each hop changes, green marks what it deliberately leaves alone — and the point of the whole comparison is that the green rows are the same in both models, while everything else about the delivery machinery differs, including what breaks and how loudly. The cluster IDs are improvised for the walkthrough (`10.0.1.1` / `10.0.0.1` / `10.0.2.1` per tier); the ASNs, RTs, and AS paths are exactly the ones above.
+
+{{< embed src="/posts/vxlan-evpn-architecture/multipod-control-plane-walk.html" title="Multi-pod control-plane walk, hop by hop" height="820" >}}
+
 **Data-plane walk — identical in both models.** Once the route is installed, the models converge completely:
 
 1. A host in Pod 2 sends a frame toward `192.168.1.10`; its leaf finds the EVPN-installed entry pointing at VTEP `10.0.1.11`.
 2. The leaf encapsulates once: outer source its own VTEP loopback, outer destination `10.0.1.11`, VNI 10100.
 3. The underlay forwards the outer packet leaf → Pod-2 spine → super-spine → Pod-1 spine → Pod-1 leaf, ECMP-hashed per flow on the outer UDP source port at every tier.
 4. The Pod-1 leaf decapsulates and delivers the original frame.
+
+The interactive walkthrough below generalizes this walk. It uses its own small addressing plan (VTEPs `192.0.2.x`, VNIs 1010/50001) rather than the pod plan above, but the mechanics are the point: pick Server A's destination, toggle between the two section 10.2 IRB models, and watch how the three packet stages change — routed through the VRF's L3 VNI (symmetric) or straight into the destination VLAN's L2 VNI (asymmetric), bridged in an L2 VNI, routed via a leaked route into another VRF's L3 VNI, or dropped at ingress when no route was imported. Note what stays constant in every forwarded case: one leaf-to-leaf encapsulation, and an outer header whose UDP source port carries the ECMP entropy.
+
+{{< embed src="/posts/vxlan-evpn-architecture/vxlan-packet-walk.html" title="VXLAN EVPN packet walk, case by case" height="900" >}}
 
 The tunnel is one leaf-to-leaf VXLAN encapsulation either way — spines and super-spines route the outer IP packet and never process VXLAN. What differs is the machinery that delivered the route, and therefore the failure modes. In Model A a broken route reflector *hides* reachability: the route never arrives, and the gap is visible as absence in `show bgp l2vpn evpn`. In Model B a forgotten next-hop-unchanged policy *blackholes* it: the spine advertises itself as next hop, attracts VXLAN traffic it has no NVE to decapsulate, and drops it — BGP looks healthy and only the data plane fails. The first design concentrates risk in a few devices; the second spreads a thinner risk across every session.
 

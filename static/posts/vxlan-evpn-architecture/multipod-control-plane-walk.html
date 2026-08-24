@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Multi-pod EVPN control-plane walk</title>
+<style>
+  :root {
+    color-scheme: dark;
+    /* pinned to the blog's m10c palette so the embed blends into the post */
+    --bg: #353b43;
+    --bg2: #3f464f;
+    --text: #d6dde3;
+    --muted: rgb(214 221 227 / 62%);
+    --accent: #57cc8a;
+    --accent-bg: rgb(87 204 138 / 16%);
+    --border: rgb(255 255 255 / 14%);
+    --border2: rgb(255 255 255 / 10%);
+    --changed: #e8b04b;
+    --changed-bg: rgb(232 176 75 / 14%);
+    --steady: #57cc8a;
+    --risk: #e07a5f;
+    background: var(--bg);
+  }
+  html, body { margin: 0; }
+  body {
+    box-sizing: border-box;
+    padding: 6px 2px;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  #mp-walk { width: 100%; }
+  #mp-walk h2 { font-size: 18px; margin: 2px 0 2px; }
+  #mp-walk .sub { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
+  #mp-walk code, #mp-walk .mono {
+    font-family: Consolas, Menlo, monospace;
+    font-size: 12.5px;
+  }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .btn {
+    font: inherit; font-size: 13px;
+    min-height: 28px; padding: 2px 10px; margin: 0;
+    color: var(--text); background: var(--bg2);
+    border: 1px solid var(--border); border-radius: 999px;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn[aria-pressed="true"] {
+    color: var(--accent); background: var(--accent-bg);
+    border-color: var(--accent); font-weight: 600;
+  }
+
+  .flow {
+    display: grid;
+    grid-template-columns: 1fr 18px 1fr 18px 1fr 18px 1fr 18px 1fr;
+    align-items: stretch; gap: 4px; margin-bottom: 12px;
+  }
+  .node {
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--bg2); padding: 8px 6px; text-align: center;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .node strong { display: block; font-size: 12.5px; }
+  .node .as { display: block; color: var(--muted); font-size: 11.5px; margin-top: 2px; }
+  .node:hover { border-color: var(--accent); }
+  .node[data-active="true"] {
+    border-color: var(--accent); background: var(--accent-bg);
+  }
+  .node[data-done="true"] { border-color: rgb(87 204 138 / 45%); }
+  .arrow {
+    align-self: center; text-align: center;
+    color: var(--muted); font-size: 14px; user-select: none;
+  }
+
+  .summary {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline;
+    border: 1px solid var(--border2); border-radius: 10px;
+    background: var(--bg2); padding: 8px 12px; margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 999px;
+    background: var(--accent-bg); color: var(--accent);
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+
+  .detail {
+    border: 1px solid var(--border2); border-radius: 10px;
+    background: var(--bg2); padding: 12px 14px; margin-bottom: 10px;
+  }
+  .detail-head {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    justify-content: space-between; margin-bottom: 4px;
+  }
+  .detail-head h3 { font-size: 14.5px; margin: 0; }
+  .stepper { display: flex; gap: 6px; }
+  .stepper .btn { min-height: 24px; font-size: 12px; padding: 0 8px; }
+  .detail .action { color: var(--muted); margin: 0 0 10px; font-size: 13px; }
+
+  .fields { display: grid; gap: 4px; }
+  .field {
+    display: grid; grid-template-columns: 190px 1fr;
+    gap: 3px 12px; align-items: baseline;
+    border-left: 3px solid var(--border); border-radius: 3px;
+    padding: 3px 8px; background: rgb(255 255 255 / 3%);
+  }
+  .field > span { font-size: 12.5px; color: var(--muted); }
+  .field > code { text-align: left; word-break: break-word; }
+  .field[data-state="changed"] { border-left-color: var(--changed); background: var(--changed-bg); }
+  .field[data-state="changed"] > span { color: var(--changed); }
+  .field[data-state="steady"] { border-left-color: var(--steady); }
+  .field[data-state="steady"] > span { color: var(--steady); }
+
+  .risk {
+    margin: 10px 0 0; font-size: 12.5px; color: var(--muted);
+    border-top: 1px dashed var(--border2); padding-top: 8px;
+  }
+  .risk strong { color: var(--risk); font-weight: 600; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .legend i.chg { background: var(--changed); }
+  .legend i.std { background: var(--steady); }
+
+  .footnotes { color: var(--muted); font-size: 12.5px; }
+  .footnotes p { margin: 4px 0; }
+
+  @media (max-width: 760px) {
+    .flow { grid-template-columns: 1fr; }
+    .arrow { transform: rotate(90deg); min-height: 18px; }
+    .field { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="mp-walk">
+  <h2>Multi-pod control-plane walk — one Type-2 route crossing pods</h2>
+  <p class="sub">Host <code>192.168.1.10</code> · Type-2 MAC/IP · L2 VNI 10100 · originated behind Pod-1 leaf VTEP <code>10.0.1.11</code> → installed on a Pod-2 leaf. Click a hop, or step through.</p>
+
+  <div class="controls" role="group" aria-label="Choose the fabric's BGP model">
+    <button type="button" class="btn" data-model="A" aria-pressed="true">Model A — one AS 65001, iBGP + hierarchical RRs</button>
+    <button type="button" class="btn" data-model="B" aria-pressed="false">Model B — eBGP everywhere, per-tier ASNs</button>
+  </div>
+
+  <div class="flow" id="flow" role="group" aria-label="Route path across the fabric tiers"></div>
+
+  <div class="summary" aria-live="polite">
+    <span class="badge" id="mode"></span>
+    <span id="summary-text"></span>
+  </div>
+
+  <div class="legend">
+    <span><i class="chg"></i>changed at this hop</span>
+    <span><i class="std"></i>deliberately untouched — the property the design must preserve</span>
+  </div>
+
+  <div class="detail" aria-live="polite">
+    <div class="detail-head">
+      <h3 id="hop-title"></h3>
+      <div class="stepper">
+        <button type="button" class="btn" id="prev">← Prev hop</button>
+        <button type="button" class="btn" id="next">Next hop →</button>
+      </div>
+    </div>
+    <p class="action" id="hop-action"></p>
+    <div class="fields" id="fields"></div>
+    <p class="risk" id="hop-risk"></p>
+  </div>
+
+  <div class="footnotes">
+    <p><strong>Same route, same next hop, two delivery machines.</strong> In both models the Pod-2 leaf ends with next hop <code>10.0.1.11</code> — the tunnel stays leaf-to-leaf and no spine ever decapsulates VXLAN. Everything else about how the route got there differs.</p>
+    <p><strong>Failure modes differ in kind:</strong> a broken RR in Model A <em>hides</em> the route — visible as absence in <code>show bgp l2vpn evpn</code>. A forgotten next-hop-unchanged route-map in Model B <em>blackholes</em> traffic — BGP looks healthy, the spine attracts VXLAN it cannot decapsulate, and only the data plane fails.</p>
+    <p>Model B assumes the <code>rewrite-evpn-rt-asn</code> design from section 7.4; the alternatives (fabric-wide static RTs, FRR wildcard import) change the RT rows but not the next-hop or AS-path behavior.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const root = document.getElementById('mp-walk');
+  if (!root) return;
+
+  // f(state, label, value): state = null | 'changed' | 'steady'
+  const f = (state, label, value) => ({ state, label, value });
+
+  const models = {
+    A: {
+      badge: 'Model A · iBGP + RR hierarchy',
+      summary: 'One AS 65001 end to end. RRs reflect the route through three tiers; next hop, RT, and RD are never touched. Only the cluster list grows.',
+      steps: [
+        {
+          node: 'Pod-1 leaf', as: 'AS 65001 · VTEP 10.0.1.11',
+          title: 'Hop 1 · Pod-1 leaf originates',
+          action: 'The leaf learns 192.168.1.10 locally and originates the Type-2 route to its pod spine RRs.',
+          fields: [
+            f(null,     'Next hop',      '10.0.1.11 — the leaf itself'),
+            f(null,     'RT (auto)',     '65001:10100 — ASN:VNI, identical fabric-wide'),
+            f(null,     'RD (auto)',     '10.0.1.11:32867 — unique per VTEP'),
+            f(null,     'AS path',       'empty — iBGP end to end'),
+            f(null,     'Cluster list',  '— (not yet reflected)')
+          ],
+          risk: 'If it breaks here: the host was never learned or the L2VPN EVPN session to the pod RRs is down — the route exists nowhere.'
+        },
+        {
+          node: 'Pod-1 spine RRs', as: 'AS 65001 · cluster 10.0.1.1',
+          title: 'Hop 2 · Pod-1 spine RRs reflect',
+          action: 'Pure reflection: to their leaf clients and up to the super-spine RRs. No attribute of the route is rewritten.',
+          fields: [
+            f('steady',  'Next hop',     '10.0.1.11 — preserved by reflection, nothing to configure'),
+            f('steady',  'RT',           '65001:10100 — untouched'),
+            f(null,      'RD',           '10.0.1.11:32867'),
+            f(null,      'AS path',      'empty'),
+            f('changed', 'Cluster list', '10.0.1.1 — the only thing that grows; loop prevention')
+          ],
+          risk: 'If it breaks here: a misconfigured RR hides the route from everything behind it — one device, fabric-wide absence.'
+        },
+        {
+          node: 'Super-spine RRs', as: 'AS 65001 · cluster 10.0.0.1',
+          title: 'Hop 3 · Super-spine RRs reflect down',
+          action: 'The top of the hierarchy reflects the route toward every other pod’s spine RRs — still untouched.',
+          fields: [
+            f('steady',  'Next hop',     '10.0.1.11'),
+            f('steady',  'RT',           '65001:10100'),
+            f(null,      'RD',           '10.0.1.11:32867'),
+            f(null,      'AS path',      'empty'),
+            f('changed', 'Cluster list', '10.0.0.1 10.0.1.1')
+          ],
+          risk: 'If it breaks here: every inter-pod route disappears at once — the hierarchy concentrates risk at its apex.'
+        },
+        {
+          node: 'Pod-2 spine RRs', as: 'AS 65001 · cluster 10.0.2.1',
+          title: 'Hop 4 · Pod-2 spine RRs reflect to leaves',
+          action: 'The last reflection, down to the Pod-2 leaf clients.',
+          fields: [
+            f('steady',  'Next hop',     '10.0.1.11'),
+            f('steady',  'RT',           '65001:10100'),
+            f(null,      'RD',           '10.0.1.11:32867'),
+            f(null,      'AS path',      'empty'),
+            f('changed', 'Cluster list', '10.0.2.1 10.0.0.1 10.0.1.1')
+          ],
+          risk: 'If it breaks here: only Pod-2 loses the route — reading the cluster list in show bgp identifies which reflection leg is missing.'
+        },
+        {
+          node: 'Pod-2 leaf', as: 'AS 65001',
+          title: 'Hop 5 · Pod-2 leaf imports and installs',
+          action: 'The RT equals the leaf’s own auto-derived import RT — one ASN everywhere makes the match automatic. The route is installed and the VXLAN tunnel targets the Pod-1 leaf directly.',
+          fields: [
+            f('steady',  'Next hop',     '10.0.1.11 — installed: tunnel is leaf-to-leaf across both pods'),
+            f('steady',  'RT match',     '65001:10100 = auto-derived import — consistent by construction'),
+            f(null,      'RD',           '10.0.1.11:32867 — still names the originating VTEP'),
+            f(null,      'AS path',      'empty — origin traced via next hop and cluster list instead'),
+            f(null,      'Cluster list', '10.0.2.1 10.0.0.1 10.0.1.1')
+          ],
+          risk: 'If it breaks here: an import filter or missing VNI config on this leaf only — the blast radius is one device.'
+        }
+      ]
+    },
+    B: {
+      badge: 'Model B · eBGP everywhere',
+      summary: 'Per-tier ASNs: leaf 65111 → spines 65010 → super-spines 65000 → spines 65020 → leaf 65211. Every transit tier must retain foreign RTs and leave the next hop alone; the RT is rewritten at each receiving hop, and the AS path records the full journey.',
+      steps: [
+        {
+          node: 'Pod-1 leaf', as: 'AS 65111 · VTEP 10.0.1.11',
+          title: 'Hop 1 · Pod-1 leaf (AS 65111) advertises',
+          action: 'The leaf originates the Type-2 route on its eBGP EVPN sessions to the Pod-1 spines: next hop itself, RT auto-derived from its own ASN.',
+          fields: [
+            f(null,      'Next hop',  '10.0.1.11 — the leaf sets itself'),
+            f(null,      'RT (auto)', '65111:10100 — derived from the leaf ASN, meaningless elsewhere'),
+            f(null,      'RD (auto)', '10.0.1.11:32867'),
+            f(null,      'AS path',   '65111 — as received by the spines')
+          ],
+          risk: 'If it breaks here: same as Model A — no local learn or no session. From here on, every hop adds policy that can fail.'
+        },
+        {
+          node: 'Pod-1 spines', as: 'AS 65010 · transit',
+          title: 'Hop 2 · Pod-1 spines (AS 65010) — pure transit',
+          action: 'Three obligations, per session: retain route-target all keeps the route despite no importable RT; rewrite-evpn-rt-asn stamps the RT with the receiving ASN on ingress; the outbound route-map leaves the next hop untouched.',
+          fields: [
+            f('steady',  'Next hop', '10.0.1.11 — only because a route-map says next-hop unchanged'),
+            f('changed', 'RT',       '65111:10100 → 65010:10100 — rewritten on ingress'),
+            f(null,      'RD',       '10.0.1.11:32867 — never rewritten in-fabric'),
+            f('changed', 'AS path',  '65010 65111 — grows at every eBGP hop'),
+            f(null,      'Kept by',  'retain route-target all — without it the transit tier silently drops the route')
+          ],
+          risk: 'If it breaks here: a missing next-hop route-map blackholes traffic (spine attracts VXLAN it cannot decapsulate); a missing retain silently drops the route. BGP looks healthy either way.'
+        },
+        {
+          node: 'Super-spines', as: 'AS 65000 · transit',
+          title: 'Hop 3 · Super-spines (AS 65000) — identical treatment',
+          action: 'The transit checklist repeats verbatim at the super-spine tier: retain, rewrite on ingress, next hop unchanged outbound.',
+          fields: [
+            f('steady',  'Next hop', '10.0.1.11 — second tier that must not touch it'),
+            f('changed', 'RT',       '65010:10100 → 65000:10100'),
+            f(null,      'RD',       '10.0.1.11:32867'),
+            f('changed', 'AS path',  '65000 65010 65111')
+          ],
+          risk: 'If it breaks here: same two failure modes as hop 2 — and because every inter-pod route transits this tier, the blast radius is fabric-wide.'
+        },
+        {
+          node: 'Pod-2 spines', as: 'AS 65020 · transit',
+          title: 'Hop 4 · Pod-2 spines (AS 65020) — and again',
+          action: 'Third and last transit tier. The per-tier ASNs keep ordinary eBGP loop prevention working with no allowas-in gymnastics.',
+          fields: [
+            f('steady',  'Next hop', '10.0.1.11'),
+            f('changed', 'RT',       '65000:10100 → 65020:10100'),
+            f(null,      'RD',       '10.0.1.11:32867'),
+            f('changed', 'AS path',  '65020 65000 65010 65111')
+          ],
+          risk: 'If it breaks here: only routes toward Pod-2 are affected. The AS path in show bgp names exactly which tiers the route did cross.'
+        },
+        {
+          node: 'Pod-2 leaf', as: 'AS 65211',
+          title: 'Hop 5 · Pod-2 leaf (AS 65211) rewrites and installs',
+          action: 'The leaf’s inbound rewrite stamps its own ASN — the RT now equals its auto-derived import RT, so the route imports without any static RT configuration.',
+          fields: [
+            f('steady',  'Next hop', '10.0.1.11 — survived three transit tiers; tunnel is leaf-to-leaf'),
+            f('changed', 'RT match', '65020:10100 → 65211:10100 = auto-derived import'),
+            f(null,      'RD',       '10.0.1.11:32867 — still names the originating VTEP'),
+            f(null,      'AS path',  '65020 65000 65010 65111 — the route’s full itinerary, readable in show bgp')
+          ],
+          risk: 'If it breaks here: a missing inbound rewrite means the RT never matches — route visible in the table, import silently dead, every session happily Established.'
+        }
+      ]
+    }
+  };
+
+  const flow = document.getElementById('flow');
+  const modelButtons = Array.from(root.querySelectorAll('[data-model]'));
+  let activeModel = 'A';
+  let activeStep = 0;
+
+  const byId = id => document.getElementById(id);
+
+  const buildFlow = () => {
+    flow.replaceChildren();
+    models[activeModel].steps.forEach((step, i) => {
+      if (i > 0) {
+        const a = document.createElement('div');
+        a.className = 'arrow';
+        a.setAttribute('aria-hidden', 'true');
+        a.textContent = '→';
+        flow.append(a);
+      }
+      const n = document.createElement('button');
+      n.type = 'button';
+      n.className = 'node';
+      n.dataset.step = String(i);
+      const t = document.createElement('strong');
+      t.textContent = step.node;
+      const s = document.createElement('span');
+      s.className = 'as';
+      s.textContent = step.as;
+      n.append(t, s);
+      n.addEventListener('click', () => { activeStep = i; render(); });
+      flow.append(n);
+    });
+  };
+
+  const render = () => {
+    const model = models[activeModel];
+    const step = model.steps[activeStep];
+
+    modelButtons.forEach(b =>
+      b.setAttribute('aria-pressed', String(b.dataset.model === activeModel)));
+
+    Array.from(flow.querySelectorAll('.node')).forEach((n, i) => {
+      n.dataset.active = String(i === activeStep);
+      n.dataset.done = String(i < activeStep);
+    });
+
+    byId('mode').textContent = model.badge;
+    byId('summary-text').textContent = model.summary;
+    byId('hop-title').textContent = step.title;
+    byId('hop-action').textContent = step.action;
+
+    const fields = byId('fields');
+    fields.replaceChildren();
+    step.fields.forEach(field => {
+      const row = document.createElement('div');
+      row.className = 'field';
+      if (field.state) row.dataset.state = field.state;
+      const label = document.createElement('span');
+      label.textContent = field.label;
+      const value = document.createElement('code');
+      value.textContent = field.value;
+      row.append(label, value);
+      fields.append(row);
+    });
+
+    byId('hop-risk').innerHTML = '';
+    const strong = document.createElement('strong');
+    strong.textContent = 'If it breaks here: ';
+    const rest = document.createTextNode(step.risk.replace(/^If it breaks here: /, ''));
+    byId('hop-risk').append(strong, rest);
+
+    byId('prev').disabled = activeStep === 0;
+    byId('next').disabled = activeStep === model.steps.length - 1;
+    byId('prev').style.opacity = activeStep === 0 ? '.45' : '1';
+    byId('next').style.opacity = activeStep === model.steps.length - 1 ? '.45' : '1';
+  };
+
+  modelButtons.forEach(b => b.addEventListener('click', () => {
+    activeModel = b.dataset.model;
+    if (activeStep >= models[activeModel].steps.length) activeStep = 0;
+    buildFlow();
+    render();
+  }));
+  byId('prev').addEventListener('click', () => { if (activeStep > 0) { activeStep--; render(); } });
+  byId('next').addEventListener('click', () => { if (activeStep < models[activeModel].steps.length - 1) { activeStep++; render(); } });
+
+  buildFlow();
+  render();
+})();
+</script>
+<script>
+(() => {
+  const report = () => parent.postMessage(
+    { type: "embed-height", height: Math.ceil(document.body.getBoundingClientRect().height) }, "*");
+  new ResizeObserver(report).observe(document.body);
+  window.addEventListener("load", report);
+})();
+</script>
+</body>
+</html>

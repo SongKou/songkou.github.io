@@ -1,0 +1,1583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>VXLAN EVPN Packet Walk</title>
+<style>:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: var(--border-radius-lg, 12.5px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 17'%3E%3Cpath d='M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z'/%3E%3C/svg%3E");
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html > body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive > .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align="right"]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align="center"]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: superellipse(1.5);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget > :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress {
+  display: flex;
+  height: 6px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 6px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls > .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls > .form-label > :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type="file"] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type="file"]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type="file"]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: superellipse(1.5);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type="checkbox"]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: "";
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type="radio"]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: "";
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed="true"],
+  [aria-selected="true"],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed="true"], [aria-selected="true"], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget > svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: 16px !important;
+  height: 16px !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html>body{padding:0}</style>
+</head>
+<body>
+<div id="vxlan-packet-walk-8f32">
+  <h2>VXLAN EVPN packet walk</h2>
+
+  <div class="vx-picker-row">
+    <span class="text-small">IRB model for same-VRF routing</span>
+    <div class="viz-controls" role="group" aria-label="Choose IRB forwarding model">
+      <button type="button" class="btn" data-model="symmetric" aria-pressed="true">Symmetric IRB</button>
+      <button type="button" class="btn" data-model="asymmetric" aria-pressed="false">Asymmetric IRB</button>
+    </div>
+  </div>
+
+  <div class="viz-controls" role="group" aria-label="Choose Server A's destination">
+    <button type="button" class="btn" data-case="b" aria-pressed="true">1 · B — same VRF, different VLAN</button>
+    <button type="button" class="btn" data-case="c" aria-pressed="false">2 · C — same VLAN</button>
+    <button type="button" class="btn" data-case="d" aria-pressed="false">3 · D — leaked VRF</button>
+    <button type="button" class="btn" data-case="e" aria-pressed="false">4 · E — route not imported</button>
+  </div>
+
+  <div class="card vx-summary" aria-live="polite">
+    <span class="viz-badge" id="vx-mode"></span>
+    <span id="vx-summary-text"></span>
+  </div>
+
+  <div class="vx-flow" id="vx-flow" role="img" aria-label="">
+    <div class="vx-node" id="vx-source-node">
+      <strong>Server A</strong>
+      <span class="text-small">10.10.10.11 · VLAN 10 · VRF_A</span>
+    </div>
+    <div class="vx-arrow" aria-hidden="true">→</div>
+    <div class="vx-node" id="vx-ingress-node">
+      <strong>Ingress Leaf 1</strong>
+      <span class="text-small" id="vx-ingress-action"></span>
+    </div>
+    <div class="vx-arrow" id="vx-arrow-fabric" aria-hidden="true">→</div>
+    <div class="vx-node" id="vx-fabric-node">
+      <strong>VXLAN fabric</strong>
+      <span class="text-small" id="vx-fabric-action"></span>
+    </div>
+    <div class="vx-arrow" id="vx-arrow-egress" aria-hidden="true">→</div>
+    <div class="vx-node" id="vx-egress-node">
+      <strong id="vx-egress-title"></strong>
+      <span class="text-small" id="vx-egress-action"></span>
+    </div>
+    <div class="vx-arrow" id="vx-arrow-destination" aria-hidden="true">→</div>
+    <div class="vx-node" id="vx-destination-node">
+      <strong id="vx-destination-title"></strong>
+      <span class="text-small" id="vx-destination-detail"></span>
+    </div>
+  </div>
+
+  <div class="vx-route-line text-small" id="vx-route-line"></div>
+
+  <div class="vx-stages">
+    <section class="vx-stage" aria-labelledby="vx-access-heading">
+      <h3 id="vx-access-heading">1 · Access-side frame</h3>
+      <p class="text-small text-muted" id="vx-access-context"></p>
+      <div class="vx-packet" id="vx-access-packet" aria-label="Access-side packet fields"></div>
+    </section>
+
+    <section class="vx-stage" aria-labelledby="vx-fabric-heading">
+      <h3 id="vx-fabric-heading">2 · Across the fabric</h3>
+      <p class="text-small text-muted" id="vx-fabric-context"></p>
+      <div class="vx-packet" id="vx-fabric-packet" aria-label="VXLAN-encapsulated packet fields"></div>
+    </section>
+
+    <section class="vx-stage" aria-labelledby="vx-output-heading">
+      <h3 id="vx-output-heading">3 · Destination-side frame</h3>
+      <p class="text-small text-muted" id="vx-output-context"></p>
+      <div class="vx-packet" id="vx-output-packet" aria-label="Destination-side packet fields"></div>
+    </section>
+  </div>
+
+  <div class="vx-legend text-small" aria-label="Packet field color legend">
+    <span><i data-swatch="outer" aria-hidden="true"></i>Underlay headers</span>
+    <span><i data-swatch="overlay" aria-hidden="true"></i>VXLAN context</span>
+    <span><i data-swatch="ethernet" aria-hidden="true"></i>Tenant Ethernet</span>
+    <span><i data-swatch="ip" aria-hidden="true"></i>Tenant IP and payload</span>
+  </div>
+
+  <section class="vx-glossary" aria-labelledby="vx-glossary-heading">
+    <h3 id="vx-glossary-heading">Header terms</h3>
+    <dl class="text-small">
+      <div>
+        <dt><code>Flags 0x08 (I=1)</code></dt>
+        <dd>The VXLAN I bit says the 24-bit VNI is valid. With all reserved flag bits zero, the first byte is <code>0x08</code>; the first four on-wire bytes are <code>08 00 00 00</code>, or <code>0x08000000</code> as one network-order 32-bit word.</dd>
+      </div>
+      <div>
+        <dt><code>RMAC</code></dt>
+        <dd>The VTEP’s overlay router/system MAC. Symmetric IRB uses ingress and egress RMACs for the inner router-to-router Ethernet header carried by an L3 VNI; it is not the destination host MAC.</dd>
+      </div>
+      <div>
+        <dt><code>IRB-MAC-20</code></dt>
+        <dd>The MAC of the IRB/SVI joining VRF_A to VLAN 20/bridge domain 20—usually VLAN 20’s anycast-gateway MAC. In asymmetric IRB it becomes the source MAC of the routed frame sent toward Server B.</dd>
+      </div>
+    </dl>
+  </section>
+
+  <div class="vx-footnotes text-small">
+    <p><strong>Control plane:</strong> RT, RD, and EVPN route types decide what is installed, but none of them appears as a packet header.</p>
+    <p><strong>Assumptions:</strong> remote destination leaves; direct EVPN route import for VRF_B; no default, static, policy, or service route from VRF_A to VRF_C.</p>
+    <p>Asymmetric IRB is standards-defined here for same-VRF A→B. RT leaking alone does not provide the destination MAC-VRF state needed for a generic asymmetric A→D path, so that case retains the symmetric IP-VRF path.</p>
+    <p>Server access links may be untagged. The leaf maps the local VLAN/bridge domain to a VNI. If both endpoints are on one leaf, forwarding is local and there is no VXLAN header.</p>
+  </div>
+</div>
+
+<style>
+  #vxlan-packet-walk-8f32 {
+    color: var(--foreground);
+    width: 100%;
+  }
+
+  #vxlan-packet-walk-8f32 .viz-controls {
+    margin-block: 12px;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-picker-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin-block: 8px 0;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-picker-row .viz-controls {
+    margin-block: 0;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-block: 12px 18px;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-flow {
+    display: grid;
+    grid-template-columns: minmax(112px, 1fr) auto minmax(112px, 1fr) auto minmax(112px, 1fr) auto minmax(112px, 1fr) auto minmax(112px, 1fr);
+    gap: 6px;
+    align-items: stretch;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-node {
+    min-width: 0;
+    padding: 10px;
+    background: var(--muted);
+    color: var(--foreground);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    transition: transform 180ms ease, opacity 180ms ease, background-color 180ms ease;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-node[data-state="focus"] {
+    background: color-mix(in srgb, var(--viz-series-2) 16%, transparent);
+    transform: translateY(-2px);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-node[data-state="inactive"] {
+    opacity: 0.45;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-node[data-state="drop"] {
+    background: color-mix(in srgb, var(--destructive) 14%, transparent);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted-foreground);
+    font-weight: 500;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-arrow[data-state="drop"] {
+    color: var(--destructive);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-arrow[data-state="inactive"] {
+    opacity: 0.3;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-route-line {
+    margin-block: 10px 18px;
+    color: var(--muted-foreground);
+    min-height: 1.4em;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-stages {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+    align-items: start;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-stage {
+    min-width: 0;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-stage h3,
+  #vxlan-packet-walk-8f32 .vx-stage p {
+    margin-block: 0 8px;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-packet {
+    display: grid;
+    gap: 5px;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-field {
+    min-width: 0;
+    padding: 8px 10px;
+    display: grid;
+    grid-template-columns: minmax(92px, auto) minmax(0, 1fr);
+    gap: 10px;
+    align-items: baseline;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-field > span {
+    font-weight: 500;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-field > code {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-field[data-kind="local"] {
+    background: var(--muted);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-field[data-kind="outer"] {
+    background: color-mix(in srgb, var(--viz-series-1) 14%, transparent);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-field[data-kind="overlay"] {
+    background: color-mix(in srgb, var(--viz-series-2) 16%, transparent);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-field[data-kind="ethernet"] {
+    background: color-mix(in srgb, var(--viz-series-3) 14%, transparent);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-field[data-kind="ip"] {
+    background: color-mix(in srgb, var(--viz-series-4) 14%, transparent);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-field[data-kind="drop"] {
+    background: color-mix(in srgb, var(--destructive) 14%, transparent);
+    color: var(--foreground);
+    grid-template-columns: 1fr;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-field[data-kind="drop"] > code {
+    text-align: left;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    margin-block: 18px 10px;
+    color: var(--muted-foreground);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-legend i {
+    width: 12px;
+    height: 12px;
+    display: inline-block;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-legend i[data-swatch="outer"] {
+    background: var(--viz-series-1);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-legend i[data-swatch="overlay"] {
+    background: var(--viz-series-2);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-legend i[data-swatch="ethernet"] {
+    background: var(--viz-series-3);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-legend i[data-swatch="ip"] {
+    background: var(--viz-series-4);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-glossary {
+    margin-block: 16px 10px;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-glossary h3 {
+    margin-block: 0 8px;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-glossary dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin: 0;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-glossary dt {
+    font-weight: 500;
+    margin-block: 0 4px;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-glossary dd {
+    color: var(--muted-foreground);
+    margin: 0;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-footnotes {
+    color: var(--muted-foreground);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-footnotes p {
+    margin-block: 5px;
+  }
+
+  @media (max-width: 820px) {
+    #vxlan-packet-walk-8f32 .vx-stages {
+      grid-template-columns: 1fr;
+    }
+
+    #vxlan-packet-walk-8f32 .vx-glossary dl {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 760px) {
+    #vxlan-packet-walk-8f32 .vx-flow {
+      grid-template-columns: 1fr;
+    }
+
+    #vxlan-packet-walk-8f32 .vx-arrow {
+      min-height: 22px;
+      transform: rotate(90deg);
+    }
+
+    #vxlan-packet-walk-8f32 .vx-node[data-state="focus"] {
+      transform: none;
+    }
+  }
+
+  @media (max-width: 420px) {
+    #vxlan-packet-walk-8f32 .vx-field {
+      grid-template-columns: 1fr;
+      gap: 3px;
+    }
+
+    #vxlan-packet-walk-8f32 .vx-field > code {
+      text-align: left;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #vxlan-packet-walk-8f32 .vx-node {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+(() => {
+  const root = document.getElementById('vxlan-packet-walk-8f32');
+  if (!root) return;
+
+  const f = (kind, label, value) => ({ kind, label, value });
+
+  const cases = {
+    b: {
+      mode: 'L3 VNI · forwarded',
+      summary: 'Different subnet, same VRF: Leaf 1 routes into VRF_A; Leaf 2 routes out of VRF_A.',
+      ingressAction: 'MAC lookup → VRF_A IP lookup',
+      fabricAction: 'L3VNI_A · 50001',
+      egressTitle: 'Egress Leaf 2',
+      egressAction: 'VRF_A IP lookup → VLAN 20',
+      destinationTitle: 'Server B',
+      destinationDetail: '10.10.20.22 · VLAN 20 · VRF_A',
+      routeLine: 'EVPN route in VRF_A → VTEP 192.0.2.12 · service context L3VNI_A 50001',
+      flowLabel: 'Server A to Server B. Routed in VRF A at both VTEPs using L3 VNI A 50001.',
+      accessContext: 'B is off-subnet, so A addresses the frame to VRF_A’s anycast gateway.',
+      access: [
+        f('local', 'Local context', 'access port → VLAN 10 / VRF_A'),
+        f('ethernet', 'Ethernet · 14 B', 'MAC-A → GW-A-MAC'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.22 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged application payload')
+      ],
+      fabricContext: 'The original IP packet is carried inside a new router-to-router Ethernet frame.',
+      fabric: [
+        f('outer', 'Outer Ethernet · 14 B', 'Leaf 1 → underlay next hop · rewritten each hop'),
+        f('outer', 'Outer IPv4 · 20 B', 'VTEP 192.0.2.11 → 192.0.2.12'),
+        f('outer', 'UDP · 8 B', 'entropy source port → 4789'),
+        f('overlay', 'VXLAN · 8 B', 'Flags 0x08 (I=1) · L3VNI_A 50001'),
+        f('ethernet', 'Inner Ethernet · 14 B', 'RMAC-Leaf1 → RMAC-Leaf2'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.22 · TTL 63'),
+        f('ip', 'L4 + data', 'unchanged')
+      ],
+      outputContext: 'L3VNI_A selects VRF_A; Leaf 2 routes to the local VLAN 20 adjacency.',
+      output: [
+        f('local', 'Local context', 'VLAN 20 → Server B access port'),
+        f('ethernet', 'Ethernet · 14 B', 'GW-A-MAC → MAC-B'),
+        f('ip', 'IPv4', '10.10.10.11 → 10.10.20.22 · TTL 62'),
+        f('ip', 'L4 + data', 'unchanged')
+      ]
+    },
+    c: {
+      mode: 'L2 VNI · forwarded',
+      summary: 'Same subnet and bridge domain: both leaves bridge the original host Ethernet frame.',
+      ingressAction: 'MAC lookup in VLAN 10 bridge domain',
+      fabricAction: 'L2VNI_10 · 1010',
+      egressTitle: 'Egress Leaf 2',
+      egressAction: 'VNI → VLAN 10 · MAC lookup',
+      destinationTitle: 'Server C',
+      destinationDetail: '10.10.10.33 · VLAN 10 · VRF_A',
+      routeLine: 'Known Type-2 MAC → unicast VTEP 192.0.2.12; unknown MAC → BUM replication · both use L2VNI_10 1010',
+      flowLabel: 'Server A to Server C. Bridged across the fabric using L2 VNI 1010; the IP TTL is unchanged.',
+      accessContext: 'C is on-link. After ARP or ND, A addresses the frame directly to MAC-C.',
+      access: [
+        f('local', 'Local context', 'access port → VLAN 10 / bridge domain 10'),
+        f('ethernet', 'Ethernet · 14 B', 'MAC-A → MAC-C'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.10.33 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged application payload')
+      ],
+      fabricContext: 'VXLAN preserves the original host-to-host frame; no tenant IP routing occurs.',
+      fabric: [
+        f('outer', 'Outer Ethernet · 14 B', 'Leaf 1 → underlay next hop · rewritten each hop'),
+        f('outer', 'Outer IPv4 · 20 B', 'VTEP 192.0.2.11 → 192.0.2.12'),
+        f('outer', 'UDP · 8 B', 'entropy source port → 4789'),
+        f('overlay', 'VXLAN · 8 B', 'Flags 0x08 (I=1) · L2VNI_10 1010'),
+        f('ethernet', 'Inner Ethernet · 14 B', 'MAC-A → MAC-C · preserved'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.10.33 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged')
+      ],
+      outputContext: 'L2VNI_10 selects the VLAN 10 bridge domain; Leaf 2 forwards by destination MAC.',
+      output: [
+        f('local', 'Local context', 'VLAN 10 → Server C access port'),
+        f('ethernet', 'Ethernet · 14 B', 'MAC-A → MAC-C · preserved'),
+        f('ip', 'IPv4', '10.10.10.11 → 10.10.10.33 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged')
+      ]
+    },
+    d: {
+      mode: 'Leaked L3 VNI · forwarded',
+      summary: 'VRF_A imported D’s route from VRF_B; the common direct-import model tunnels into destination L3VNI_B.',
+      ingressAction: 'VRF_A lookup → imported VRF_B route',
+      fabricAction: 'L3VNI_B · 50002',
+      egressTitle: 'Egress Leaf 3',
+      egressAction: 'VNI → VRF_B → VLAN 30',
+      destinationTitle: 'Server D',
+      destinationDetail: '10.20.30.44 · VLAN 30 · VRF_B',
+      routeLine: 'VRF_A imports RT_B route → VTEP 192.0.2.13 · destination L3VNI_B 50002; centralized or service-node designs can add another hop/VNI',
+      flowLabel: 'Server A in VRF A to Server D in VRF B. An imported route permits forwarding with destination VRF B L3 VNI 50002.',
+      accessContext: 'D is off-subnet. A sends to GW-A; the VRF change is not encoded in A’s original IP packet.',
+      access: [
+        f('local', 'Local context', 'access port → VLAN 10 / VRF_A'),
+        f('ethernet', 'Ethernet · 14 B', 'MAC-A → GW-A-MAC'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.20.30.44 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged application payload')
+      ],
+      fabricContext: 'The imported route’s forwarding action targets VRF_B at the remote VTEP.',
+      fabric: [
+        f('outer', 'Outer Ethernet · 14 B', 'Leaf 1 → underlay next hop · rewritten each hop'),
+        f('outer', 'Outer IPv4 · 20 B', 'VTEP 192.0.2.11 → 192.0.2.13'),
+        f('outer', 'UDP · 8 B', 'entropy source port → 4789'),
+        f('overlay', 'VXLAN · 8 B', 'Flags 0x08 (I=1) · destination L3VNI_B 50002'),
+        f('ethernet', 'Inner Ethernet · 14 B', 'RMAC-Leaf1 → RMAC-Leaf3'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.20.30.44 · TTL 63'),
+        f('ip', 'L4 + data', 'unchanged')
+      ],
+      outputContext: 'L3VNI_B selects VRF_B; Leaf 3 routes to Server D through VLAN 30.',
+      output: [
+        f('local', 'Local context', 'VLAN 30 → Server D access port'),
+        f('ethernet', 'Ethernet · 14 B', 'GW-B-MAC → MAC-D'),
+        f('ip', 'IPv4', '10.10.10.11 → 10.20.30.44 · TTL 62'),
+        f('ip', 'L4 + data', 'unchanged')
+      ]
+    },
+    e: {
+      mode: 'No route · dropped',
+      summary: 'VRF_A has no imported route to E, so the ingress leaf drops before VXLAN encapsulation.',
+      ingressAction: 'VRF_A IP lookup → no matching route',
+      fabricAction: 'No VXLAN packet',
+      egressTitle: 'Egress leaf',
+      egressAction: 'Not reached',
+      destinationTitle: 'Server E',
+      destinationDetail: '10.30.40.55 · VLAN 40 · VRF_C',
+      routeLine: 'VRF_C route is not imported into VRF_A → no usable FIB entry → drop; ICMP unreachable is optional',
+      flowLabel: 'Server A to Server E. No route is imported into VRF A, so the packet is dropped at ingress and no VXLAN packet exists.',
+      drop: true,
+      accessContext: 'E is off-subnet, so A still sends the original frame to GW-A.',
+      access: [
+        f('local', 'Local context', 'access port → VLAN 10 / VRF_A'),
+        f('ethernet', 'Ethernet · 14 B', 'MAC-A → GW-A-MAC'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.30.40.55 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged application payload')
+      ],
+      fabricContext: 'The route lookup fails before an outer Ethernet/IP/UDP/VXLAN header can be built.',
+      fabric: [
+        f('drop', 'No encapsulation', 'No outer IP · no UDP · no VXLAN header · no VNI')
+      ],
+      outputContext: 'Server E and VRF_C never receive this packet.',
+      output: [
+        f('drop', 'No output frame', 'A default, static, policy, or service route would change this result')
+      ]
+    }
+  };
+
+  const asymmetricCases = {
+    b: {
+      mode: 'Asymmetric IRB · L2 VNI',
+      summary: 'Leaf 1 routes into B’s destination bridge domain and then bridges across L2VNI_20; Leaf 2 only bridges.',
+      ingressAction: 'MAC → VRF_A IP → VLAN 20 MAC',
+      fabricAction: 'L2VNI_20 · 1020',
+      egressAction: 'VNI → VLAN 20 · MAC lookup only',
+      routeLine: 'Leaf 1 must instantiate BD20/L2VNI_20 and know B’s MAC adjacency · tenant TTL drops once, at ingress',
+      flowLabel: 'Server A to Server B using asymmetric IRB. Leaf 1 routes and bridges into L2 VNI 1020; Leaf 2 only bridges.',
+      fabricContext: 'Ingress routing creates the destination-subnet Ethernet frame before VXLAN encapsulation.',
+      fabric: [
+        f('outer', 'Outer Ethernet · 14 B', 'Leaf 1 → underlay next hop · rewritten each hop'),
+        f('outer', 'Outer IPv4 · 20 B', 'VTEP 192.0.2.11 → 192.0.2.12'),
+        f('outer', 'UDP · 8 B', 'entropy source port → 4789'),
+        f('overlay', 'VXLAN · 8 B', 'Flags 0x08 (I=1) · destination L2VNI_20 1020'),
+        f('ethernet', 'Inner Ethernet · 14 B', 'IRB-MAC-20 → MAC-B'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.22 · TTL 63'),
+        f('ip', 'L4 + data', 'unchanged')
+      ],
+      outputContext: 'L2VNI_20 selects bridge domain 20; Leaf 2 performs no IP lookup and preserves TTL 63.',
+      output: [
+        f('local', 'Local context', 'VLAN 20 → Server B access port'),
+        f('ethernet', 'Ethernet · 14 B', 'IRB-MAC-20 → MAC-B · preserved'),
+        f('ip', 'IPv4', '10.10.10.11 → 10.10.20.22 · TTL 63'),
+        f('ip', 'L4 + data', 'unchanged')
+      ]
+    },
+    c: {
+      mode: 'L2 bridging · model-independent',
+      summary: 'A and C share one bridge domain, so no IRB lookup occurs; symmetric versus asymmetric does not change this packet.'
+    },
+    d: {
+      mode: 'Inter-VRF · symmetric IP-VRF path',
+      summary: 'RT leaking does not automatically import VRF_B’s MAC-VRF state. The vendor-neutral direct path still uses L3VNI_B and routes at both leaves.',
+      ingressAction: 'VRF_A lookup → imported VRF_B IP route',
+      routeLine: 'An asymmetric L2VNI_30 path would require a platform-specific cross-VRF adjacency, local BD30, and MAC-D state at Leaf 1',
+      flowLabel: 'Server A in VRF A to Server D in VRF B. Even with asymmetric selected, the vendor-neutral direct-import path uses destination L3 VNI B and symmetric IP-VRF forwarding.',
+      fabricContext: 'The imported IP-VRF route targets VRF_B; the standards-based direct path remains symmetric across L3VNI_B.'
+    },
+    e: {
+      mode: 'No route · model-independent',
+      summary: 'The VRF_A lookup fails before either IRB forwarding model can create a VXLAN packet.'
+    }
+  };
+
+  const byId = id => root.querySelector(`#${id}`);
+  const caseButtons = Array.from(root.querySelectorAll('[data-case]'));
+  const modelButtons = Array.from(root.querySelectorAll('[data-model]'));
+  let activeCase = 'b';
+  let activeModel = 'symmetric';
+
+  const renderFields = (container, fields) => {
+    container.replaceChildren();
+    fields.forEach(field => {
+      const row = document.createElement('div');
+      row.className = 'vx-field';
+      row.dataset.kind = field.kind;
+
+      const label = document.createElement('span');
+      label.textContent = field.label;
+      const value = document.createElement('code');
+      value.textContent = field.value;
+
+      row.append(label, value);
+      container.append(row);
+    });
+  };
+
+  const render = (key, model) => {
+    const baseItem = cases[key];
+    const item = model === 'asymmetric'
+      ? { ...baseItem, ...asymmetricCases[key] }
+      : baseItem;
+    if (!item) return;
+
+    activeCase = key;
+    activeModel = model;
+
+    caseButtons.forEach(button => {
+      button.setAttribute('aria-pressed', String(button.dataset.case === key));
+    });
+
+    modelButtons.forEach(button => {
+      button.setAttribute('aria-pressed', String(button.dataset.model === model));
+    });
+
+    byId('vx-mode').textContent = item.mode;
+    byId('vx-summary-text').textContent = item.summary;
+    byId('vx-ingress-action').textContent = item.ingressAction;
+    byId('vx-fabric-action').textContent = item.fabricAction;
+    byId('vx-egress-title').textContent = item.egressTitle;
+    byId('vx-egress-action').textContent = item.egressAction;
+    byId('vx-destination-title').textContent = item.destinationTitle;
+    byId('vx-destination-detail').textContent = item.destinationDetail;
+    byId('vx-route-line').textContent = item.routeLine;
+    byId('vx-flow').setAttribute('aria-label', item.flowLabel);
+
+    byId('vx-access-context').textContent = item.accessContext;
+    byId('vx-fabric-context').textContent = item.fabricContext;
+    byId('vx-output-context').textContent = item.outputContext;
+
+    renderFields(byId('vx-access-packet'), item.access);
+    renderFields(byId('vx-fabric-packet'), item.fabric);
+    renderFields(byId('vx-output-packet'), item.output);
+
+    const fabricNode = byId('vx-fabric-node');
+    const egressNode = byId('vx-egress-node');
+    const destinationNode = byId('vx-destination-node');
+    const fabricArrow = byId('vx-arrow-fabric');
+    const egressArrow = byId('vx-arrow-egress');
+    const destinationArrow = byId('vx-arrow-destination');
+
+    if (item.drop) {
+      byId('vx-ingress-node').dataset.state = 'drop';
+      fabricNode.dataset.state = 'inactive';
+      egressNode.dataset.state = 'inactive';
+      destinationNode.dataset.state = 'inactive';
+      fabricArrow.dataset.state = 'drop';
+      egressArrow.dataset.state = 'inactive';
+      destinationArrow.dataset.state = 'inactive';
+    } else {
+      byId('vx-ingress-node').dataset.state = 'focus';
+      fabricNode.dataset.state = 'focus';
+      egressNode.dataset.state = 'focus';
+      destinationNode.dataset.state = 'focus';
+      delete fabricArrow.dataset.state;
+      delete egressArrow.dataset.state;
+      delete destinationArrow.dataset.state;
+    }
+  };
+
+  caseButtons.forEach(button => {
+    button.addEventListener('click', () => render(button.dataset.case, activeModel));
+  });
+
+  modelButtons.forEach(button => {
+    button.addEventListener('click', () => render(activeCase, button.dataset.model));
+  });
+
+  render('b', 'symmetric');
+})();
+</script>
+
+
+
+
+<style>
+  /* pinned to the blog's m10c palette so the embed blends into the post */
+  :root {
+    color-scheme: dark;
+    --color-background-primary: #353b43;
+    --color-background-secondary: #3f464f;
+    --color-text-primary: #d6dde3;
+    --color-text-secondary: rgb(214 221 227 / 62%);
+    --color-text-info: #57cc8a;
+    --color-background-info: rgb(87 204 138 / 16%);
+    --color-border-primary: rgb(255 255 255 / 14%);
+    --color-border-secondary: rgb(255 255 255 / 10%);
+  }
+  html > body { padding: 6px 2px; }
+</style>
+<script>
+(() => {
+  const report = () => parent.postMessage(
+    { type: "embed-height", height: Math.ceil(document.body.getBoundingClientRect().height) }, "*");
+  new ResizeObserver(report).observe(document.body);
+  window.addEventListener("load", report);
+})();
+</script>
+</body>
+</html>

@@ -38,6 +38,12 @@ And a collective is not a one-shot copy. An AllReduce across 8 GPUs must end wit
 
 If every framework re-implemented this, it would be both complex and impossible to keep current with hardware. NCCL's value is concentrating that hardware-facing complexity in one place: the application declares data semantics ("AllReduce this"), and NCCL picks the transport paths and execution algorithms from machine topology and message characteristics. Despite the name, it is not collectives-only — modern NCCL also provides point-to-point `Send`/`Recv`.
 
+Everything the rest of this post covers flows from three design principles:
+
+1. **Automatic discovery** — at startup NCCL scans the hardware topology itself (section 8.1); no user configuration describes the machine.
+2. **Automatic selection** — the best algorithm for the message size, the best path for the topology (sections 6–8), chosen by a cost model rather than by hand.
+3. **Hidden complexity** — to the layer above, it is one API call; the algorithms, topology, and transports underneath run automatically (the seven-layer journey in section 4.1).
+
 ## 2. Where NCCL sits in the stack
 
 NCCL sits between the framework and the hardware:
@@ -107,6 +113,8 @@ A **collective** is an operation that *every* rank in the communicator takes par
 
 One process calls `ncclGetUniqueId()`, then distributes the `ncclUniqueId` to all others through a control plane *outside* NCCL — MPI broadcast, TCP socket, the PyTorch Store, or the rendezvous mechanism of Kubernetes or the job launcher. Everyone then calls `ncclCommInitRank()` with the same ID, a consistent `nranks`, and its own rank. The ID is how members of the same group find each other; during bootstrap NCCL exchanges node, GPU, NIC, and connection information, then builds the actual transport channels. The division of labor matters for debugging: **NCCL owns the data plane; member discovery, process launch, and ID distribution belong to the upper runtime.**
 
+After the ID exchange, bootstrap proceeds into connection establishment — the step-by-step sequence is section 8.6, after the topology discovery (section 8.1) that informs it.
+
 ### 3.5 CUDA streams: enqueued is not finished
 
 NCCL calls take a CUDA stream, and when the call returns, **the operation has usually only been enqueued** — no data has necessarily moved:
@@ -148,6 +156,10 @@ NCCL's native interface has long covered five collectives — `AllReduce`, `AllG
 - **ReduceScatter** — reduce everything, then slice the result into P blocks; **rank *i* keeps block *i***. The natural primitive for sharded training (FSDP/ZeRO): if a rank only *owns* 1/P of the parameters, it only needs 1/P of the reduced gradients — gradient memory drops by (P−1)/P. The price is architectural: the training logic above must accept that state lives sharded.
 
 ![AllReduce - every rank contributes, every rank receives the full reduced result](/posts/nvlink-nccl-scaleup-scaleout/nccl-allreduce.svg)
+
+Since AllReduce is the workhorse, it also makes the best preview of everything this post covers — the complete journey behind one `torch.distributed.all_reduce()` call, with the section that covers each layer:
+
+![The complete journey of one AllReduce - seven layers from the PyTorch call to the reduced result](/posts/nvlink-nccl-scaleup-scaleout/nccl-allreduce-journey.svg)
 
 ![Reduce - every rank contributes, only the root receives the reduced result](/posts/nvlink-nccl-scaleup-scaleout/nccl-reduce.svg)
 
@@ -451,36 +463,111 @@ The same AllReduce may run Tree+LL in one size range and Ring+Simple in another.
 
 ## 8. Topology: what NCCL discovers, and the paths it picks
 
-### 8.1 Discovery
+### 8.1 Why topology matters, and what discovery does
 
-At communicator init, NCCL collects: GPU models, device numbers, CUDA capability; NVLink connections between GPUs; the GPU–PCIe-switch–CPU–NUMA relationships; NICs/HCA ports and their PCIe distance to each GPU; P2P and GPUDirect RDMA capability; available network plugins and interfaces. From this it builds an internal topology graph, scores paths by bandwidth and distance, and searches for ring/tree/NVLS communication graphs. The operating-system view of the same facts:
+Three numbers explain why NCCL's first job is cartography:
+
+| Path | Bandwidth | Analogy |
+|---|---|---|
+| NVLink 4.0 (H100) | 900 GB/s (aggregate, both directions) | high-speed rail |
+| PCIe Gen5 x16 | ~64 GB/s per direction (~128 GB/s bidir) | national highway |
+| NDR InfiniBand, per NIC | ~50 GB/s per direction (~100 GB/s bidir) | provincial road |
+
+(Conventions normalized as in section 9.1's fact-check note.) Roughly an order of magnitude separates NVLink from everything else — if traffic that should ride NVLink ends up on PCIe, performance does not degrade, it collapses. So before anything moves, NCCL works out how every GPU is physically connected.
+
+What a simplified two-socket server looks like from NCCL's point of view:
+
+![A typical GPU server topology, simplified - NUMA nodes, PCIe switches, NVSwitch, NICs](/posts/nvlink-nccl-scaleup-scaleout/nccl-server-topology.svg)
+
+The key observations NCCL must extract from this map:
+
+- **GPU0 and GPU1** share NUMA node 0 and PCIe Switch 0, and also have a direct NVLink — two candidate paths with a 10× bandwidth gap between them.
+- **GPU2 and GPU3** mirror that under NUMA node 1.
+- **GPU1 and GPU2** are cross-NUMA, but the NVSwitch connects them at full NVLink speed — *lower* latency than PCIe despite crossing the socket boundary.
+- **GPU0 to GPU2/GPU3 over PCIe** would be the worst path in the box: cross-NUMA and cross-PCIe-switch, through the CPUs' UPI interconnect.
+- Each NIC hangs off one PCIe switch — which is why GPU–NIC affinity (section 8.5) matters for cross-node traffic.
+
+(The figure is a teaching simplification: in a real HGX/DGX H100 all 8 GPUs attach to all 4 NVSwitches in a full crossbar, as section 9.1 describes — but the *path classes* it shows are exactly what NCCL distinguishes.)
+
+At communicator init, discovery runs in four steps:
+
+1. **Enumerate the hardware** — walk the PCIe tree via `/sys/devices` and the NVML API: GPU models, device numbers, CUDA capability; NVLink connections; the GPU–PCIe-switch–CPU–NUMA relationships; NICs/HCA ports and their PCIe distance to each GPU; P2P and GPUDirect RDMA capability; available network plugins.
+2. **Build the topology graph** — which device sits under which switch, which NUMA node owns what.
+3. **Score every GPU pair** — the fastest path between each pair and its bandwidth class (the same classes `nvidia-smi topo -m` prints: NVLink, same PCIe switch, across the host bridge, across NUMA).
+4. **Search communication graphs** — build rings, trees, and NVLS structures over those scores, placing "near" GPUs adjacent in the ring order.
+
+Like a courier who just moved to a new district: first study the map, then plan the routes. Every communicator that comes out of this process (section 3.2's object, now filled in) holds:
+
+1. a **topology-sorted rank list** — the "nearest" GPUs placed adjacent in the communication order;
+2. the **optimal ring/tree structures** built over that list, one set per channel;
+3. a set of **transport connections** — for every pair that must talk, the fastest link available between them (NVLink, P2P, shared memory, RDMA, or socket).
+
+With `NCCL_DEBUG=INFO` (plus `NCCL_DEBUG_SUBSYS=INIT,GRAPH`, section 13.1) the whole discovery is printed at startup — which NVLink pairs were found, which path class each connection got, which rings and trees were built over them. An excerpt from a real capture (two V100 nodes over InfiniBand, published in NVIDIA's HPC-X manual; older NCCL, so the exact format varies by version):
+
+```text
+# Using devices
+#   Rank  0 Pid   7198 on  host1 device  0 [0x06] Tesla V100-SXM2-32GB
+#   Rank  1 Pid   4890 on  host2 device  0 [0x06] Tesla V100-SXM2-32GB
+host1:7198:7198 [0] NCCL INFO NET/IB : Using [0]mlx5_0:1/IB ; OOB ib0:1.1.21.3<0>
+host2:4890:4920 [0] NCCL INFO GPU Direct RDMA Enabled for GPU 6000 / HCA 0 (distance 2 <= 3), read 0
+host1:7198:7226 [0] NCCL INFO Ring 00 : 1[6000] -> 0[6000] [receive] via NET/UCX/0/GDRDMA
+host1:7198:7226 [0] NCCL INFO Ring 00 : 0[6000] -> 1[6000] [send] via NET/UCX/0/GDRDMA
+```
+
+Three answers in four lines: which NIC was chosen (`mlx5_0:1`), whether GPUDirect RDMA engaged (and the topology distance that allowed it), and how the rings were built and over what transport (`NET/UCX/0/GDRDMA`). Reading this log against `nvidia-smi topo -m` is the fastest way to catch a wrong topology before it becomes a performance mystery (section 15.7). The operating-system view of the same facts:
 
 ```text
 nvidia-smi topo -m     ! GPU/NIC connectivity matrix: NVLink, same PCIe switch,
                        ! across host bridge, across NUMA - exact legend per driver version
 ```
 
-### 8.2 Intra-node paths
+Sample NCCL Topology discovery log:
 
-1. **NVLink / NVSwitch** — highest bandwidth, lowest latency where present.
-2. **PCIe P2P** — one GPU directly accesses a peer GPU's memory.
-3. **Shared host memory** — the intermediary when direct P2P is not possible.
-4. **Fallbacks** — shaped by IOMMU, virtualization, container permissions, and topology.
+```text
+NCCL INFO: Topology detection started
+NCCL INFO: GPU 0: NVLink connected to GPU 2
+NCCL INFO: GPU 0: NVLink connected to GPU 3
+NCCL INFO: GPU 0: PCIe bus 0:...
+NCCL INFO: nvsPair[0]  GPU0<->GPU2: NVLink1, rate 900
+NCCL INFO: nvsPair[1]  GPU0<->GPU1: PIX, rate 64
+```
 
-NVLink does not automatically translate into application performance: wrong rank-to-GPU binding, processes running across NUMA nodes, or a communication pattern that fights the topology still lose badly on top of perfect links.
+### 8.2 One interface, many roads: the transport ladder
 
-### 8.3 Inter-node paths and GPUDirect RDMA
+Discovery told NCCL what the map looks like; now the data has to actually travel. NCCL puts a **unified transport interface** over every physical link type, so an AllReduce that has passed through the algorithm layer never cares what it runs on — the transport layer picks the fastest implementation per GPU pair from the topology:
 
-Cross-node traffic uses InfiniBand verbs, RoCE, an NCCL Net plugin, or plain TCP sockets as the general fallback. With GPUDirect RDMA, the NIC exchanges data directly with GPU memory:
+![NCCL transport layer - the path-selection ladder and channels in parallel](/posts/nvlink-nccl-scaleup-scaleout/nccl-transport-architecture.svg)
+
+The selection logic, per pair, is a simple ladder: do the two GPUs share NVLink → use NVLink; else do they support PCIe P2P → use PCIe; else is there a configured RDMA NIC → use RDMA; else fall back to TCP sockets. All of it is automatic — no user intervention — and `NCCL_DEBUG=INFO` prints which transport each connection actually got (section 13.1). One subtlety the figure calls out: **NVSwitch is not a separate transport**. It rides the NVLink transport; topology discovery identifies it, and it is the *algorithm* layer that exploits its switching capability (CollNet/NVLS, sections 6.4–6.5).
+
+### 8.3 Inside the node: NVLink, then PCIe P2P
+
+When two GPUs in the same machine share NVLink, NCCL prefers it unconditionally. On an H100, NVLink 4.0 provides ~450 GB/s per direction (900 GB/s aggregate) — roughly **7× PCIe Gen5 x16** at matched conventions (the popular "14×" compares NVLink's bidirectional total against PCIe's one direction; section 9.1's fact-check note again). NCCL uses CUDA's P2P mechanism to read and write the peer GPU's memory directly — no CPU, no system memory on the path. *Analogy: an enclosed skybridge between two adjacent buildings — near, fast, and nobody goes outside.*
+
+Without NVLink (different-generation GPUs, or cards that only meet at a PCIe switch), NCCL falls back to **PCIe P2P** — the same CUDA P2P mechanism, running over the PCIe bus at ~64 GB/s per direction. *Analogy: the street between the buildings — it gets you there, slower than the skybridge.* When direct P2P is impossible (IOMMU, virtualization, container permissions), a **shared-host-memory** path steps in as the intermediary.
+
+Two cautions from the earlier sections still apply: NVLink does not automatically translate into application performance — wrong rank-to-GPU binding, processes running across NUMA nodes, or a communication pattern that fights the topology still lose badly on top of perfect links.
+
+### 8.4 Across nodes: RDMA, GPUDirect, and the proxy thread
+
+When the GPUs sit in different machines, the data must cross the network, and NCCL uses **RDMA** — InfiniBand verbs or RoCE, or an NCCL Net plugin. The key property is **GPUDirect RDMA (GDR)**:
 
 ```text
 without GPUDirect RDMA : GPU → CPU memory → NIC → network
 with GPUDirect RDMA    : GPU ⇔ NIC → network
 ```
 
-"Direct" does not mean bypassing PCIe — it means skipping the bounce through a host buffer and the CPU network stack. The PCIe/NUMA distance between GPU and NIC still decides real performance.
+GPU memory → NIC → network → remote NIC → remote GPU memory, with the CPU and system memory never on the data path. That buys three things at once: **lower latency** (no CPU relay), **higher bandwidth** (no contention for CPU memory bandwidth), and **lower CPU load** (the CPU initiates, it does not move bytes). *Analogy: RDMA is the direct flight between two cities, and GDR is the airport at your doorstep — no bus ride (CPU relay) to get there.* "Direct" still does not mean bypassing PCIe: the PCIe/NUMA distance between GPU and NIC decides real performance, which is `NCCL_NET_GDR_LEVEL`'s whole job (section 13.2).
 
-### 8.4 Multiple NICs and rails
+The part nobody sees on the GPU side is the **proxy thread**. For cross-node RDMA, NCCL runs a CPU-side proxy thread per GPU that listens for GPU-initiated transfer requests, manages RDMA connection setup and queue pairs (QPs), and handles network events — completion notifications and errors. The GPU never drives the NIC itself:
+
+![Cross-node communication - the proxy thread manages QPs while data moves GPU-to-NIC via GDR](/posts/nvlink-nccl-scaleup-scaleout/nccl-proxy-thread.svg)
+
+This is why CPU cores matter for cross-node NCCL (section 10's phase 3, and 14.1): each GPU effectively needs a dedicated proxy thread, and a starved proxy stalls the NIC no matter how fast the fabric is.
+
+And when none of the above exists — a virtualized environment, no RDMA-capable NIC — NCCL falls back to plain **TCP sockets**: the slowest road, and the most compatible one.
+
+### 8.5 Multiple NICs and rails
 
 High-end GPU servers carry multiple HCAs/NICs; NCCL assigns network paths by GPU–NIC topological distance and drives ports in parallel. The ideal mapping:
 
@@ -491,7 +578,36 @@ GPU 4/5 → nearby NIC 2
 GPU 6/7 → nearby NIC 3
 ```
 
-If a container exposes only some devices, NIC name selection is wrong, or CPU/GPU/NIC NUMA binding is off, traffic detours across sockets — link bandwidth drops and tail latency grows. This per-GPU-NIC layout is also exactly what the **rail-optimized** fabric design in section 9 exists to serve.
+If a container exposes only some devices, NIC name selection is wrong, or CPU/GPU/NIC NUMA binding is off, traffic detours across sockets — link bandwidth drops and tail latency grows. This per-GPU-NIC layout is also exactly what the **rail-optimized** fabric design in section 9 exists to serve — and multi-rail only pays off when there are multiple channels to feed the NICs in parallel (section 8.7).
+
+### 8.6 How connections are established (bootstrap)
+
+Topology discovery tells NCCL what *could* connect; the GPUs still need actual connections before anything moves. That process is **bootstrap**:
+
+1. **Generate the Unique ID** — rank 0 calls `ncclGetUniqueId()` and the ID is passed to every other rank through an external mechanism (MPI, environment variables, a shared file, the framework's store — section 3.4).
+2. **Create the communicator** — every rank calls `ncclCommInitRank()` with the Unique ID and its own rank number.
+3. **Establish point-to-point connections** — each GPU pair sets up a transport channel chosen from the discovered topology (NVLink/P2P, shared memory, RDMA, or socket), exchanging memory handles and port information.
+4. **Allocate communication buffers** — GPU memory buffers are allocated per channel for sends and receives.
+
+In PyTorch all of this usually completes automatically behind `torch.distributed.init_process_group()` — with the wrinkle that the NCCL communicator is created *lazily, at the first collective*, so an "initialization" problem often surfaces at the first `all_reduce` instead. No engineer drives bootstrap by hand, but understanding it is what makes initialization-phase hangs and timeouts (section 15.1) debuggable. This is the front half of section 10's initialization phase, seen from the connection side.
+
+### 8.7 More than one road at once: channels stripe the data
+
+Everything above is "how do *two* GPUs talk". But a collective does not run on one ring: NCCL builds **several parallel rings (or trees), each called a channel** (section 3.6). The core idea is simple — if one ring cannot saturate the NVLink between GPU0 and GPU1, build two rings, cut the data in half, and run both at once. Concretely:
+
+- NCCL **stripes** the buffer across the channels;
+- each channel runs its own ring/tree with its own peers and buffers;
+- all channels execute **in parallel**, and the summed bandwidth approaches the total of every available link (the right panel of 8.2's figure).
+
+Why channels earn their keep:
+
+**load balance** — a single ring touches only some links, more channels light up more parallel paths;
+**multiple NICs** — with two IB NICs per node NCCL typically builds at least two channels, each bound to its own NIC, which is what makes 8.5's multi-rail real;
+**NVSwitch topologies** — many channels are how the all-to-all bandwidth of the crossbar actually gets used and fully utilized.
+
+The channel count is chosen automatically from the topology; `NCCL_MIN_NCHANNELS` / `NCCL_MAX_NCHANNELS` exist for experiments (section 13.4 — their pre-2.5 names were `NCCL_MIN_NRINGS`/`NCCL_MAX_NRINGS`).
+
+Which leaves the last question of the pipeline: what is the GPU *doing* while all this communication runs — waiting, or computing? That is the stream-and-overlap story of section 10.1.
 
 ## 9. NVLink and NVSwitch: the two domains of an AI cluster
 
@@ -530,7 +646,7 @@ GPU HBM → PCIe → RDMA NIC (CX7) → optics → leaf/spine switch → optics 
 Three structural changes arrive at once:
 
 1. **Latency jumps an order of magnitude.** Sub-µs NVLink becomes 1–5 µs RDMA on every cross-node hop of every synchronous collective.
-2. **Per-GPU bandwidth falls ~9×** (450 → ~50 GB/s per direction, using consistent units). The cliff is unavoidable; topology decides how much of the remainder is usable. **Rail-optimized** design uplinks each of the server's 8 NICs to a *different* leaf switch, so 8 GPUs running one AllReduce get 8 independent parallel uplink paths that sum — instead of contending for a single uplink. It is the fabric-side mirror of NCCL's own GPU→nearest-NIC assignment from section 8.4.
+2. **Per-GPU bandwidth falls ~9×** (450 → ~50 GB/s per direction, using consistent units). The cliff is unavoidable; topology decides how much of the remainder is usable. **Rail-optimized** design uplinks each of the server's 8 NICs to a *different* leaf switch, so 8 GPUs running one AllReduce get 8 independent parallel uplink paths that sum — instead of contending for a single uplink. It is the fabric-side mirror of NCCL's own GPU→nearest-NIC assignment from section 8.5.
 3. **Congestion starts existing.** NVSwitch made it a non-issue; an Ethernet fabric carrying AllReduce **incast** is the opposite — many-to-one bursts pile up queues, and without PFC/ECN discipline the result is drops, RDMA go-back-N retransmits, and training throughput falling off a cliff. Everything from my RoCEv2 posts — [PFC/ECN thresholds and headroom](/posts/roce-qos-concepts-and-packet-examples/), [the end-to-end DSCP contract](/posts/rocev2-cisco-cumulus-connectx-end-to-end/) — is the daily work of this domain.
 
 Inside 8 GPUs the network engineer has no seat at the table; beyond 8, every configuration decision lands directly in training throughput.
@@ -569,6 +685,22 @@ Internals evolve by version, but a typical communication passes four phases — 
 2. **Operation submission.** `ncclAllReduce()` picks the execution plan from the collective type, datatype and reduction op, message size, communicator topology, available algorithms/protocols/channels, and user configuration — then enqueues work on the CUDA stream. With the Group API, NCCL collects the batch and plans it as one unit.
 3. **GPU and proxy coordination.** Intra-node NVLink/P2P paths are driven mainly by GPU kernels — but cross-node communication also needs **NCCL's CPU proxy threads** to drive the NIC: posting sends and receives, polling completion queues, making plugin progress. "NCCL is a GPU library" does not mean the CPU is uninvolved: wrong core binding, CPU contention, or a tight container CPU quota degrades cross-node NCCL directly.
 4. **Completion.** Stream work after the collective proceeds only when the kernels and transfers finish. On a network error, peer exit, or timeout, the framework must query the asynchronous error and decide whether to abort the communicator and the job — NCCL does not guarantee the surviving ranks of a crashed group can carry on; the standard recovery is tearing the group down and rebuilding it (what elastic-training systems automate).
+
+### 10.1 Multi-stream and asynchronous execution: making communication non-blocking
+
+The four phases describe *one* operation. What decides real training speed is what the GPU does while phase 3 runs: wait, or keep computing?
+
+**The problem.** A naive training step is serial — forward → AllReduce → backward → AllReduce → next layer — and in that synchronous shape the GPU idles through every AllReduce, waiting for the transfer. For many models communication is 30% or more of step time, which means a GPU spending nearly a third of its life waiting:
+
+![Compute-communication overlap - synchronous serial execution vs dual-stream overlap](/posts/nvlink-nccl-scaleup-scaleout/nccl-compute-comm-overlap.svg)
+
+**The dual-stream answer.** NCCL rides CUDA's stream mechanism (section 3.5): a **compute stream** runs the forward/backward kernels while a separate **communication stream** runs the collectives, and the two execute concurrently. While the communication stream grinds through layer N's AllReduce, the compute stream is already producing layer N−1's gradients. PyTorch DDP is exactly this loop — gradients materialize back-to-front, each finished bucket is enqueued on the communication stream immediately, and compute never stops (section 11.3 has the bucket mechanics and their size trade-off). *Analogy: you keep cooking (compute) while the dishwasher runs (communication) — by the time the next course is prepped, the previous one's dishes are clean.*
+
+In theory, when each layer's AllReduce finishes before the compute stacked above it does, communication is **fully hidden** and training time ≈ pure compute time. The catch is the ratio: shallow layers and small batches produce AllReduces that outlive their compute, and the unhidden tail sticks out — which is precisely why topology (sections 8–9) and message coalescing (14.3) matter as much as they do.
+
+**Fewer kernel launches.** Every communication operation launches a CUDA kernel, and a swarm of small operations pays that launch tax over and over. NCCL batches: the Group API (section 11.1) plans grouped operations together and submits them as fewer launches, and within one collective many chunks ride a single kernel — launch overhead stays amortized instead of dominating.
+
+**What asynchrony costs.** Overlap is not free of rules. Buffer lifetime: the compute stream must not overwrite memory the communication stream is still reading. Synchronization points: results are usable only after the stream dependency is honored — `work.wait()`, a recorded event, or the blunt `torch.cuda.synchronize()` (section 3.5's contract). Grouped submission: mutually dependent operations go between `ncclGroupStart()`/`ncclGroupEnd()` (section 4.4). Frameworks wrap all three so users rarely touch them — but these seams are exactly where misconception 5 and the section 15.2 hangs live.
 
 ## 11. Using it: CUDA and PyTorch
 
@@ -720,25 +852,130 @@ For a Ring AllReduce of M total bytes (M as in section 6.2), the per-rank traffi
 busbw = algbw × 2 × (P − 1) / P
 ```
 
-Each collective has its own correction factor — consult the nccl-tests implementation, and never compare raw algbw one-to-one against a unidirectional link spec.
+The factor differs per collective — nccl-tests' PERFORMANCE.md derives each one:
 
-### 12.2 nccl-tests
+| Collective | busbw factor on algbw | Why |
+|---|---|---|
+| AllReduce | 2(n−1)/n | every element moves twice through the ring (6.2) |
+| ReduceScatter / AllGather | (n−1)/n | every element moves once, minus the local share |
+| AlltoAll | (n−1)/n | each rank keeps 1/n of its own data local |
+| Broadcast / Reduce | 1 | everything must leave (or reach) the root — the root *is* the bottleneck |
+| SendRecv | 1 | a plain point-to-point copy |
 
-NVIDIA's `nccl-tests` is the standard tool: `all_reduce_perf`, `all_gather_perf`, `reduce_scatter_perf`, `broadcast_perf`, `sendrecv_perf`, and friends.
+The point of the normalization, in the doc's own words: busbw exists so you can "compare it with the hardware peak bandwidth, independently of the number of ranks used", and "the bus bandwidth should reflect the speed of the hardware bottleneck: NVLink, PCI, QPI, or network." The companion rule: look at **time** for small sizes — that is the constant launch-and-latency overhead — and at **bandwidth** for large ones. Never compare raw algbw one-to-one against a unidirectional link spec.
+
+### 12.2 nccl-tests: the official benchmark
+
+[`nccl-tests`](https://github.com/NVIDIA/nccl-tests) is NVIDIA's own suite, and its first sentence states the double mission: the tests "check both the performance and the correctness" of NCCL operations. The build produces **eleven** binaries — one per pattern:
 
 ```text
-./build/all_reduce_perf \
-  -b 8 \        ! start at 8 bytes
-  -e 8G \       ! sweep up to 8 GiB
-  -f 2 \        ! double the size each step
-  -g 8          ! 8 GPUs per process (single-process mode)
+all_reduce_perf   all_gather_perf    broadcast_perf   reduce_scatter_perf
+reduce_perf       alltoall_perf      alltoallv_perf   scatter_perf
+gather_perf       sendrecv_perf      hypercube_perf
 ```
 
-Multi-node runs go through MPI or the cluster launcher, and the nccl-tests README's convention is **one process per GPU with `-g 1`** — e.g. `mpirun -np 64 -N 8 ./build/all_reduce_perf -b 8 -e 8G -f 2 -g 1` for 8 nodes × 8 GPUs. The process count, `-g`, and CPU/GPU binding must stay mutually consistent.
+Building is one `make`; point it at non-default installs with `CUDA_HOME`/`NCCL_HOME`, and build with `make MPI=1 MPI_HOME=/path/to/mpi` for multi-node runs (MPI is how the tests span processes and nodes):
 
-### 12.3 Methodology
+```text
+git clone https://github.com/NVIDIA/nccl-tests.git && cd nccl-tests
+make MPI=1 MPI_HOME=/path/to/mpi CUDA_HOME=/path/to/cuda NCCL_HOME=/path/to/nccl
+```
+
+The rank math is the one rule everyone trips over: **total ranks (= CUDA devices) = processes × threads per process (`-t`) × GPUs per thread (`-g`)** — the process count comes from `mpirun`, not from the tool. The two canonical invocations from the README:
+
+```text
+./build/all_reduce_perf -b 8 -e 128M -f 2 -g 8                 ! one process driving 8 GPUs (single node)
+mpirun -np 64 -N 8 ./build/all_reduce_perf -b 8 -e 8G -f 2 -g 1  ! 8 nodes x 8 GPUs, one rank per GPU
+```
+
+The arguments that matter day to day (defaults in parentheses):
+
+| Group | Flags |
+|---|---|
+| Size sweep | `-b` min / `-e` max (both default 32M — always set them), `-f` multiply per step or `-i` fixed increment |
+| GPU mapping | `-t` threads per process (1), `-g` GPUs per thread (1) |
+| Operation | `-o` sum/prod/min/max/avg/all (Sum), `-d` datatype (Float), `-r` root rank for rooted collectives (0) |
+| Iterations | `-n` timed iters (20), `-w` warmup iters, not timed (1), `-m` operations aggregated per iteration (1) |
+| Correctness | `-c` check iterations (1 — validation is on by default; slow at large scale, `-c 0` to disable) |
+| Modifiers | `-G` capture as CUDA Graph and replay, `-R` buffer registration (1 local, 2 symmetric), `-z` blocking mode, `-T` per-test timeout, `-a` report avg/min/max across ranks (MPI builds) |
+
+One environment variable of the suite itself deserves a network engineer's attention: `NCCL_TESTS_SPLIT` partitions the GPUs into groups running the same operation in parallel — e.g. `NCCL_TESTS_SPLIT="MOD 8"` on 8-GPU nodes runs eight parallel operations, each with one GPU per node, so the traffic is **purely inter-node**: a clean way to load the fabric without any NVLink component (bandwidth is then reported per group).
+
+### 12.3 Reading the output
+
+Each run prints a preamble (`nccl-tests version`, the parameter line, and a `# Using devices` block listing every rank's host, PID, and PCI bus id — worth a glance to confirm the rank↔GPU↔node mapping you intended), then one row per message size with two column groups, **out-of-place** and **in-place** (section 5.2's distinction), each holding `time`, `algbw`, `busbw`, and `#wrong`, and finally a footer:
+
+- `#wrong` and `Out of bounds values` are the correctness half: input buffers are generated by the suite's `verifiable` library, which "carefully craft[s] floating point input to produce exactly predictable output", so every received element is compared against the exact expected value — a nonzero count fails the run.
+- `Avg bus bandwidth` is the arithmetic mean of every busbw measurement in the run — a single regression-tracking number (and `NCCL_TESTS_MIN_BW` turns it into a pass/fail gate, useful in burn-in pipelines).
+
+The header block, from a real capture (a two-node V100 run posted in [nccl-tests issue #107](https://github.com/NVIDIA/nccl-tests/issues/107)):
+
+```text
+# nThread 1 nGpus 1 minBytes 1310720000 maxBytes 1310720000 step: 1048576(bytes) warmup iters: 5 iters: 20 validation: 1
+#
+# Using devices
+#   Rank  0 Pid   1320 on ip-172-31-20-228 device  0 [0x00] Tesla V100-SXM2-16GB
+#   Rank  0 Pid   2066 on ip-172-31-22-230 device  0 [0x00] Tesla V100-SXM2-16GB
+#
+#                                                       out-of-place                       in-place
+#       size         count      type   redop     time   algbw   busbw  error     time   algbw   busbw  error
+#        (B)    (elements)                       (us)  (GB/s)  (GB/s)            (us)  (GB/s)  (GB/s)
+```
+
+And this particular capture is a **broken run**, diagnosable from the header alone — which is exactly why the issue was filed as "How to understand the result?": both processes report **Rank 0**, meaning the binary was not built with `MPI=1`, so each node ran its own independent single-GPU "collective". The data rows confirm it — `busbw` prints `0.00` because the AllReduce factor `2(n−1)/n` is *zero* at n=1, and the in-place half reports a nonsensical 2 TB/s "algbw" for what is a no-op. First lesson of reading nccl-tests output: check `# Using devices` before believing any number.
+
+A **healthy run at scale**, published in NVIDIA's [HPC-X user manual](https://networking-docs.nvidia.com/hpcxum/2200/nccl-rdma-sharp-plugins) — 1,024 GPUs across 128 nodes, IB SHARP/CollNet enabled (section 6.4 live):
+
+```text
+mpirun -np 1024 -map-by ppr:8:node -x NCCL_COLLNET_ENABLE=1 -x NCCL_ALGO=CollNet \
+    ./nccl-tests/build/all_reduce_perf -b 4 -e 2G -f 2 -g 1 -w 50 -n 50
+
+           4             1   float     sum    44.53    0.00    0.00  3e-05    44.21    0.00    0.00  3e-05
+           8             2   float     sum    45.42    0.00    0.00  3e-05    45.85    0.00    0.00  3e-05
+          16             4   float     sum    46.34    0.00    0.00  3e-05    45.84    0.00    0.00  2e-05
+          32             8   float     sum    46.20    0.00    0.00  2e-05    46.56    0.00    0.00  2e-05
+          64            16   float     sum    46.00    0.00    0.00  2e-05    48.33    0.00    0.00  2e-05
+         128            32   float     sum    48.77    0.00    0.01  2e-05    47.23    0.00    0.01  2e-05
+         256            64   float     sum    47.88    0.01    0.01  2e-05    47.85    0.01    0.01  2e-05
+         512           128   float     sum    51.44    0.01    0.02  3e-05    48.66    0.01    0.02  3e-05
+        1024           256   float     sum    51.27    0.02    0.04  4e-05    51.78    0.02    0.04  4e-05
+        2048           512   float     sum    57.93    0.04    0.07  4e-05    56.45    0.04    0.07  4e-05
+        4096          1024   float     sum    57.32    0.07    0.14  4e-05    93.51    0.04    0.09  4e-05
+        8192          2048   float     sum    106.4    0.08    0.15  4e-05    59.70    0.14    0.27  4e-05
+       16384          4096   float     sum    103.0    0.16    0.32  4e-05    58.23    0.28    0.56  4e-05
+       32768          8192   float     sum    74.85    0.44    0.87  4e-05    137.8    0.24    0.48  4e-05
+       65536         16384   float     sum    96.71    0.68    1.35  4e-05    92.89    0.71    1.41  4e-05
+      131072         32768   float     sum    115.6    1.13    2.27  4e-05    120.7    1.09    2.17  4e-05
+      262144         65536   float     sum    197.7    1.33    2.65  4e-05    167.6    1.56    3.13  4e-05
+      524288        131072   float     sum    222.7    2.35    4.70  4e-05    239.2    2.19    4.38  4e-05
+     1048576        262144   float     sum    280.9    3.73    7.46  4e-05    197.7    5.30   10.60  4e-05
+     2097152        524288   float     sum    218.0    9.62   19.22  4e-05    213.9    9.81   19.59  4e-05
+     4194304       1048576   float     sum    257.6   16.28   32.53  4e-05    254.7   16.47   32.90  4e-05
+     8388608       2097152   float     sum    354.3   23.68   47.31  4e-05    523.5   16.02   32.02  4e-05
+    16777216       4194304   float     sum    505.9   33.16   66.26  4e-05    484.1   34.66   69.24  4e-05
+    33554432       8388608   float     sum    639.2   52.50  104.89  4e-05    678.6   49.45   98.80  4e-05
+    67108864      16777216   float     sum   1358.2   49.41   98.72  4e-05   1048.6   64.00  127.87  4e-05
+   134217728      33554432   float     sum   1737.2   77.26  154.37  4e-05   1777.6   75.51  150.86  4e-05
+   268435456      67108864   float     sum   4359.5   61.58  123.03  4e-05   4262.3   62.98  125.83  4e-05
+   536870912     134217728   float     sum   5619.7   95.53  190.88  4e-05   5699.0   94.20  188.22  4e-05
+  1073741824     268435456   float     sum    12169   88.23  176.30  4e-05    11508   93.30  186.42  4e-05
+  2147483648     536870912   float     sum    22618   94.94  189.70  4e-05    21814   98.44  196.70  4e-05
+# Out of bounds values : 0 OK
+# Avg bus bandwidth    : 41.2497
+```
+
+This one table carries every lesson of the section. The **latency floor**: a 4-byte AllReduce across 1,024 GPUs completes in ~45 µs, and the whole left half of the sweep is pinned there regardless of size — pure launch-and-synchronization overhead. The **S-curve**: busbw climbs from the floor through the megabyte range and plateaus around 190–197 GB/s at gigabyte sizes — as NVIDIA's tuning guidance puts it, a healthy system "level[s] off at the line rate of the hardware", and the plateau is what you compare against the bottleneck link (12.1); a plateau far below it, or a curve that never flattens, is where the sections 13–15 toolbox comes in. The **`error` column** (older releases print the max relative error for floating-point checks; current ones print the `#wrong` element count) stays at ~4e-05 — float rounding, not corruption — and the footer's `Out of bounds values: 0 OK` is the pass. And **`Avg bus bandwidth: 41.25`** shows why that footer number is a regression tracker rather than a headline: it averages the entire sweep, latency floor included, so it sits far below the 190 GB/s the fabric actually delivers.
+
+For calibration on the single-node ladder, NVIDIA's own published numbers for what topology buys: ~5 GB/s across CPU sockets over shared memory, ~12 GB/s with PCIe P2P, and NVLink aggregating far beyond (132 GB/s already on Volta's six links) — the measured version of section 8's transport ladder.
+
+### 12.4 Methodology
 
 A trustworthy measurement controls at least: GPU model and clock state; NCCL/CUDA/driver/network-driver versions; node count, GPUs per node, rank mapping; GPU-CPU-NIC NUMA affinity; the message-size range; warm-up; whether compute overlaps; whether algorithm/protocol are auto-selected; IB/RoCE port speeds, link state, congestion; and whether anything else shares the PCIe, NVLink, or network. And never record a single peak number: training traffic spans many bucket sizes, so the deliverable is the full **message-size → latency/bandwidth curve**.
+
+Two more lenses for interpreting what that curve *measures*, both second nature to a network engineer:
+
+- **What the number is an indicator *of* migrates with scale.** On 1–4 nodes, nccl-tests mostly measures the servers — NVLink, PCIe, NUMA binding, NCCL's own efficiency. Around 8–32 nodes it becomes a hybrid of node and fabric. Beyond ~64 nodes the fabric dominates, and the busbw curve is effectively a **network-capability indicator**: rail balance, congestion control, and ECMP behavior show up in it before anything GPU-side does. The same 41 GB/s average means completely different things at each of those scales.
+- **Judge stability by the tail, not the mean.** A synchronized collective completes when its *slowest* rank does (section 15.6), so a fabric that averages well but jitters badly trains slowly. nccl-tests has per-iteration statistics for exactly this — `-I 1` reports `i_min`/`i_max`/`i_p99`/`i_cv%` per size — and across repeated runs the P95/P99 spread matters more than the average. A scaling sweep should degrade *smoothly* as nodes are added; a sharp drop at one node count is an inflection worth chasing (an oversubscription tier, a hash imbalance, a rail asymmetry — section 15.4's ladder).
 
 ## 13. The environment-variable toolbox
 
@@ -807,6 +1044,21 @@ TORCH_NCCL_*  → PyTorch ProcessGroupNCCL behavior
 ```
 
 Keeping the two namespaces straight avoids a whole category of "I set the variable and nothing changed" confusion.
+
+### 13.6 The quick-reference card
+
+The handful you actually reach for, on one card:
+
+| Variable | What it does | When to reach for it |
+|---|---|---|
+| `NCCL_DEBUG=INFO` | Print topology, transport, and channel decisions | The first move in any investigation (13.1, 15.1) |
+| `NCCL_ALGO=Ring` / `=Tree` | Pin the algorithm | A/B tests and fault isolation only — the cost model already picks Ring for large messages and Tree for small (6.6) |
+| `NCCL_PROTO=Simple` | Pin the protocol | When an LL/LL128 bug is suspected — the docs discourage setting it otherwise (sections 7, 13.4) |
+| `NCCL_MIN_NCHANNELS` | Raise the channel floor | Multi-NIC nodes where too few channels underfeed the rails (8.7); `NCCL_MIN_NRINGS` is its pre-2.5 name |
+| `NCCL_NTHREADS` | CUDA threads per channel's block | Practically never — the default tracks the GPU generation |
+| `NCCL_P2P_LEVEL` | Distance cap for GPU P2P | Debugging when NVLink/P2P looks unused (13.3, 15.7) |
+
+> **Note:** cards like this circulate with "set Ring for large messages, Tree for small" as standing tuning advice. In NCCL that is what the cost model already does per message size — pinning is a *diagnostic*, not a configuration strategy (sections 6.6 and 13.4).
 
 ## 14. Optimization beyond environment variables
 
@@ -990,4 +1242,5 @@ And the four one-liners this post compresses into: **AllReduce = ReduceScatter +
 - NVIDIA — [NCCL GitHub repository](https://github.com/NVIDIA/nccl), [nccl-tests](https://github.com/NVIDIA/nccl-tests)
 - PyTorch — [Distributed documentation](https://pytorch.org/docs/stable/distributed.html)
 - NVIDIA — [GB200 NVL72](https://www.nvidia.com/en-us/data-center/gb200-nvl72/)
+- CloudSwitch — [How to read NCCL test results](https://cloudswit.ch/blogs/how-to-read-nccl-test-results/) (the scale-migration and tail-latency lenses in 12.4)
 - Related posts on this blog: [RoCE QoS concepts and packet examples](/posts/roce-qos-concepts-and-packet-examples/), [End-to-end RoCEv2: Nexus, Cumulus, ConnectX](/posts/rocev2-cisco-cumulus-connectx-end-to-end/), [RDMA performance tuning](/posts/rdma-performance-tuning/)

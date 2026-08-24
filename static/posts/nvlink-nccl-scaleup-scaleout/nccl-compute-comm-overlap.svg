@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="700" viewBox="0 0 1080 700" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="ov" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8A8880"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="700" fill="#ffffff"/>
+  <text x="540" y="36" font-size="20" font-weight="bold" fill="#2C2C2A" text-anchor="middle">Compute&#8211;communication overlap</text>
+
+  <!-- ===== synchronous panel ===== -->
+  <rect x="40" y="60" width="1000" height="180" rx="16" fill="#FDF0EF" stroke="#E05C7A" stroke-width="1.5"/>
+  <rect x="60" y="76" width="300" height="30" rx="6" fill="#F8D7DC" stroke="#E05C7A"/>
+  <text x="210" y="96" font-size="12.5" font-weight="bold" fill="#A33049" text-anchor="middle">Synchronous: compute, then wait</text>
+  <text x="380" y="96" font-size="11" fill="#5F5E5A">the GPU alternates between computing and idling while the transfer runs</text>
+
+  <rect x="70" y="122" width="200" height="52" rx="8" fill="#CBDCF2" stroke="#3A7BD5" stroke-width="1.5"/>
+  <text x="170" y="152" font-size="12.5" font-weight="bold" fill="#1F3B5C" text-anchor="middle">forward compute</text>
+  <rect x="290" y="122" width="200" height="52" rx="8" fill="#F8D7DC" stroke="#E05C7A" stroke-width="1.5"/>
+  <text x="390" y="145" font-size="12.5" font-weight="bold" fill="#A33049" text-anchor="middle">AllReduce</text>
+  <text x="390" y="163" font-size="10.5" fill="#A33049" text-anchor="middle">gradient sync</text>
+  <rect x="510" y="122" width="200" height="52" rx="8" fill="#CBDCF2" stroke="#3A7BD5" stroke-width="1.5"/>
+  <text x="610" y="152" font-size="12.5" font-weight="bold" fill="#1F3B5C" text-anchor="middle">backward compute</text>
+  <rect x="730" y="122" width="200" height="52" rx="8" fill="#F8D7DC" stroke="#E05C7A" stroke-width="1.5"/>
+  <text x="830" y="145" font-size="12.5" font-weight="bold" fill="#A33049" text-anchor="middle">AllReduce</text>
+  <text x="830" y="163" font-size="10.5" fill="#A33049" text-anchor="middle">gradient sync</text>
+
+  <text x="390" y="196" font-size="11" font-weight="bold" fill="#C62828" text-anchor="middle">&#9888; GPU idle</text>
+  <text x="830" y="196" font-size="11" font-weight="bold" fill="#C62828" text-anchor="middle">&#9888; GPU idle</text>
+  <text x="540" y="224" font-size="11.5" fill="#A33049" text-anchor="middle" font-weight="bold">total time = compute + communication (low GPU utilization)</text>
+
+  <!-- ===== asynchronous panel ===== -->
+  <rect x="40" y="260" width="1000" height="240" rx="16" fill="#F0F8EE" stroke="#57A64A" stroke-width="1.5"/>
+  <rect x="60" y="276" width="330" height="30" rx="6" fill="#DFF0DA" stroke="#57A64A"/>
+  <text x="225" y="296" font-size="12.5" font-weight="bold" fill="#1B5E20" text-anchor="middle">Asynchronous: compute and communicate</text>
+  <text x="410" y="296" font-size="11" fill="#5F5E5A">while layer N&#8722;1 computes on one stream, layer N's gradients travel on the other</text>
+
+  <text x="120" y="345" font-size="11.5" font-weight="bold" fill="#1F3B5C" text-anchor="middle">compute stream</text>
+  <rect x="200" y="320" width="160" height="46" rx="8" fill="#CBDCF2" stroke="#3A7BD5" stroke-width="1.5"/>
+  <text x="280" y="348" font-size="12" font-weight="bold" fill="#1F3B5C" text-anchor="middle">forward</text>
+  <rect x="380" y="320" width="160" height="46" rx="8" fill="#CBDCF2" stroke="#3A7BD5" stroke-width="1.5"/>
+  <text x="460" y="348" font-size="12" font-weight="bold" fill="#1F3B5C" text-anchor="middle">backward layer N</text>
+  <rect x="560" y="320" width="170" height="46" rx="8" fill="#CBDCF2" stroke="#3A7BD5" stroke-width="1.5"/>
+  <text x="645" y="348" font-size="12" font-weight="bold" fill="#1F3B5C" text-anchor="middle">backward layer N&#8722;1</text>
+  <rect x="750" y="320" width="170" height="46" rx="8" fill="#CBDCF2" stroke="#3A7BD5" stroke-width="1.5"/>
+  <text x="835" y="348" font-size="12" font-weight="bold" fill="#1F3B5C" text-anchor="middle">backward layer N&#8722;2</text>
+
+  <g stroke="#8A8880" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ov)">
+    <line x1="460" y1="366" x2="460" y2="404"/>
+    <line x1="645" y1="366" x2="645" y2="404"/>
+    <line x1="835" y1="366" x2="835" y2="404"/>
+  </g>
+
+  <text x="120" y="435" font-size="11.5" font-weight="bold" fill="#A33049" text-anchor="middle">communication stream</text>
+  <rect x="380" y="408" width="160" height="46" rx="8" fill="#F8D7DC" stroke="#E05C7A" stroke-width="1.5"/>
+  <text x="460" y="430" font-size="11.5" font-weight="bold" fill="#A33049" text-anchor="middle">AllReduce</text>
+  <text x="460" y="446" font-size="10.5" fill="#A33049" text-anchor="middle">(layer N)</text>
+  <rect x="560" y="408" width="170" height="46" rx="8" fill="#F8D7DC" stroke="#E05C7A" stroke-width="1.5"/>
+  <text x="645" y="430" font-size="11.5" font-weight="bold" fill="#A33049" text-anchor="middle">AllReduce</text>
+  <text x="645" y="446" font-size="10.5" fill="#A33049" text-anchor="middle">(layer N&#8722;1)</text>
+  <rect x="750" y="408" width="170" height="46" rx="8" fill="#F8D7DC" stroke="#E05C7A" stroke-width="1.5"/>
+  <text x="835" y="430" font-size="11.5" font-weight="bold" fill="#A33049" text-anchor="middle">AllReduce</text>
+  <text x="835" y="446" font-size="10.5" fill="#A33049" text-anchor="middle">(layer N&#8722;2)</text>
+
+  <rect x="370" y="310" width="560" height="154" rx="12" fill="none" stroke="#57A64A" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="650" y="482" font-size="11" font-weight="bold" fill="#2E7D32" text-anchor="middle">overlap region &#9660;</text>
+
+  <text x="540" y="492" font-size="0" fill="#1B5E20"> </text>
+
+  <!-- ===== time comparison ===== -->
+  <rect x="40" y="520" width="1000" height="120" rx="16" fill="#F7F7F5" stroke="#C9C7BF"/>
+  <rect x="470" y="534" width="140" height="26" rx="5" fill="#4A4A46"/>
+  <text x="540" y="552" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">time compared</text>
+
+  <text x="105" y="586" font-size="11.5" font-weight="bold" fill="#A33049" text-anchor="middle">synchronous</text>
+  <rect x="160" y="572" width="700" height="20" rx="6" fill="#F8D7DC" stroke="#E05C7A"/>
+  <text x="105" y="618" font-size="11.5" font-weight="bold" fill="#1B5E20" text-anchor="middle">asynchronous</text>
+  <rect x="160" y="604" width="480" height="20" rx="6" fill="#DFF0DA" stroke="#57A64A"/>
+  <text x="656" y="618" font-size="11" fill="#2E7D32">&#8592; communication time saved</text>
+
+  <text x="540" y="668" font-size="11.5" fill="#1F3B5C" text-anchor="middle" font-weight="bold">Overlap works when each layer's backward compute time &#8805; that layer's gradient-communication time — the longer the compute, the better it hides.</text>
+</svg>

@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="640" viewBox="0 0 1080 640" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="ad" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8A8880"/>
+    </marker>
+    <marker id="ap" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6A1B9A"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="640" fill="#ffffff"/>
+  <text x="540" y="36" font-size="20" font-weight="bold" fill="#2C2C2A" text-anchor="middle">The NCCL transport layer &#8212; one interface, many roads</text>
+
+  <!-- ===== left panel: transport ladder ===== -->
+  <rect x="40" y="60" width="230" height="30" rx="5" fill="#EEF7EE" stroke="#57A64A"/>
+  <text x="155" y="80" font-size="13" font-weight="bold" fill="#2E7D32" text-anchor="middle">Automatic path selection</text>
+  <text x="40" y="112" font-size="11" fill="#5F5E5A">per GPU pair, NCCL picks the fastest available transport</text>
+
+  <rect x="40" y="126" width="480" height="86" rx="10" fill="#DFF0DA" stroke="#2E7D32" stroke-width="2"/>
+  <text x="58" y="152" font-size="14" font-weight="bold" fill="#1B5E20">&#9312;  NVLink</text>
+  <text x="240" y="152" font-size="12" font-weight="bold" fill="#2E7D32">900 GB/s aggregate bidirectional</text>
+  <text x="58" y="174" font-size="11.5" fill="#2C2C2A">same-node GPUs, direct or through the NVSwitch chip;</text>
+  <text x="58" y="192" font-size="11.5" fill="#2C2C2A">CUDA P2P loads/stores straight into peer HBM</text>
+
+  <line x1="280" y1="212" x2="280" y2="232" stroke="#8A8880" stroke-width="2" marker-end="url(#ad)"/>
+
+  <rect x="40" y="236" width="480" height="74" rx="10" fill="#EEF7EE" stroke="#57A64A" stroke-width="1.5"/>
+  <text x="58" y="262" font-size="14" font-weight="bold" fill="#1B5E20">&#9313;  PCIe P2P</text>
+  <text x="240" y="262" font-size="12" font-weight="bold" fill="#2E7D32">64 GB/s per direction</text>
+  <text x="58" y="284" font-size="11.5" fill="#2C2C2A">GPU-to-GPU through the PCIe switch, no CPU involved</text>
+
+  <line x1="280" y1="310" x2="280" y2="330" stroke="#8A8880" stroke-width="2" marker-end="url(#ad)"/>
+
+  <rect x="40" y="334" width="480" height="86" rx="10" fill="#FDF6E3" stroke="#E6A817" stroke-width="1.5"/>
+  <text x="58" y="360" font-size="14" font-weight="bold" fill="#8C6D0A">&#9314;  RDMA (IB / RoCE)</text>
+  <text x="270" y="360" font-size="12" font-weight="bold" fill="#8C6D0A">~100 GB/s bidir per NIC (with GDR)</text>
+  <text x="58" y="382" font-size="11.5" fill="#2C2C2A">cross-node: GPU memory exchanged directly with the NIC</text>
+  <text x="58" y="400" font-size="11.5" fill="#2C2C2A">by DMA (GPUDirect RDMA), no host bounce</text>
+
+  <line x1="280" y1="420" x2="280" y2="440" stroke="#8A8880" stroke-width="2" marker-end="url(#ad)"/>
+
+  <rect x="40" y="444" width="480" height="64" rx="10" fill="#FDECEA" stroke="#C62828" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="58" y="470" font-size="14" font-weight="bold" fill="#C62828">&#9315;  TCP socket</text>
+  <text x="230" y="470" font-size="12" font-weight="bold" fill="#C62828">fallback</text>
+  <text x="58" y="492" font-size="11.5" fill="#2C2C2A">no RDMA hardware / virtualized: kernel TCP/IP stack</text>
+
+  <rect x="40" y="524" width="480" height="86" rx="10" fill="none" stroke="#57A64A" stroke-width="1.2" stroke-dasharray="5 4"/>
+  <text x="56" y="548" font-size="11" fill="#2E7D32" font-weight="bold">NVSwitch is not a separate transport.</text>
+  <text x="56" y="566" font-size="11" fill="#5F5E5A">It rides the NVLink transport; topology discovery (8.1) identifies it,</text>
+  <text x="56" y="582" font-size="11" fill="#5F5E5A">and the algorithm layer exploits its switching capability</text>
+  <text x="56" y="598" font-size="11" fill="#5F5E5A">for CollNet / NVLS (sections 6.4&#8211;6.5).</text>
+
+  <!-- ===== right panel: channel striping ===== -->
+  <rect x="560" y="60" width="230" height="30" rx="5" fill="#F4EEF9" stroke="#6A1B9A"/>
+  <text x="675" y="80" font-size="13" font-weight="bold" fill="#4A148C" text-anchor="middle">Channels in parallel</text>
+  <text x="560" y="112" font-size="11" fill="#5F5E5A">striped data + parallel channels &#8776; the physical limit</text>
+
+  <rect x="670" y="130" width="300" height="48" rx="10" fill="#E9DFF5" stroke="#6A1B9A" stroke-width="1.5"/>
+  <text x="820" y="159" font-size="13" font-weight="bold" fill="#4A148C" text-anchor="middle">GPU buffer (e.g. 1 GB)</text>
+
+  <g stroke="#6A1B9A" stroke-width="2" marker-end="url(#ap)">
+    <line x1="740" y1="178" x2="640" y2="248"/>
+    <line x1="820" y1="178" x2="820" y2="248"/>
+    <line x1="900" y1="178" x2="1000" y2="248"/>
+  </g>
+  <text x="820" y="212" font-size="11" fill="#6A1B9A" text-anchor="middle">sliced into N stripes</text>
+
+  <rect x="560" y="252" width="160" height="66" rx="8" fill="#F4EEF9" stroke="#6A1B9A"/>
+  <text x="640" y="276" font-size="11.5" font-weight="bold" fill="#4A148C" text-anchor="middle">Channel 1 (Ring)</text>
+  <text x="640" y="292" font-size="11" fill="#2C2C2A" text-anchor="middle">stripe 1</text>
+  <text x="640" y="308" font-size="10.5" fill="#5F5E5A" text-anchor="middle">&#8594; NIC 0</text>
+
+  <rect x="740" y="252" width="160" height="66" rx="8" fill="#F4EEF9" stroke="#6A1B9A"/>
+  <text x="820" y="276" font-size="11.5" font-weight="bold" fill="#4A148C" text-anchor="middle">Channel 2 (Ring)</text>
+  <text x="820" y="292" font-size="11" fill="#2C2C2A" text-anchor="middle">stripe 2</text>
+  <text x="820" y="308" font-size="10.5" fill="#5F5E5A" text-anchor="middle">&#8594; NIC 1</text>
+
+  <rect x="920" y="252" width="160" height="66" rx="8" fill="#F4EEF9" stroke="#6A1B9A"/>
+  <text x="1000" y="276" font-size="11.5" font-weight="bold" fill="#4A148C" text-anchor="middle">Channel N (Tree)</text>
+  <text x="1000" y="292" font-size="11" fill="#2C2C2A" text-anchor="middle">stripe N</text>
+  <text x="1000" y="308" font-size="10.5" fill="#5F5E5A" text-anchor="middle">&#8594; NIC N&#8722;1</text>
+
+  <g stroke="#6A1B9A" stroke-width="2" marker-end="url(#ap)">
+    <line x1="640" y1="318" x2="750" y2="388"/>
+    <line x1="820" y1="318" x2="820" y2="388"/>
+    <line x1="1000" y1="318" x2="890" y2="388"/>
+  </g>
+  <text x="820" y="356" font-size="11" fill="#6A1B9A" text-anchor="middle">merged at the destination</text>
+
+  <rect x="660" y="392" width="320" height="52" rx="10" fill="#6A1B9A"/>
+  <text x="820" y="416" font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">total bandwidth &#8776; N &#215; per-channel</text>
+  <text x="820" y="434" font-size="11" fill="#E9DFF5" text-anchor="middle">every rail and every NVLink lane kept busy</text>
+
+  <text x="560" y="480" font-size="11" fill="#5F5E5A">Each channel is a full logical pipeline (section 3.6): its own</text>
+  <text x="560" y="496" font-size="11" fill="#5F5E5A">rank order, peer connections, buffers, and &#8212; cross-node &#8212;</text>
+  <text x="560" y="512" font-size="11" fill="#5F5E5A">its own NIC binding. NCCL picks the count automatically</text>
+  <text x="560" y="528" font-size="11" fill="#5F5E5A">(NCCL_MIN/MAX_NCHANNELS to experiment, section 13.4).</text>
+
+  <text x="560" y="566" font-size="11" fill="#5F5E5A">Bandwidth conventions differ per rung &#8212; NVLink is quoted as</text>
+  <text x="560" y="582" font-size="11" fill="#5F5E5A">aggregate bidirectional, PCIe per direction, RDMA per NIC</text>
+  <text x="560" y="598" font-size="11" fill="#5F5E5A">bidirectional &#8212; see the fact-check note in section 9.1.</text>
+</svg>

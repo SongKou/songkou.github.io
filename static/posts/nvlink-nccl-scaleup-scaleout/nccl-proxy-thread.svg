@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="380" viewBox="0 0 1080 380" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="ag2" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4A4A46"/>
+    </marker>
+    <marker id="ao2" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#E67E22"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="380" fill="#ffffff"/>
+  <text x="540" y="36" font-size="20" font-weight="bold" fill="#2C2C2A" text-anchor="middle">Cross-node communication: the proxy-thread architecture</text>
+
+  <!-- Node A -->
+  <rect x="40" y="70" width="400" height="220" rx="16" fill="#EBF3FB" stroke="#3A7BD5" stroke-width="1.5"/>
+  <text x="240" y="96" font-size="13" font-weight="bold" fill="#1F3B5C" text-anchor="middle">Node A</text>
+
+  <rect x="64" y="150" width="130" height="56" rx="8" fill="#CBDCF2" stroke="#1F3B5C" stroke-width="1.5"/>
+  <text x="129" y="174" font-size="12.5" font-weight="bold" fill="#1F3B5C" text-anchor="middle">GPU memory</text>
+  <text x="129" y="192" font-size="10.5" fill="#1F3B5C" text-anchor="middle">(HBM)</text>
+
+  <rect x="176" y="106" width="180" height="34" rx="8" fill="#FDF6E3" stroke="#E6A817" stroke-width="1.5"/>
+  <text x="266" y="128" font-size="11.5" font-weight="bold" fill="#8C6D0A" text-anchor="middle">proxy thread &#183; manages QPs</text>
+
+  <rect x="280" y="150" width="130" height="56" rx="8" fill="#FBE3C3" stroke="#E67E22" stroke-width="1.5"/>
+  <text x="345" y="174" font-size="12.5" font-weight="bold" fill="#8C4B0A" text-anchor="middle">RDMA NIC</text>
+  <text x="345" y="192" font-size="10.5" fill="#8C4B0A" text-anchor="middle">(IB / RoCE)</text>
+
+  <line x1="194" y1="178" x2="280" y2="178" stroke="#4A4A46" stroke-width="3" marker-end="url(#ag2)" marker-start="url(#ag2)"/>
+  <text x="237" y="168" font-size="10.5" font-weight="bold" fill="#2E7D32" text-anchor="middle">GDR</text>
+
+  <g stroke="#E6A817" stroke-width="1.5" stroke-dasharray="4 3">
+    <line x1="240" y1="140" x2="230" y2="164"/>
+    <line x1="300" y1="140" x2="330" y2="150"/>
+  </g>
+  <text x="240" y="234" font-size="10.5" fill="#5F5E5A" text-anchor="middle">posts sends/receives, polls the completion queue,</text>
+  <text x="240" y="250" font-size="10.5" fill="#5F5E5A" text-anchor="middle">handles errors &#8212; the data itself never touches the CPU</text>
+
+  <!-- network -->
+  <rect x="470" y="150" width="140" height="56" rx="10" fill="#F0F0EE" stroke="#8A8880" stroke-width="1.5"/>
+  <text x="540" y="174" font-size="12.5" font-weight="bold" fill="#4A4A46" text-anchor="middle">IB / RoCE</text>
+  <text x="540" y="192" font-size="10.5" fill="#4A4A46" text-anchor="middle">network</text>
+  <line x1="410" y1="178" x2="470" y2="178" stroke="#E67E22" stroke-width="3" marker-end="url(#ao2)"/>
+  <line x1="610" y1="178" x2="670" y2="178" stroke="#E67E22" stroke-width="3" marker-end="url(#ao2)"/>
+
+  <!-- Node B -->
+  <rect x="640" y="70" width="400" height="220" rx="16" fill="#EBF3FB" stroke="#3A7BD5" stroke-width="1.5"/>
+  <text x="840" y="96" font-size="13" font-weight="bold" fill="#1F3B5C" text-anchor="middle">Node B</text>
+
+  <rect x="670" y="150" width="130" height="56" rx="8" fill="#FBE3C3" stroke="#E67E22" stroke-width="1.5"/>
+  <text x="735" y="174" font-size="12.5" font-weight="bold" fill="#8C4B0A" text-anchor="middle">RDMA NIC</text>
+  <text x="735" y="192" font-size="10.5" fill="#8C4B0A" text-anchor="middle">(IB / RoCE)</text>
+
+  <rect x="724" y="106" width="180" height="34" rx="8" fill="#FDF6E3" stroke="#E6A817" stroke-width="1.5"/>
+  <text x="814" y="128" font-size="11.5" font-weight="bold" fill="#8C6D0A" text-anchor="middle">proxy thread &#183; manages QPs</text>
+
+  <rect x="886" y="150" width="130" height="56" rx="8" fill="#CBDCF2" stroke="#1F3B5C" stroke-width="1.5"/>
+  <text x="951" y="174" font-size="12.5" font-weight="bold" fill="#1F3B5C" text-anchor="middle">GPU memory</text>
+  <text x="951" y="192" font-size="10.5" fill="#1F3B5C" text-anchor="middle">(HBM)</text>
+
+  <line x1="800" y1="178" x2="886" y2="178" stroke="#4A4A46" stroke-width="3" marker-end="url(#ag2)" marker-start="url(#ag2)"/>
+  <text x="843" y="168" font-size="10.5" font-weight="bold" fill="#2E7D32" text-anchor="middle">GDR</text>
+
+  <g stroke="#E6A817" stroke-width="1.5" stroke-dasharray="4 3">
+    <line x1="780" y1="140" x2="750" y2="150"/>
+    <line x1="840" y1="140" x2="850" y2="164"/>
+  </g>
+  <text x="840" y="234" font-size="10.5" fill="#5F5E5A" text-anchor="middle">one proxy thread per GPU, on the CPU &#8212; which is why</text>
+  <text x="840" y="250" font-size="10.5" fill="#5F5E5A" text-anchor="middle">CPU cores and pinning matter for cross-node NCCL (14.1)</text>
+
+  <text x="540" y="330" font-size="12" fill="#5F5E5A" text-anchor="middle">The GPU never drives the NIC. The CPU proxy thread manages queue pairs and RDMA events;</text>
+  <text x="540" y="350" font-size="12" fill="#5F5E5A" text-anchor="middle">the payload moves directly between GPU memory and the NIC via GPUDirect RDMA (GDR).</text>
+</svg>

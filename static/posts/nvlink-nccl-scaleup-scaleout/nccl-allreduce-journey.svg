@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="820" viewBox="0 0 1080 820" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="aj" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1F3B5C"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="820" fill="#ffffff"/>
+  <text x="540" y="36" font-size="20" font-weight="bold" fill="#2C2C2A" text-anchor="middle">The complete journey of one AllReduce</text>
+  <text x="540" y="58" font-size="12" fill="#5F5E5A" text-anchor="middle">what happens behind a single torch.distributed.all_reduce() call &#8212; and where this post covers each layer</text>
+
+  <!-- call box -->
+  <rect x="240" y="78" width="600" height="46" rx="10" fill="#1F3B5C"/>
+  <text x="540" y="102" font-size="13.5" font-weight="bold" fill="#ffffff" text-anchor="middle">your PyTorch code &#8212; torch.distributed.all_reduce()</text>
+  <text x="540" y="116" font-size="0"> </text>
+  <line x1="540" y1="124" x2="540" y2="146" stroke="#1F3B5C" stroke-width="2.5" marker-end="url(#aj)"/>
+
+  <!-- layer 1 -->
+  <rect x="180" y="150" width="720" height="52" rx="10" fill="#F7F7F5" stroke="#1F3B5C" stroke-width="1.5"/>
+  <circle cx="216" cy="176" r="15" fill="#1F3B5C"/>
+  <text x="216" y="181" font-size="12.5" font-weight="bold" fill="#ffffff" text-anchor="middle">1</text>
+  <text x="244" y="171" font-size="12.5" font-weight="bold" fill="#2C2C2A">Communication primitive</text>
+  <text x="244" y="190" font-size="11.5" fill="#5F5E5A">NCCL decides this is an AllReduce</text>
+  <text x="884" y="181" font-size="11" fill="#8A8880" text-anchor="end">section 4</text>
+  <line x1="540" y1="202" x2="540" y2="224" stroke="#1F3B5C" stroke-width="2.5" marker-end="url(#aj)"/>
+
+  <!-- layer 2 -->
+  <rect x="180" y="228" width="720" height="52" rx="10" fill="#F7F7F5" stroke="#1F3B5C" stroke-width="1.5"/>
+  <circle cx="216" cy="254" r="15" fill="#1F3B5C"/>
+  <text x="216" y="259" font-size="12.5" font-weight="bold" fill="#ffffff" text-anchor="middle">2</text>
+  <text x="244" y="249" font-size="12.5" font-weight="bold" fill="#2C2C2A">Algorithm &#215; protocol</text>
+  <text x="244" y="268" font-size="11.5" fill="#5F5E5A">Ring / Tree / CollNet / NVLS &#215; Simple / LL / LL128, by message size and topology</text>
+  <text x="884" y="259" font-size="11" fill="#8A8880" text-anchor="end">sections 6&#8211;7</text>
+  <line x1="540" y1="280" x2="540" y2="302" stroke="#1F3B5C" stroke-width="2.5" marker-end="url(#aj)"/>
+
+  <!-- layer 3 (init-time) -->
+  <rect x="180" y="306" width="720" height="52" rx="10" fill="#E8F1FB" stroke="#3A7BD5" stroke-width="1.5"/>
+  <circle cx="216" cy="332" r="15" fill="#3A7BD5"/>
+  <text x="216" y="337" font-size="12.5" font-weight="bold" fill="#ffffff" text-anchor="middle">3</text>
+  <text x="244" y="327" font-size="12.5" font-weight="bold" fill="#2C2C2A">Topology discovery</text>
+  <text x="244" y="346" font-size="11.5" fill="#5F5E5A">the best physical path for every GPU pair</text>
+  <text x="884" y="337" font-size="11" fill="#8A8880" text-anchor="end">section 8.1</text>
+  <line x1="540" y1="358" x2="540" y2="380" stroke="#1F3B5C" stroke-width="2.5" marker-end="url(#aj)"/>
+
+  <!-- layer 4 (init-time) -->
+  <rect x="180" y="384" width="720" height="52" rx="10" fill="#E8F1FB" stroke="#3A7BD5" stroke-width="1.5"/>
+  <circle cx="216" cy="410" r="15" fill="#3A7BD5"/>
+  <text x="216" y="415" font-size="12.5" font-weight="bold" fill="#ffffff" text-anchor="middle">4</text>
+  <text x="244" y="405" font-size="12.5" font-weight="bold" fill="#2C2C2A">Bootstrap</text>
+  <text x="244" y="424" font-size="11.5" fill="#5F5E5A">connections established, the communicator comes up</text>
+  <text x="884" y="415" font-size="11" fill="#8A8880" text-anchor="end">section 8.6</text>
+  <line x1="540" y1="436" x2="540" y2="458" stroke="#1F3B5C" stroke-width="2.5" marker-end="url(#aj)"/>
+
+  <!-- bracket for init-time layers -->
+  <path d="M 916 306 L 928 306 L 928 436 L 916 436" fill="none" stroke="#3A7BD5" stroke-width="1.5"/>
+  <text x="944" y="362" font-size="10.5" fill="#3A7BD5">runs once,</text>
+  <text x="944" y="376" font-size="10.5" fill="#3A7BD5">at communicator</text>
+  <text x="944" y="390" font-size="10.5" fill="#3A7BD5">creation</text>
+
+  <!-- layer 5 -->
+  <rect x="180" y="462" width="720" height="52" rx="10" fill="#F7F7F5" stroke="#1F3B5C" stroke-width="1.5"/>
+  <circle cx="216" cy="488" r="15" fill="#1F3B5C"/>
+  <text x="216" y="493" font-size="12.5" font-weight="bold" fill="#ffffff" text-anchor="middle">5</text>
+  <text x="244" y="483" font-size="12.5" font-weight="bold" fill="#2C2C2A">Transport</text>
+  <text x="244" y="502" font-size="11.5" fill="#5F5E5A">the fastest road wins: NVLink &#8250; PCIe P2P &#8250; RDMA &#8250; socket</text>
+  <text x="884" y="493" font-size="11" fill="#8A8880" text-anchor="end">sections 8.2&#8211;8.4</text>
+  <line x1="540" y1="514" x2="540" y2="536" stroke="#1F3B5C" stroke-width="2.5" marker-end="url(#aj)"/>
+
+  <!-- layer 6 -->
+  <rect x="180" y="540" width="720" height="52" rx="10" fill="#F7F7F5" stroke="#1F3B5C" stroke-width="1.5"/>
+  <circle cx="216" cy="566" r="15" fill="#1F3B5C"/>
+  <text x="216" y="571" font-size="12.5" font-weight="bold" fill="#ffffff" text-anchor="middle">6</text>
+  <text x="244" y="561" font-size="12.5" font-weight="bold" fill="#2C2C2A">Channels</text>
+  <text x="244" y="580" font-size="11.5" fill="#5F5E5A">data striped over parallel rings/trees, one NIC binding per channel</text>
+  <text x="884" y="571" font-size="11" fill="#8A8880" text-anchor="end">section 8.7</text>
+  <line x1="540" y1="592" x2="540" y2="614" stroke="#1F3B5C" stroke-width="2.5" marker-end="url(#aj)"/>
+
+  <!-- layer 7 -->
+  <rect x="180" y="618" width="720" height="52" rx="10" fill="#F7F7F5" stroke="#1F3B5C" stroke-width="1.5"/>
+  <circle cx="216" cy="644" r="15" fill="#1F3B5C"/>
+  <text x="216" y="649" font-size="12.5" font-weight="bold" fill="#ffffff" text-anchor="middle">7</text>
+  <text x="244" y="639" font-size="12.5" font-weight="bold" fill="#2C2C2A">Asynchronous execution</text>
+  <text x="244" y="658" font-size="11.5" fill="#5F5E5A">communication runs on its own stream while the GPU keeps computing</text>
+  <text x="884" y="649" font-size="11" fill="#8A8880" text-anchor="end">section 10.1</text>
+  <line x1="540" y1="670" x2="540" y2="692" stroke="#1F3B5C" stroke-width="2.5" marker-end="url(#aj)"/>
+
+  <!-- done -->
+  <rect x="240" y="696" width="600" height="46" rx="10" fill="#DFF0DA" stroke="#2E7D32" stroke-width="2"/>
+  <text x="540" y="724" font-size="13" font-weight="bold" fill="#1B5E20" text-anchor="middle">done &#8212; every GPU holds the same reduced result</text>
+
+  <text x="540" y="784" font-size="11" fill="#5F5E5A" text-anchor="middle">Blue layers (3&#8211;4) run once when the communicator is created; the others fire on every call. The rest of the post walks these layers in order.</text>
+</svg>

@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="720" viewBox="0 0 1080 720" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="ab" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3A7BD5"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="720" fill="#ffffff"/>
+  <text x="540" y="38" font-size="20" font-weight="bold" fill="#2C2C2A" text-anchor="middle">A typical GPU server topology, simplified &#8212; what NCCL has to discover</text>
+
+  <!-- NUMA node 0 -->
+  <rect x="50" y="70" width="430" height="470" rx="20" fill="none" stroke="#3A7BD5" stroke-width="2" stroke-dasharray="8 6"/>
+  <rect x="160" y="86" width="150" height="30" rx="4" fill="#E8F1FB" stroke="#3A7BD5"/>
+  <text x="235" y="106" font-size="13" font-weight="bold" fill="#1F3B5C" text-anchor="middle">NUMA Node 0</text>
+
+  <rect x="150" y="140" width="170" height="46" rx="8" fill="#E8F1FB" stroke="#1F3B5C" stroke-width="1.5"/>
+  <text x="235" y="168" font-size="14" font-weight="bold" fill="#1F3B5C" text-anchor="middle">CPU 0</text>
+
+  <line x1="235" y1="186" x2="235" y2="228" stroke="#3A7BD5" stroke-width="2.5" marker-end="url(#ab)"/>
+
+  <rect x="150" y="232" width="170" height="42" rx="6" fill="#F0F0EE" stroke="#8A8880" stroke-width="1.5"/>
+  <text x="235" y="258" font-size="13" font-weight="bold" fill="#4A4A46" text-anchor="middle">PCIe Switch 0</text>
+
+  <line x1="200" y1="274" x2="135" y2="330" stroke="#3A7BD5" stroke-width="2.5" marker-end="url(#ab)"/>
+  <line x1="270" y1="274" x2="335" y2="330" stroke="#3A7BD5" stroke-width="2.5" marker-end="url(#ab)"/>
+
+  <rect x="70" y="334" width="130" height="52" rx="8" fill="#CBE6C0" stroke="#57A64A" stroke-width="1.5"/>
+  <text x="135" y="365" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">GPU 0</text>
+  <rect x="280" y="334" width="130" height="52" rx="8" fill="#CBE6C0" stroke="#57A64A" stroke-width="1.5"/>
+  <text x="345" y="365" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">GPU 1</text>
+
+  <line x1="200" y1="360" x2="280" y2="360" stroke="#57A64A" stroke-width="3.5"/>
+  <text x="240" y="352" font-size="10" font-weight="bold" fill="#2E7D32" text-anchor="middle">NVLink 900 GB/s</text>
+
+  <line x1="135" y1="386" x2="230" y2="444" stroke="#3A7BD5" stroke-width="2.5" marker-end="url(#ab)"/>
+  <rect x="155" y="448" width="180" height="44" rx="8" fill="#FBE3C3" stroke="#E67E22" stroke-width="1.5"/>
+  <text x="245" y="475" font-size="12.5" font-weight="bold" fill="#8C4B0A" text-anchor="middle">NIC 0 (IB/RoCE)</text>
+
+  <!-- NUMA node 1 -->
+  <rect x="600" y="70" width="430" height="470" rx="20" fill="none" stroke="#3A7BD5" stroke-width="2" stroke-dasharray="8 6"/>
+  <rect x="770" y="86" width="150" height="30" rx="4" fill="#E8F1FB" stroke="#3A7BD5"/>
+  <text x="845" y="106" font-size="13" font-weight="bold" fill="#1F3B5C" text-anchor="middle">NUMA Node 1</text>
+
+  <rect x="760" y="140" width="170" height="46" rx="8" fill="#E8F1FB" stroke="#1F3B5C" stroke-width="1.5"/>
+  <text x="845" y="168" font-size="14" font-weight="bold" fill="#1F3B5C" text-anchor="middle">CPU 1</text>
+
+  <line x1="845" y1="186" x2="845" y2="228" stroke="#3A7BD5" stroke-width="2.5" marker-end="url(#ab)"/>
+
+  <rect x="760" y="232" width="170" height="42" rx="6" fill="#F0F0EE" stroke="#8A8880" stroke-width="1.5"/>
+  <text x="845" y="258" font-size="13" font-weight="bold" fill="#4A4A46" text-anchor="middle">PCIe Switch 1</text>
+
+  <line x1="810" y1="274" x2="745" y2="330" stroke="#3A7BD5" stroke-width="2.5" marker-end="url(#ab)"/>
+  <line x1="880" y1="274" x2="945" y2="330" stroke="#3A7BD5" stroke-width="2.5" marker-end="url(#ab)"/>
+
+  <rect x="680" y="334" width="130" height="52" rx="8" fill="#CBE6C0" stroke="#57A64A" stroke-width="1.5"/>
+  <text x="745" y="365" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">GPU 2</text>
+  <rect x="880" y="334" width="130" height="52" rx="8" fill="#CBE6C0" stroke="#57A64A" stroke-width="1.5"/>
+  <text x="945" y="365" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">GPU 3</text>
+
+  <line x1="810" y1="360" x2="880" y2="360" stroke="#57A64A" stroke-width="3.5"/>
+  <text x="845" y="352" font-size="10" font-weight="bold" fill="#2E7D32" text-anchor="middle">NVLink 900 GB/s</text>
+
+  <line x1="945" y1="386" x2="860" y2="444" stroke="#3A7BD5" stroke-width="2.5" marker-end="url(#ab)"/>
+  <rect x="750" y="448" width="180" height="44" rx="8" fill="#FBE3C3" stroke="#E67E22" stroke-width="1.5"/>
+  <text x="840" y="475" font-size="12.5" font-weight="bold" fill="#8C4B0A" text-anchor="middle">NIC 1 (IB/RoCE)</text>
+
+  <!-- NVSwitch in the middle -->
+  <rect x="480" y="330" width="120" height="60" rx="10" fill="#57A64A" stroke="#2E7D32" stroke-width="2"/>
+  <text x="540" y="349" font-size="10" fill="#EAF6E5" text-anchor="middle">NVLink</text>
+  <text x="540" y="368" font-size="14" font-weight="bold" fill="#ffffff" text-anchor="middle">NVSwitch</text>
+  <line x1="410" y1="360" x2="480" y2="360" stroke="#57A64A" stroke-width="3.5"/>
+  <line x1="600" y1="360" x2="680" y2="360" stroke="#57A64A" stroke-width="3.5"/>
+
+  <!-- UPI between CPUs -->
+  <line x1="320" y1="160" x2="760" y2="160" stroke="#B0AEA6" stroke-width="2" stroke-dasharray="7 6"/>
+  <text x="540" y="150" font-size="11" fill="#8A8880" text-anchor="middle">UPI/QPI</text>
+  <text x="540" y="300" font-size="11" font-weight="bold" fill="#C62828" text-anchor="middle">longest path: cross-NUMA via UPI</text>
+
+  <!-- legend -->
+  <rect x="90" y="566" width="900" height="106" rx="10" fill="#F7F7F5" stroke="#C9C7BF"/>
+  <text x="540" y="590" font-size="12" font-weight="bold" fill="#2C2C2A" text-anchor="middle">Legend</text>
+  <line x1="120" y1="612" x2="160" y2="612" stroke="#57A64A" stroke-width="3.5"/>
+  <text x="170" y="616" font-size="11" fill="#2C2C2A">NVLink (900 GB/s) &#8212; direct GPU link</text>
+  <line x1="410" y1="612" x2="450" y2="612" stroke="#3A7BD5" stroke-width="2.5" marker-end="url(#ab)"/>
+  <text x="460" y="616" font-size="11" fill="#2C2C2A">PCIe (64 GB/s per direction) &#8212; via switch</text>
+  <line x1="730" y1="612" x2="770" y2="612" stroke="#B0AEA6" stroke-width="2" stroke-dasharray="7 6"/>
+  <text x="780" y="616" font-size="11" fill="#2C2C2A">UPI/QPI &#8212; CPU interconnect</text>
+  <rect x="120" y="632" width="36" height="18" rx="4" fill="#57A64A"/>
+  <text x="138" y="645" font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle">SW</text>
+  <text x="170" y="646" font-size="11" fill="#2C2C2A">NVSwitch GPU switching chip</text>
+  <rect x="410" y="632" width="36" height="18" rx="4" fill="#FBE3C3" stroke="#E67E22"/>
+  <text x="428" y="645" font-size="9" font-weight="bold" fill="#8C4B0A" text-anchor="middle">NIC</text>
+  <text x="460" y="646" font-size="11" fill="#2C2C2A">NIC &#8212; RDMA adapter (cross-node traffic)</text>
+
+  <text x="540" y="700" font-size="11" fill="#5F5E5A" text-anchor="middle">Simplified teaching topology: in a real HGX/DGX H100 all 8 GPUs attach to all 4 NVSwitches in a full crossbar (section 9.1) &#8212; but the path classes shown here are exactly what NCCL scores.</text>
+</svg>

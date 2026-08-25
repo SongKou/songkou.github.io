@@ -1,0 +1,222 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="920" viewBox="0 0 1560 920" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="1560" height="920" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="40" y="42" font-size="22" font-weight="bold" fill="#2C2C2A">Walk 5 - the data plane, case by case</text>
+  <text x="40" y="66" font-size="13" fill="#5F5E5A">Three cases, each three stitched tunnel legs, source on the left (site B) &#8594; destination on the right (site A)  |  numbered badges match the numbered steps  |  outer addresses are VTEP loopbacks (Lo1) - Lo0 is peering only, never in a packet header</text>
+
+  <!-- ============================================================ -->
+  <!-- PANEL A: ARP / BUM -->
+  <!-- ============================================================ -->
+  <text x="40" y="106" font-size="14" font-weight="bold" fill="#2C2C2A">A - First packet: ARP broadcast (BUM, VNI 1010)</text>
+  <g font-size="10" fill="#888780">
+    <text x="270" y="122" text-anchor="middle">SITE B DOMAIN</text>
+    <text x="715" y="122" text-anchor="middle">DCI DOMAIN</text>
+    <text x="1230" y="122" text-anchor="middle">SITE A DOMAIN</text>
+  </g>
+
+  <!-- nodes -->
+  <g>
+    <rect x="50" y="130" width="110" height="58" rx="7" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1.1"/>
+    <text x="105" y="149" font-size="12" font-weight="bold" fill="#444441" text-anchor="middle">R_VPC1</text>
+    <text x="105" y="166" font-size="9.5" fill="#5F5E5A" text-anchor="middle">192.168.10.150</text>
+    <text x="105" y="180" font-size="9.5" fill="#5F5E5A" text-anchor="middle">vlan 10</text>
+    <rect x="200" y="130" width="140" height="58" rx="7" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="270" y="149" font-size="12" font-weight="bold" fill="#085041" text-anchor="middle">Leaf31</text>
+    <text x="270" y="166" font-size="9.5" fill="#0F6E56" text-anchor="middle">VTEP 10.255.31.113</text>
+    <text x="270" y="180" font-size="9.5" fill="#0F6E56" text-anchor="middle">Lo0 10.255.31.21</text>
+    <rect x="420" y="130" width="160" height="58" rx="7" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.4"/>
+    <text x="500" y="149" font-size="12" font-weight="bold" fill="#3B3486" text-anchor="middle">Border2 GW</text>
+    <text x="500" y="166" font-size="9.5" fill="#534AB7" text-anchor="middle">VTEP 10.255.31.101</text>
+    <text x="500" y="180" font-size="9.5" fill="#534AB7" text-anchor="middle">Lo0 10.255.31.1</text>
+    <rect x="650" y="130" width="130" height="58" rx="7" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.1"/>
+    <text x="715" y="149" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">DCI</text>
+    <text x="715" y="166" font-size="9.5" fill="#B9770E" text-anchor="middle">routes outer IP only</text>
+    <text x="715" y="180" font-size="9.5" fill="#B9770E" text-anchor="middle">Lo0 10.255.99.1</text>
+    <rect x="850" y="130" width="160" height="58" rx="7" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.4"/>
+    <text x="930" y="149" font-size="12" font-weight="bold" fill="#3B3486" text-anchor="middle">Border1 GW</text>
+    <text x="930" y="166" font-size="9.5" fill="#534AB7" text-anchor="middle">VTEP 10.255.255.101</text>
+    <text x="930" y="180" font-size="9.5" fill="#534AB7" text-anchor="middle">Lo0 10.255.255.1</text>
+    <rect x="1080" y="130" width="170" height="58" rx="7" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="1165" y="149" font-size="12" font-weight="bold" fill="#085041" text-anchor="middle">MLAG pair + Leaf3</text>
+    <text x="1165" y="166" font-size="9.5" fill="#0F6E56" text-anchor="middle">flood copies to .112 and .113</text>
+    <text x="1165" y="180" font-size="9.5" fill="#0F6E56" text-anchor="middle">Lo0 .21 / .22 / .23</text>
+    <rect x="1300" y="130" width="130" height="58" rx="7" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1.1"/>
+    <text x="1365" y="149" font-size="12" font-weight="bold" fill="#444441" text-anchor="middle">VPC1</text>
+    <text x="1365" y="166" font-size="9.5" fill="#5F5E5A" text-anchor="middle">192.168.10.10</text>
+    <text x="1365" y="180" font-size="9.5" fill="#5F5E5A" text-anchor="middle">vlan 10</text>
+  </g>
+  <!-- arrows -->
+  <g stroke-linecap="round">
+    <line x1="160" y1="153" x2="198" y2="153" stroke="#888780" stroke-width="1.6"/>
+    <line x1="340" y1="153" x2="414" y2="153" stroke="#0F6E56" stroke-width="4.5"/>
+    <line x1="580" y1="153" x2="644" y2="153" stroke="#B9770E" stroke-width="4.5"/>
+    <line x1="780" y1="153" x2="844" y2="153" stroke="#B9770E" stroke-width="4.5"/>
+    <line x1="1010" y1="153" x2="1074" y2="153" stroke="#185FA5" stroke-width="4.5"/>
+    <line x1="1250" y1="153" x2="1298" y2="153" stroke="#888780" stroke-width="1.6"/>
+  </g>
+  <g fill="#ffffff" stroke="#B03A2E" stroke-width="1.5">
+    <path d="M 500 192 L 508 200 L 500 208 L 492 200 Z"/>
+    <path d="M 930 192 L 938 200 L 930 208 L 922 200 Z"/>
+  </g>
+  <!-- numbered badges -->
+  <g>
+    <circle cx="336" cy="132" r="10" fill="#ffffff" stroke="#B03A2E" stroke-width="1.5"/><text x="336" y="136.5" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">1</text>
+    <circle cx="576" cy="132" r="10" fill="#ffffff" stroke="#B03A2E" stroke-width="1.5"/><text x="576" y="136.5" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">2</text>
+    <circle cx="1006" cy="132" r="10" fill="#ffffff" stroke="#B03A2E" stroke-width="1.5"/><text x="1006" y="136.5" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">3</text>
+    <circle cx="1246" cy="132" r="10" fill="#ffffff" stroke="#B03A2E" stroke-width="1.5"/><text x="1246" y="136.5" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">4</text>
+  </g>
+  <!-- itemized steps -->
+  <g font-size="11.5" fill="#444441">
+    <text x="60" y="222"><tspan font-weight="bold" fill="#B03A2E">1.</tspan>  R_VPC1 broadcasts who-has 192.168.10.10; Leaf31 floods per its VNI 1010 HER list - one copy, to 10.255.31.101 (no site A VTEP is in the list). Outer: 10.255.31.113 &#8594; 10.255.31.101.</text>
+    <text x="60" y="243"><tspan font-weight="bold" fill="#B03A2E">2.</tspan>  Border2 decapsulates, floods its local VLAN 10 (empty), and re-encapsulates one copy per its interconnect IMET list. Outer: 10.255.31.101 &#8594; 10.255.255.101. Split horizon: nothing returns toward Leaf31.</text>
+    <text x="60" y="264"><tspan font-weight="bold" fill="#B03A2E">3.</tspan>  Border1 decapsulates and head-end-replicates into site A's flood list: copies to .112 and .113 - and nothing back toward the DCI, the domain the frame arrived from.</text>
+    <text x="60" y="285"><tspan font-weight="bold" fill="#B03A2E">4.</tspan>  One MLAG member wins the .112 copy (section 2.4's rules) and floods VLAN 10; VPC1 answers, and the unicast reply rides the same three legs in reverse.</text>
+  </g>
+  <line x1="40" y1="308" x2="1520" y2="308" stroke="#E5E3DB" stroke-width="1"/>
+
+  <!-- ============================================================ -->
+  <!-- PANEL B: KNOWN UNICAST -->
+  <!-- ============================================================ -->
+  <text x="40" y="336" font-size="14" font-weight="bold" fill="#2C2C2A">B - Steady state: known unicast, R_VPC1 &#8594; VPC1 (VNI 1010)</text>
+
+  <!-- nodes -->
+  <g>
+    <rect x="50" y="352" width="110" height="58" rx="7" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1.1"/>
+    <text x="105" y="371" font-size="12" font-weight="bold" fill="#444441" text-anchor="middle">R_VPC1</text>
+    <text x="105" y="388" font-size="9.5" fill="#5F5E5A" text-anchor="middle">192.168.10.150</text>
+    <text x="105" y="402" font-size="9.5" fill="#5F5E5A" text-anchor="middle">vlan 10</text>
+    <rect x="200" y="352" width="140" height="58" rx="7" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="270" y="371" font-size="12" font-weight="bold" fill="#085041" text-anchor="middle">Leaf31</text>
+    <text x="270" y="388" font-size="9.5" fill="#0F6E56" text-anchor="middle">VTEP 10.255.31.113</text>
+    <text x="270" y="402" font-size="9.5" fill="#0F6E56" text-anchor="middle">Lo0 10.255.31.21</text>
+    <rect x="420" y="352" width="160" height="58" rx="7" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.4"/>
+    <text x="500" y="371" font-size="12" font-weight="bold" fill="#3B3486" text-anchor="middle">Border2 GW</text>
+    <text x="500" y="388" font-size="9.5" fill="#534AB7" text-anchor="middle">VTEP 10.255.31.101</text>
+    <text x="500" y="402" font-size="9.5" fill="#534AB7" text-anchor="middle">Lo0 10.255.31.1</text>
+    <rect x="650" y="352" width="130" height="58" rx="7" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.1"/>
+    <text x="715" y="371" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">DCI</text>
+    <text x="715" y="388" font-size="9.5" fill="#B9770E" text-anchor="middle">routes outer IP only</text>
+    <text x="715" y="402" font-size="9.5" fill="#B9770E" text-anchor="middle">Lo0 10.255.99.1</text>
+    <rect x="850" y="352" width="160" height="58" rx="7" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.4"/>
+    <text x="930" y="371" font-size="12" font-weight="bold" fill="#3B3486" text-anchor="middle">Border1 GW</text>
+    <text x="930" y="388" font-size="9.5" fill="#534AB7" text-anchor="middle">VTEP 10.255.255.101</text>
+    <text x="930" y="402" font-size="9.5" fill="#534AB7" text-anchor="middle">Lo0 10.255.255.1</text>
+    <rect x="1080" y="352" width="170" height="58" rx="7" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="1165" y="371" font-size="12" font-weight="bold" fill="#085041" text-anchor="middle">MLAG pair</text>
+    <text x="1165" y="388" font-size="9.5" fill="#0F6E56" text-anchor="middle">anycast VTEP .112</text>
+    <text x="1165" y="402" font-size="9.5" fill="#0F6E56" text-anchor="middle">Lo0 .21 / .22</text>
+    <rect x="1300" y="352" width="130" height="58" rx="7" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1.1"/>
+    <text x="1365" y="371" font-size="12" font-weight="bold" fill="#444441" text-anchor="middle">VPC1</text>
+    <text x="1365" y="388" font-size="9.5" fill="#5F5E5A" text-anchor="middle">192.168.10.10</text>
+    <text x="1365" y="402" font-size="9.5" fill="#5F5E5A" text-anchor="middle">vlan 10</text>
+  </g>
+  <!-- arrows -->
+  <g stroke-linecap="round">
+    <line x1="160" y1="375" x2="198" y2="375" stroke="#888780" stroke-width="1.6"/>
+    <line x1="340" y1="375" x2="414" y2="375" stroke="#0F6E56" stroke-width="4.5"/>
+    <line x1="580" y1="375" x2="644" y2="375" stroke="#B9770E" stroke-width="4.5"/>
+    <line x1="780" y1="375" x2="844" y2="375" stroke="#B9770E" stroke-width="4.5"/>
+    <line x1="1010" y1="375" x2="1074" y2="375" stroke="#185FA5" stroke-width="4.5"/>
+    <line x1="1250" y1="375" x2="1298" y2="375" stroke="#888780" stroke-width="1.6"/>
+  </g>
+  <g fill="#ffffff" stroke="#B03A2E" stroke-width="1.5">
+    <path d="M 500 414 L 508 422 L 500 430 L 492 422 Z"/>
+    <path d="M 930 414 L 938 422 L 930 430 L 922 422 Z"/>
+  </g>
+  <g>
+    <circle cx="336" cy="354" r="10" fill="#ffffff" stroke="#B03A2E" stroke-width="1.5"/><text x="336" y="358.5" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">1</text>
+    <circle cx="576" cy="354" r="10" fill="#ffffff" stroke="#B03A2E" stroke-width="1.5"/><text x="576" y="358.5" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">2</text>
+    <circle cx="1006" cy="354" r="10" fill="#ffffff" stroke="#B03A2E" stroke-width="1.5"/><text x="1006" y="358.5" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">3</text>
+  </g>
+  <!-- itemized steps -->
+  <g font-size="11.5" fill="#444441">
+    <text x="60" y="444"><tspan font-weight="bold" fill="#B03A2E">1.</tspan>  Leaf31's MAC table: VPC1-MAC &#8594; VTEP 10.255.31.101 (installed from Walk 4's re-originated Type-2). Encapsulate: outer 10.255.31.113 &#8594; 10.255.31.101, routed Leaf31 &#8594; SP31 &#8594; Border2.</text>
+    <text x="60" y="465"><tspan font-weight="bold" fill="#B03A2E">2.</tspan>  Border2 decapsulates; its MAC table says VPC1-MAC &#8594; VTEP 10.255.255.101. Re-encapsulate: outer 10.255.31.101 &#8594; 10.255.255.101, routed Border2 &#8594; DCI &#8594; Border1.</text>
+    <text x="60" y="486"><tspan font-weight="bold" fill="#B03A2E">3.</tspan>  Border1 decapsulates; VPC1-MAC &#8594; VTEP 10.255.255.112. Re-encapsulate: outer 10.255.255.101 &#8594; 10.255.255.112, either spine, either MLAG member decapsulates and bridges to VPC1.</text>
+    <text x="60" y="507" font-style="italic" fill="#5F5E5A">The inner Ethernet frame is untouched end to end - only the outer header is rewritten at each stitch point.</text>
+  </g>
+  <line x1="40" y1="530" x2="1520" y2="530" stroke="#E5E3DB" stroke-width="1"/>
+
+  <!-- ============================================================ -->
+  <!-- PANEL C: ROUTED -->
+  <!-- ============================================================ -->
+  <text x="40" y="558" font-size="14" font-weight="bold" fill="#2C2C2A">C - Routed: R_VPC1 &#8594; VPC3, VLAN 30 never stretched (symmetric IRB, VNI 50000)</text>
+
+  <!-- nodes -->
+  <g>
+    <rect x="50" y="574" width="110" height="58" rx="7" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1.1"/>
+    <text x="105" y="593" font-size="12" font-weight="bold" fill="#444441" text-anchor="middle">R_VPC1</text>
+    <text x="105" y="610" font-size="9.5" fill="#5F5E5A" text-anchor="middle">192.168.10.150</text>
+    <text x="105" y="624" font-size="9.5" fill="#5F5E5A" text-anchor="middle">vlan 10</text>
+    <rect x="200" y="574" width="140" height="58" rx="7" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="270" y="593" font-size="12" font-weight="bold" fill="#085041" text-anchor="middle">Leaf31</text>
+    <text x="270" y="610" font-size="9.5" fill="#0F6E56" text-anchor="middle">VRF TENANT_A lookup</text>
+    <text x="270" y="624" font-size="9.5" fill="#0F6E56" text-anchor="middle">Lo0 .31.21 &#183; VTEP .31.113</text>
+    <rect x="420" y="574" width="160" height="58" rx="7" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.4"/>
+    <text x="500" y="593" font-size="12" font-weight="bold" fill="#3B3486" text-anchor="middle">Border2 GW</text>
+    <text x="500" y="610" font-size="9.5" fill="#534AB7" text-anchor="middle">VRF lookup again</text>
+    <text x="500" y="624" font-size="9.5" fill="#534AB7" text-anchor="middle">Lo0 .31.1 &#183; VTEP .31.101</text>
+    <rect x="650" y="574" width="130" height="58" rx="7" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.1"/>
+    <text x="715" y="593" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">DCI</text>
+    <text x="715" y="610" font-size="9.5" fill="#B9770E" text-anchor="middle">routes outer IP only</text>
+    <text x="715" y="624" font-size="9.5" fill="#B9770E" text-anchor="middle">Lo0 10.255.99.1</text>
+    <rect x="850" y="574" width="160" height="58" rx="7" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.4"/>
+    <text x="930" y="593" font-size="12" font-weight="bold" fill="#3B3486" text-anchor="middle">Border1 GW</text>
+    <text x="930" y="610" font-size="9.5" fill="#534AB7" text-anchor="middle">VRF lookup, third time</text>
+    <text x="930" y="624" font-size="9.5" fill="#534AB7" text-anchor="middle">Lo0 10.255.255.1 &#183; VTEP .101</text>
+    <rect x="1080" y="574" width="170" height="58" rx="7" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="1165" y="593" font-size="12" font-weight="bold" fill="#085041" text-anchor="middle">.112 or .113</text>
+    <text x="1165" y="610" font-size="9.5" fill="#0F6E56" text-anchor="middle">ECMP - 3 leaves originate VLAN 30</text>
+    <text x="1165" y="624" font-size="9.5" fill="#0F6E56" text-anchor="middle">Lo0 .21 / .22 / .23</text>
+    <rect x="1300" y="574" width="130" height="58" rx="7" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1.1"/>
+    <text x="1365" y="593" font-size="12" font-weight="bold" fill="#444441" text-anchor="middle">VPC3</text>
+    <text x="1365" y="610" font-size="9.5" fill="#5F5E5A" text-anchor="middle">192.168.30.30</text>
+    <text x="1365" y="624" font-size="9.5" fill="#5F5E5A" text-anchor="middle">vlan 30</text>
+  </g>
+  <!-- arrows -->
+  <g stroke-linecap="round">
+    <line x1="160" y1="597" x2="198" y2="597" stroke="#888780" stroke-width="1.6"/>
+    <line x1="340" y1="597" x2="414" y2="597" stroke="#0F6E56" stroke-width="4.5"/>
+    <line x1="580" y1="597" x2="644" y2="597" stroke="#B9770E" stroke-width="4.5"/>
+    <line x1="780" y1="597" x2="844" y2="597" stroke="#B9770E" stroke-width="4.5"/>
+    <line x1="1010" y1="597" x2="1074" y2="597" stroke="#185FA5" stroke-width="4.5"/>
+    <line x1="1250" y1="597" x2="1298" y2="597" stroke="#888780" stroke-width="1.6"/>
+  </g>
+  <g fill="#ffffff" stroke="#B03A2E" stroke-width="1.5">
+    <path d="M 500 636 L 508 644 L 500 652 L 492 644 Z"/>
+    <path d="M 930 636 L 938 644 L 930 652 L 922 644 Z"/>
+  </g>
+  <g>
+    <circle cx="336" cy="576" r="10" fill="#ffffff" stroke="#B03A2E" stroke-width="1.5"/><text x="336" y="580.5" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">1</text>
+    <circle cx="576" cy="576" r="10" fill="#ffffff" stroke="#B03A2E" stroke-width="1.5"/><text x="576" y="580.5" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">2</text>
+    <circle cx="1006" cy="576" r="10" fill="#ffffff" stroke="#B03A2E" stroke-width="1.5"/><text x="1006" y="580.5" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">3</text>
+    <circle cx="1246" cy="576" r="10" fill="#ffffff" stroke="#B03A2E" stroke-width="1.5"/><text x="1246" y="580.5" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">4</text>
+  </g>
+  <!-- itemized steps -->
+  <g font-size="11.5" fill="#444441">
+    <text x="60" y="666"><tspan font-weight="bold" fill="#B03A2E">1.</tspan>  Leaf31, VRF TENANT_A: 192.168.30.0/24 &#8594; VTEP 10.255.31.101, router MAC = Border2's (Walk 4's RMAC row). Route into VNI 50000: inner DMAC = Border2's RMAC, outer 10.255.31.113 &#8594; 10.255.31.101.</text>
+    <text x="60" y="687"><tspan font-weight="bold" fill="#B03A2E">2.</tspan>  Border2 decapsulates and routes again in its own VRF TENANT_A: prefix &#8594; 10.255.255.101, RMAC = Border1's. Re-encapsulate in VNI 50000 across the DCI.</text>
+    <text x="60" y="708"><tspan font-weight="bold" fill="#B03A2E">3.</tspan>  Border1 decapsulates and routes a third time: prefix &#8594; .112 or .113 (ECMP - all three site A leaves originate VLAN 30). Inner DMAC = the chosen leaf's RMAC.</text>
+    <text x="60" y="729"><tspan font-weight="bold" fill="#B03A2E">4.</tspan>  The landing leaf routes from VNI 50000 into VLAN 30 and delivers to VPC3. Routed at every hop: inner MACs rewritten each leg, inner IPs constant end to end.</text>
+  </g>
+
+  <!-- ================= REFERENCE BAND ================= -->
+  <rect x="40" y="762" width="1480" height="130" rx="10" fill="#F8F7F3" stroke="#D3D1C7" stroke-width="1"/>
+  <text x="60" y="786" font-size="13" font-weight="bold" fill="#2C2C2A">What all three cases share</text>
+  <g font-size="11.5" fill="#444441">
+    <text x="60" y="808">Three independent VXLAN tunnel legs, one per domain - each converges, ECMPs, and fails in its own underlay; the DCI carries only gateway-to-gateway packets (+50 B headroom per leg)</text>
+    <text x="60" y="828">Every leg's endpoints come from Walk 4's re-originated routes: no device ever needs a route to a VTEP outside its own domain</text>
+    <text x="60" y="848">Cases A and B bridge - the inner frame is constant. Case C routes - a VRF lookup at the head of every leg, RMAC chain Border2 &#8594; Border1 &#8594; leaf. Both gateways must carry VRF TENANT_A + VNI 50000</text>
+    <text x="60" y="868">Case A's copy count across the DCI is one, always - Border1 does site A's fan-out locally (the 6.2 design sent one copy per site A VTEP)</text>
+  </g>
+  <line x1="1160" y1="772" x2="1160" y2="882" stroke="#D3D1C7" stroke-width="1"/>
+  <g font-size="11" fill="#444441">
+    <line x1="1180" y1="784" x2="1194" y2="784" stroke="#0F6E56" stroke-width="4" stroke-linecap="round"/><text x="1200" y="788">site B leg</text>
+    <line x1="1180" y1="808" x2="1194" y2="808" stroke="#B9770E" stroke-width="4" stroke-linecap="round"/><text x="1200" y="812">interconnect leg</text>
+    <line x1="1180" y1="832" x2="1194" y2="832" stroke="#185FA5" stroke-width="4" stroke-linecap="round"/><text x="1200" y="836">site A leg</text>
+    <path d="M 1187 850 L 1194 857 L 1187 864 L 1180 857 Z" fill="#ffffff" stroke="#B03A2E" stroke-width="1.4"/><text x="1200" y="861">stitch point (decap &#8594; re-encap)</text>
+    <circle cx="1370" cy="784" r="9" fill="#ffffff" stroke="#B03A2E" stroke-width="1.4"/><text x="1370" y="788" font-size="10" font-weight="bold" fill="#B03A2E" text-anchor="middle">n</text><text x="1386" y="788">numbered step</text>
+    <line x1="1362" y1="808" x2="1376" y2="808" stroke="#888780" stroke-width="1.6"/><text x="1386" y="812">access link (bridged)</text>
+  </g>
+</svg>

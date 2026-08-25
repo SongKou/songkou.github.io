@@ -7148,6 +7148,14 @@ The multi-domain successor to Walk 3. How VPC1 (192.168.10.10, behind the MLAG a
 5. **Border2 runs the loop check, imports, re-originates again.** The received D-path carries exactly one segment — `65100:1`, Border1's stamp — and contains neither of Border2's own domains (`65030:1`, `65099:1`), so the route is accepted. Border2 installs VPC1's MAC behind `10.255.255.101`, then advertises into site B over iBGP: RD `10.255.31.1:10`, next hop **`10.255.31.101`**, and the D-path extended with the domain the route was learned in — Leaf31 sees `65099:1 65100:1`, the route's domain history in the same reverse-reading order as an AS path. Had this route ever looped back toward site A, Border1 would find `65100:1` in the D-path and drop it silently — no policy, no communities, no hand-written filters.
 6. **SP31 reflects to Leaf31**, which imports on `1:10` and installs VPC1 behind **`10.255.31.101`** — a next hop *inside its own site*, reachable through its own underlay, owned by its own operations team.
 
+The whole walk as one grid — five stages, what each one rewrites (amber) and what it deliberately preserves (green), with the Type-5's extra Router-MAC row:
+
+![Walk 4 control-plane grid: RD, next hop, AS path, D-path, and router MAC of VPC1's route across five stages and two gateway re-originations](/posts/arista-vxlan-bum-her-vs-multicast/walk4-control-plane.svg)
+
+And the same walk clickable — step through the hops, toggling between the bridged Type-2 and the routed Type-5 to watch the one extra rewrite (the Router-MAC) appear:
+
+{{< embed src="/posts/arista-vxlan-bum-her-vs-multicast/multidomain-control-plane-walk.html" title="Multi-domain control-plane walk, hop by hop" height="820" >}}
+
 The Type-3s run the same three-stage relay: Leaf31's IMET reaches only site B and Border2; Border2 originates its own IMET into the interconnect domain; Border1 originates into site A. Three flood domains, joined only at the gateways.
 
 The Type-5s add one rewrite the bridged walk never needed. VLAN 30 is deliberately not stretched, so its subnet crosses the fabric only as routed reachability in VRF `TENANT_A` — and, as the 6.2 captures showed, `192.168.30.0/24` is originated by **all three** site A leaves (Leaf1 and Leaf2 carry VLAN 30 too): three Type-5 copies under RDs `10.255.255.21/22/23:50000`, next hops `.112` and `.113`, each carrying its originator's system MAC in the Router's MAC extended community. Follow Leaf3's copy — RD `10.255.255.23:50000`, RT `1:50000`, next hop `10.255.255.113`. Each gateway gives it the full Type-2 treatment — own RD, next-hop-self, D-path stamp, RT untouched — **plus a new Router's MAC: its own.** That community is not bookkeeping; it is the inner destination MAC a remote VTEP writes on every routed VXLAN packet, and it has to name the device that performs the *next* routing lookup — which is now the gateway at the far end of the first tunnel segment, not Leaf3 three segments away. A relayed Type-5 keeping a leaf's RMAC behind a rewritten next hop would have Leaf31 building inner frames addressed to a router that is not at the other end of its tunnel. And the Walk 4 step 2 collapse repeats: Border1 imports all three copies into VRF `TENANT_A` and re-originates the prefix **once**, under its own RD. So Leaf31 installs `192.168.30.0/24` via the single VTEP `10.255.31.101` with **Border2's** router MAC — where the 6.2 design held three routes, two next hops (`.112`, `.113`), and their originators' RMACs — and Walk 5's routed case is exactly this route being spent. The symmetric-IRB Type-2s for the stretched VLANs — MAC-IP routes carrying the L2 RT and the L3 context together — collect both rewrites at once: RD/next-hop/D-path as in step 3, RMAC substitution as here.
@@ -7155,6 +7163,10 @@ The Type-5s add one rewrite the bridged walk never needed. VLAN 30 is deliberate
 The verification signatures — the multi-domain equivalents of Phase 3's gates, and everything the control plane shows even on vEOS-lab: on Leaf31, `show bgp evpn route-type mac-ip 192.168.10.10 detail` must show next hop `10.255.31.101`, RD `10.255.31.1:10`, and a D-path attribute — three fields that read `10.255.255.112`, `10.255.255.21:10`, and *absent* in the 6.2 captures. On Border1, `show bgp evpn` holds the same MAC twice: the leaf-originated route in the site A domain and its own re-origination in the interconnect domain. The routed check is `show bgp evpn route-type ip-prefix ipv4 detail` on Leaf31 — `192.168.30.0/24` arriving with next hop `10.255.31.101` and Border2's MAC in the Router's MAC community — and `show ip route vrf TENANT_A 192.168.30.30` resolving over Vxlan1 toward the gateway, not toward Leaf3. And the underlay check inverts: `show ip route 10.255.255.112` on Border2 must come back **empty**.
 
 #### Walk 5 — data plane: three stitched tunnels
+
+![Walk 5 data-plane cases: ARP flood, known unicast, and routed traffic, each drawn as three stitched tunnel legs with numbered steps at every stitch point](/posts/arista-vxlan-bum-her-vs-multicast/walk5-data-plane.svg)
+
+The three cases at a glance above; each itemized below.
 
 **First packet — R_VPC1's ARP for 192.168.10.10 (BUM).**
 
@@ -7173,7 +7185,18 @@ The verification signatures — the multi-domain equivalents of Phase 3's gates,
 
 The inner Ethernet frame is untouched end to end; only the outer header is rewritten at each stitch point. Walk 1 carried the same frame in one `10.255.31.113 → 10.255.255.112` tunnel — same host experience, but every site A underlay event was Leaf31's problem. Now each segment converges, ECMPs, and fails independently.
 
-**Routed traffic — R_VPC1 → VPC3 (VLAN 30, deliberately never stretched).** Symmetric IRB composes with stitching exactly as section 5.6 built it, one domain at a time. The VLAN 30 routes arrive at Leaf31 re-originated twice in VNI 50000, next hop `10.255.31.101`, **router MAC = Border2's** — each gateway substitutes its own RMAC when it re-originates into the L3 VNI. The packet then takes three *routed* VXLAN segments: Leaf31 routes into VNI 50000 toward Border2, Border2 toward Border1, Border1 toward `10.255.255.112` or `10.255.255.113` (all three site A leaves originate the prefix, so Border1 ECMPs across both VTEPs), where that leaf's VRF `TENANT_A` lookup delivers into VLAN 30. Both gateways therefore must carry the VRF and VNI 50000 — and that requirement is the **policy boundary** the architecture post's 13.6 describes: a VLAN or VRF absent from a gateway's config simply does not exist outside its site. VLAN 30 is unreachable at L2 from site B not because a filter says so, but because no gateway ever re-originated it.
+**Routed traffic — R_VPC1 → VPC3 (VLAN 30, deliberately never stretched).** Symmetric IRB composes with stitching exactly as section 5.6 built it, one domain at a time — three *routed* VXLAN segments, a fresh VRF lookup at the head of each:
+
+1. **Leaf31** looks up 192.168.30.30 in VRF `TENANT_A` and finds Walk 4's re-originated route: via VTEP `10.255.31.101`, **router MAC = Border2's** — each gateway substituted its own RMAC when it re-originated into the L3 VNI. Leaf31 routes into VNI 50000 with Border2's RMAC as the inner destination MAC.
+2. **Border2** decapsulates and routes *again* in its own VRF `TENANT_A`: the prefix points at `10.255.255.101` with **Border1's** RMAC; it re-encapsulates in VNI 50000 across the DCI.
+3. **Border1** decapsulates and routes a third time: `10.255.255.112` *or* `10.255.255.113` — all three site A leaves originate the prefix, so it ECMPs across both VTEPs — re-encapsulating with the chosen leaf's RMAC as the inner destination.
+4. **The landing leaf** routes from VNI 50000 into VLAN 30 and delivers the frame to VPC3 — routed at every hop: inner MACs rewritten leg by leg, inner IPs constant end to end.
+
+Both gateways therefore must carry the VRF and VNI 50000 — and that requirement is the **policy boundary** the architecture post's 13.6 describes: a VLAN or VRF absent from a gateway's config simply does not exist outside its site. VLAN 30 is unreachable at L2 from site B not because a filter says so, but because no gateway ever re-originated it.
+
+The same three cases, clickable — pick a case and follow the packet's headers through each stitch point, amber where a hop rewrites them and green where they must stay constant:
+
+{{< embed src="/posts/arista-vxlan-bum-her-vs-multicast/multidomain-data-plane-walk.html" title="Multi-domain data-plane walk, case by case" height="800" >}}
 
 #### Section 6.2's design vs. this one
 

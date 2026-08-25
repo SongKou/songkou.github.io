@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="660" viewBox="0 0 1560 660" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="1560" height="660" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="40" y="42" font-size="22" font-weight="bold" fill="#2C2C2A">Walk 4 - the control plane, attribute by attribute</text>
+  <text x="40" y="66" font-size="13" fill="#5F5E5A">One route (VPC1's Type-2, plus the Type-5 RMAC row), five stages, two re-originations  |  amber = rewritten at this stage, green = deliberately preserved  |  Lo0 = BGP peering &#183; Lo1 = VTEP</text>
+
+  <!-- ================= STAGE HEADERS ================= -->
+  <g>
+    <rect x="200" y="90" width="256" height="72" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="328" y="112" font-size="12.5" font-weight="bold" fill="#085041" text-anchor="middle">Step 1 - Leaf1 + Leaf2 originate</text>
+    <text x="328" y="130" font-size="10.5" fill="#0F6E56" text-anchor="middle">site A domain 65100:1</text>
+    <text x="328" y="147" font-size="9.5" fill="#0F6E56" text-anchor="middle">Lo0 .21 / .22 &#183; VTEP Lo1 .112</text>
+  </g>
+  <g>
+    <rect x="468" y="90" width="256" height="72" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.2"/>
+    <text x="596" y="112" font-size="12.5" font-weight="bold" fill="#0C447C" text-anchor="middle">Step 2 - via spines, to Border1</text>
+    <text x="596" y="130" font-size="10.5" fill="#185FA5" text-anchor="middle">site A domain &#183; eBGP transit</text>
+    <text x="596" y="147" font-size="9.5" fill="#185FA5" text-anchor="middle">Lo0 .11 / .12 &#183; no VTEP</text>
+  </g>
+  <g>
+    <rect x="736" y="90" width="256" height="72" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.6"/>
+    <text x="864" y="112" font-size="12.5" font-weight="bold" fill="#3B3486" text-anchor="middle">Step 3 - Border1 re-originates</text>
+    <text x="864" y="130" font-size="10.5" fill="#534AB7" text-anchor="middle">exits site A &#8594; DCI domain 65099:1</text>
+    <text x="864" y="147" font-size="9.5" fill="#534AB7" text-anchor="middle">Lo0 10.255.255.1 &#183; GW VTEP Lo1 .101</text>
+  </g>
+  <g>
+    <rect x="1004" y="90" width="256" height="72" rx="8" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.2"/>
+    <text x="1132" y="112" font-size="12.5" font-weight="bold" fill="#8A5A08" text-anchor="middle">Step 4 - DCI route server relays</text>
+    <text x="1132" y="130" font-size="10.5" fill="#B9770E" text-anchor="middle">inside DCI domain &#183; no VXLAN</text>
+    <text x="1132" y="147" font-size="9.5" fill="#B9770E" text-anchor="middle">Lo0 10.255.99.1 &#183; no VTEP</text>
+  </g>
+  <g>
+    <rect x="1272" y="90" width="256" height="72" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.6"/>
+    <text x="1400" y="112" font-size="12.5" font-weight="bold" fill="#3B3486" text-anchor="middle">Steps 5-6 - Border2 re-originates</text>
+    <text x="1400" y="130" font-size="10.5" fill="#534AB7" text-anchor="middle">exits DCI &#8594; site B &#183; SP31 &#8594; Leaf31</text>
+    <text x="1400" y="147" font-size="9.5" fill="#534AB7" text-anchor="middle">Lo0 10.255.31.1 &#183; GW VTEP Lo1 10.255.31.101</text>
+  </g>
+  <g font-size="16" fill="#888780" text-anchor="middle">
+    <text x="462" y="123">&#8594;</text>
+    <text x="730" y="123">&#8594;</text>
+    <text x="998" y="123">&#8594;</text>
+    <text x="1266" y="123">&#8594;</text>
+  </g>
+
+  <!-- ================= ROW LABELS ================= -->
+  <g>
+    <rect x="40" y="180" width="150" height="60" rx="6" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1"/>
+    <text x="115" y="214" font-size="12.5" font-weight="bold" fill="#444441" text-anchor="middle">RD</text>
+    <rect x="40" y="246" width="150" height="60" rx="6" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1"/>
+    <text x="115" y="280" font-size="12.5" font-weight="bold" fill="#444441" text-anchor="middle">Next hop</text>
+    <rect x="40" y="312" width="150" height="60" rx="6" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1"/>
+    <text x="115" y="346" font-size="12.5" font-weight="bold" fill="#444441" text-anchor="middle">AS path</text>
+    <rect x="40" y="378" width="150" height="60" rx="6" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1"/>
+    <text x="115" y="412" font-size="12.5" font-weight="bold" fill="#444441" text-anchor="middle">D-path</text>
+    <rect x="40" y="444" width="150" height="60" rx="6" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="1"/>
+    <text x="115" y="470" font-size="12.5" font-weight="bold" fill="#444441" text-anchor="middle">Router MAC</text>
+    <text x="115" y="488" font-size="10" fill="#5F5E5A" text-anchor="middle">(Type-5 / L3 VNI)</text>
+  </g>
+
+  <!-- ================= RD ROW ================= -->
+  <g>
+    <rect x="200" y="180" width="256" height="60" rx="6" fill="#F8F7F3" stroke="#D3D1C7" stroke-width="1"/>
+    <text x="328" y="204" font-size="12" font-weight="bold" fill="#444441" text-anchor="middle">10.255.255.21:10</text>
+    <text x="328" y="222" font-size="10" fill="#5F5E5A" text-anchor="middle">+ MLAG twin under ...22:10</text>
+
+    <rect x="468" y="180" width="256" height="60" rx="6" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+    <text x="596" y="204" font-size="12" fill="#085041" text-anchor="middle">unchanged</text>
+    <text x="596" y="222" font-size="10" fill="#0F6E56" text-anchor="middle">transit hops never touch RDs</text>
+
+    <rect x="736" y="180" width="256" height="60" rx="6" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.4"/>
+    <text x="864" y="204" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">10.255.255.1:10</text>
+    <text x="864" y="222" font-size="10" fill="#B9770E" text-anchor="middle">own RD &#183; both MLAG copies collapse to one</text>
+
+    <rect x="1004" y="180" width="256" height="60" rx="6" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+    <text x="1132" y="204" font-size="12" fill="#085041" text-anchor="middle">unchanged</text>
+    <text x="1132" y="222" font-size="10" fill="#0F6E56" text-anchor="middle">route server relays, never re-originates</text>
+
+    <rect x="1272" y="180" width="256" height="60" rx="6" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.4"/>
+    <text x="1400" y="204" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">10.255.31.1:10</text>
+    <text x="1400" y="222" font-size="10" fill="#B9770E" text-anchor="middle">own RD &#183; leaf RDs never reach site B</text>
+  </g>
+
+  <!-- ================= NEXT HOP ROW ================= -->
+  <g>
+    <rect x="200" y="246" width="256" height="60" rx="6" fill="#F8F7F3" stroke="#D3D1C7" stroke-width="1"/>
+    <text x="328" y="270" font-size="12" font-weight="bold" fill="#444441" text-anchor="middle">10.255.255.112</text>
+    <text x="328" y="288" font-size="10" fill="#5F5E5A" text-anchor="middle">shared anycast VTEP</text>
+
+    <rect x="468" y="246" width="256" height="60" rx="6" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+    <text x="596" y="270" font-size="12" fill="#085041" text-anchor="middle">10.255.255.112</text>
+    <text x="596" y="288" font-size="10" fill="#0F6E56" text-anchor="middle">spines keep next-hop-unchanged</text>
+
+    <rect x="736" y="246" width="256" height="60" rx="6" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.4"/>
+    <text x="864" y="270" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">10.255.255.101</text>
+    <text x="864" y="288" font-size="10" fill="#B9770E" text-anchor="middle">next-hop-self: Border1's gateway VTEP</text>
+
+    <rect x="1004" y="246" width="256" height="60" rx="6" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+    <text x="1132" y="270" font-size="12" fill="#085041" text-anchor="middle">10.255.255.101</text>
+    <text x="1132" y="288" font-size="10" fill="#0F6E56" text-anchor="middle">DCI keeps next-hop-unchanged</text>
+
+    <rect x="1272" y="246" width="256" height="60" rx="6" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.4"/>
+    <text x="1400" y="270" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">10.255.31.101</text>
+    <text x="1400" y="288" font-size="10" fill="#B9770E" text-anchor="middle">next-hop-self: Border2's gateway VTEP</text>
+  </g>
+
+  <!-- ================= AS PATH ROW ================= -->
+  <g>
+    <rect x="200" y="312" width="256" height="60" rx="6" fill="#F8F7F3" stroke="#D3D1C7" stroke-width="1"/>
+    <text x="328" y="336" font-size="12" fill="#444441" text-anchor="middle">(empty)</text>
+    <text x="328" y="354" font-size="10" fill="#5F5E5A" text-anchor="middle">locally originated</text>
+
+    <rect x="468" y="312" width="256" height="60" rx="6" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.4"/>
+    <text x="596" y="336" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">65000 65101</text>
+    <text x="596" y="354" font-size="10" fill="#B9770E" text-anchor="middle">ordinary eBGP prepending</text>
+
+    <rect x="736" y="312" width="256" height="60" rx="6" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.4"/>
+    <text x="864" y="336" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">65100 65000 65101</text>
+    <text x="864" y="354" font-size="10" fill="#B9770E" text-anchor="middle">ordinary eBGP prepending</text>
+
+    <rect x="1004" y="312" width="256" height="60" rx="6" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.4"/>
+    <text x="1132" y="336" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">65099 65100 65000 65101</text>
+    <text x="1132" y="354" font-size="10" fill="#B9770E" text-anchor="middle">the self-documenting chain of Walk 3</text>
+
+    <rect x="1272" y="312" width="256" height="60" rx="6" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+    <text x="1400" y="336" font-size="12" fill="#085041" text-anchor="middle">unchanged</text>
+    <text x="1400" y="354" font-size="10" fill="#0F6E56" text-anchor="middle">iBGP into site B adds nothing</text>
+  </g>
+
+  <!-- ================= D-PATH ROW ================= -->
+  <g>
+    <rect x="200" y="378" width="256" height="60" rx="6" fill="#F8F7F3" stroke="#D3D1C7" stroke-width="1"/>
+    <text x="328" y="402" font-size="12" fill="#444441" text-anchor="middle">(none)</text>
+    <text x="328" y="420" font-size="10" fill="#5F5E5A" text-anchor="middle">native to its own domain, like an AS path</text>
+
+    <rect x="468" y="378" width="256" height="60" rx="6" fill="#F8F7F3" stroke="#D3D1C7" stroke-width="1"/>
+    <text x="596" y="402" font-size="12" fill="#444441" text-anchor="middle">(none)</text>
+    <text x="596" y="420" font-size="10" fill="#5F5E5A" text-anchor="middle">still inside the domain it was born in</text>
+
+    <rect x="736" y="378" width="256" height="60" rx="6" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.4"/>
+    <text x="864" y="402" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">65100:1</text>
+    <text x="864" y="420" font-size="10" fill="#B9770E" text-anchor="middle">stamp on exit: the domain it was learned in</text>
+
+    <rect x="1004" y="378" width="256" height="60" rx="6" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+    <text x="1132" y="402" font-size="12" fill="#085041" text-anchor="middle">65100:1</text>
+    <text x="1132" y="420" font-size="10" fill="#0F6E56" text-anchor="middle">relayed untouched</text>
+
+    <rect x="1272" y="378" width="256" height="60" rx="6" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.4"/>
+    <text x="1400" y="402" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">65099:1 65100:1</text>
+    <text x="1400" y="420" font-size="10" fill="#B9770E" text-anchor="middle">loop check on [65100:1] passes &#8594; stamp on exit</text>
+  </g>
+
+  <!-- ================= RMAC ROW ================= -->
+  <g>
+    <rect x="200" y="444" width="256" height="60" rx="6" fill="#F8F7F3" stroke="#D3D1C7" stroke-width="1"/>
+    <text x="328" y="468" font-size="12" font-weight="bold" fill="#444441" text-anchor="middle">originating leaf's</text>
+    <text x="328" y="486" font-size="10" fill="#5F5E5A" text-anchor="middle">system MAC of Leaf1/2/3 (VLAN 30: 3 copies)</text>
+
+    <rect x="468" y="444" width="256" height="60" rx="6" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+    <text x="596" y="468" font-size="12" fill="#085041" text-anchor="middle">unchanged</text>
+    <text x="596" y="486" font-size="10" fill="#0F6E56" text-anchor="middle">ext. communities ride through transit</text>
+
+    <rect x="736" y="444" width="256" height="60" rx="6" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.4"/>
+    <text x="864" y="468" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">Border1's</text>
+    <text x="864" y="486" font-size="10" fill="#B9770E" text-anchor="middle">next router on the tunnel is now the gateway</text>
+
+    <rect x="1004" y="444" width="256" height="60" rx="6" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1"/>
+    <text x="1132" y="468" font-size="12" fill="#085041" text-anchor="middle">unchanged</text>
+    <text x="1132" y="486" font-size="10" fill="#0F6E56" text-anchor="middle">relayed untouched</text>
+
+    <rect x="1272" y="444" width="256" height="60" rx="6" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.4"/>
+    <text x="1400" y="468" font-size="12" font-weight="bold" fill="#8A5A08" text-anchor="middle">Border2's</text>
+    <text x="1400" y="486" font-size="10" fill="#B9770E" text-anchor="middle">Leaf31 writes this as inner DMAC (Walk 5 C)</text>
+  </g>
+
+  <!-- ================= REFERENCE BAND ================= -->
+  <rect x="40" y="528" width="1480" height="108" rx="10" fill="#F8F7F3" stroke="#D3D1C7" stroke-width="1"/>
+  <text x="60" y="552" font-size="13" font-weight="bold" fill="#2C2C2A">What never appears in this grid</text>
+  <g font-size="11.5" fill="#444441">
+    <text x="60" y="574">RT 1:10 / 1:50000 - identical in every column: the static ASN-free RTs import in all three domains with zero rewriting</text>
+    <text x="60" y="594">Type-3 IMET - never relayed at all: each gateway originates its own IMET per domain, so the three flood domains stay independent</text>
+    <text x="60" y="614">65030:1 - site B's own ID is stamped only if a route ever *exits* site B; an incoming route carrying it is a loop and is dropped</text>
+  </g>
+  <line x1="1120" y1="538" x2="1120" y2="626" stroke="#D3D1C7" stroke-width="1"/>
+  <g font-size="11" fill="#444441">
+    <rect x="1140" y="548" width="14" height="14" rx="3" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.4"/><text x="1160" y="559">rewritten at this stage</text>
+    <rect x="1140" y="574" width="14" height="14" rx="3" fill="#E1F5EE" stroke="#0F6E56"/><text x="1160" y="585">deliberately preserved</text>
+    <rect x="1140" y="600" width="14" height="14" rx="3" fill="#F8F7F3" stroke="#D3D1C7"/><text x="1160" y="611">carried / not present</text>
+    <rect x="1320" y="548" width="14" height="14" rx="3" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.4"/><text x="1340" y="559">gateway stage</text>
+    <text x="1320" y="585" font-weight="bold" fill="#B03A2E">re-origination =</text>
+    <text x="1320" y="601" fill="#993C1D">new RD + next-hop-self</text>
+    <text x="1320" y="615" fill="#993C1D">+ D-path stamp (+ RMAC)</text>
+  </g>
+</svg>

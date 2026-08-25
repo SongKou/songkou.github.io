@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Multi-domain EVPN data-plane walk (Walk 5)</title>
+<style>
+  :root {
+    color-scheme: dark;
+    /* pinned to the blog's m10c palette so the embed blends into the post */
+    --bg: #353b43;
+    --bg2: #3f464f;
+    --text: #d6dde3;
+    --muted: rgb(214 221 227 / 62%);
+    --accent: #57cc8a;
+    --accent-bg: rgb(87 204 138 / 16%);
+    --border: rgb(255 255 255 / 14%);
+    --border2: rgb(255 255 255 / 10%);
+    --changed: #e8b04b;
+    --changed-bg: rgb(232 176 75 / 14%);
+    --steady: #57cc8a;
+    --risk: #e07a5f;
+    background: var(--bg);
+  }
+  html, body { margin: 0; }
+  body {
+    box-sizing: border-box;
+    padding: 6px 2px;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  #dp-walk { width: 100%; }
+  #dp-walk h2 { font-size: 18px; margin: 2px 0 2px; }
+  #dp-walk .sub { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
+  #dp-walk code, #dp-walk .mono {
+    font-family: Consolas, Menlo, monospace;
+    font-size: 12.5px;
+  }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .btn {
+    font: inherit; font-size: 13px;
+    min-height: 28px; padding: 2px 10px; margin: 0;
+    color: var(--text); background: var(--bg2);
+    border: 1px solid var(--border); border-radius: 999px;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn[aria-pressed="true"] {
+    color: var(--accent); background: var(--accent-bg);
+    border-color: var(--accent); font-weight: 600;
+  }
+
+  .flow {
+    display: grid;
+    grid-template-columns: 1fr 16px 1fr 16px 1fr 16px 1fr 16px 1fr;
+    align-items: stretch; gap: 4px; margin-bottom: 12px;
+  }
+  .node {
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--bg2); padding: 8px 5px; text-align: center;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .node strong { display: block; font-size: 12px; }
+  .node .as { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .node:hover { border-color: var(--accent); }
+  .node[data-active="true"] {
+    border-color: var(--accent); background: var(--accent-bg);
+  }
+  .node[data-done="true"] { border-color: rgb(87 204 138 / 45%); }
+  .node[data-gw="true"] strong::after { content: " ◆"; color: var(--risk); }
+  .arrow {
+    align-self: center; text-align: center;
+    color: var(--muted); font-size: 13px; user-select: none;
+  }
+
+  .summary {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline;
+    border: 1px solid var(--border2); border-radius: 10px;
+    background: var(--bg2); padding: 8px 12px; margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 999px;
+    background: var(--accent-bg); color: var(--accent);
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .legend i.chg { background: var(--changed); }
+  .legend i.std { background: var(--steady); }
+  .legend b.gw { color: var(--risk); font-weight: 600; }
+
+  .detail {
+    border: 1px solid var(--border2); border-radius: 10px;
+    background: var(--bg2); padding: 12px 14px; margin-bottom: 10px;
+  }
+  .detail-head {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    justify-content: space-between; margin-bottom: 4px;
+  }
+  .detail-head h3 { font-size: 14.5px; margin: 0; }
+  .stepper { display: flex; gap: 6px; }
+  .stepper .btn { min-height: 24px; font-size: 12px; padding: 0 8px; }
+  .detail .action { color: var(--muted); margin: 0 0 10px; font-size: 13px; }
+
+  .fields { display: grid; gap: 4px; }
+  .field {
+    display: grid; grid-template-columns: 150px 1fr;
+    gap: 3px 12px; align-items: baseline;
+    border-left: 3px solid var(--border); border-radius: 3px;
+    padding: 3px 8px; background: rgb(255 255 255 / 3%);
+  }
+  .field > span { font-size: 12.5px; color: var(--muted); }
+  .field > code { text-align: left; word-break: break-word; }
+  .field[data-state="changed"] { border-left-color: var(--changed); background: var(--changed-bg); }
+  .field[data-state="changed"] > span { color: var(--changed); }
+  .field[data-state="steady"] { border-left-color: var(--steady); }
+  .field[data-state="steady"] > span { color: var(--steady); }
+
+  .risk {
+    margin: 10px 0 0; font-size: 12.5px; color: var(--muted);
+    border-top: 1px dashed var(--border2); padding-top: 8px;
+  }
+  .risk strong { color: var(--risk); font-weight: 600; }
+
+  .footnotes { color: var(--muted); font-size: 12.5px; }
+  .footnotes p { margin: 4px 0; }
+
+  @media (max-width: 760px) {
+    .flow { grid-template-columns: 1fr; }
+    .arrow { transform: rotate(90deg); min-height: 16px; }
+    .field { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="dp-walk">
+  <h2>Walk 5, clickable — the packet across three stitched tunnels</h2>
+  <p class="sub">Source in site B, destination in site A — three tunnel legs, one per domain. Pick a case, then click a hop or step through. ◆ marks a stitch point: decapsulate, look up, re-encapsulate.</p>
+
+  <div class="controls" role="group" aria-label="Choose the traffic case">
+    <button type="button" class="btn" data-kase="A" aria-pressed="true">A — ARP broadcast (BUM)</button>
+    <button type="button" class="btn" data-kase="B" aria-pressed="false">B — known unicast, R_VPC1 → VPC1</button>
+    <button type="button" class="btn" data-kase="C" aria-pressed="false">C — routed, R_VPC1 → VPC3 (VLAN 30)</button>
+  </div>
+
+  <div class="flow" id="flow" role="group" aria-label="Packet path across the three domains"></div>
+
+  <div class="summary" aria-live="polite">
+    <span class="badge" id="mode"></span>
+    <span id="summary-text"></span>
+  </div>
+
+  <div class="legend">
+    <span><i class="chg"></i>rewritten at this hop</span>
+    <span><i class="std"></i>constant — the invariant to verify</span>
+    <span><b class="gw">◆ stitch point</b> = decap → lookup → re-encap</span>
+  </div>
+
+  <div class="detail" aria-live="polite">
+    <div class="detail-head">
+      <h3 id="hop-title"></h3>
+      <div class="stepper">
+        <button type="button" class="btn" id="prev">← Prev hop</button>
+        <button type="button" class="btn" id="next">Next hop →</button>
+      </div>
+    </div>
+    <p class="action" id="hop-action"></p>
+    <div class="fields" id="fields"></div>
+    <p class="risk" id="hop-risk"></p>
+  </div>
+
+  <div class="footnotes">
+    <p><strong>Which IPs are which:</strong> every outer address is a VTEP loopback (Lo1) — <code>10.255.31.113 → 10.255.31.101 → 10.255.255.101 → .112 / .113</code>. Lo0 addresses (<code>10.255.31.21</code>, <code>10.255.31.1</code>, <code>10.255.99.1</code>, <code>10.255.255.1</code>) carry the BGP sessions of Walk 4 and never appear in a packet header. Site A abbreviates <code>10.255.255.x</code> to <code>.x</code>.</p>
+    <p><strong>The invariant per case:</strong> A and B bridge — the inner Ethernet frame is untouched end to end, only outer headers change. C routes — a VRF lookup at the head of every leg rewrites the inner MACs (the RMAC chain from Walk 4), while the inner IPs stay constant.</p>
+    <p><strong>Every leg is its own tunnel</strong> in its own underlay: it converges, ECMPs (outer UDP source port), and fails independently — and needs the +50 B VXLAN headroom. No device ever encapsulates toward a VTEP outside its own domain.</p>
+    <p><strong>The 6.2 comparison:</strong> the old design ran one end-to-end tunnel <code>10.255.31.113 → 10.255.255.112</code> and sent one BUM copy per site A VTEP across the DCI; multi-domain sends one copy, and the far gateway fans out locally.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const root = document.getElementById('dp-walk');
+  if (!root) return;
+
+  // f(state, label, value): state = null | 'changed' | 'steady'
+  const f = (state, label, value) => ({ state, label, value });
+
+  const kases = {
+    A: {
+      badge: 'Case A · ARP who-has 192.168.10.10',
+      summary: 'The very first packet: a broadcast. Each domain floods independently from its own IMET-built list; the gateways translate between flood domains, one copy per boundary.',
+      steps: [
+        {
+          node: 'Leaf31', as: 'HER · VTEP 10.255.31.113 · Lo0 .31.21', gw: false,
+          title: 'Leg 1 · Leaf31 floods per its own domain\'s list',
+          action: 'R_VPC1 broadcasts. Leaf31\'s VNI 1010 flood list — built from site B\'s IMET routes only — contains 10.255.31.101 and no site A VTEP. One copy leaves the leaf.',
+          fields: [
+            f('changed', 'Outer IP',    '10.255.31.113 → 10.255.31.101'),
+            f(null,      'VNI',         '1010'),
+            f('steady',  'Inner dst MAC','ff:ff:ff:ff:ff:ff — broadcast, untouched end to end'),
+            f(null,      'Inner src MAC','R_VPC1\'s MAC'),
+            f(null,      'Payload',     'ARP who-has 192.168.10.10'),
+            f(null,      'Copies',      '1 — routed Leaf31 → SP31 → Border2')
+          ],
+          risk: 'if 10.255.255.112 still shows in show vxlan flood vtep here, the flood list is the 6.2 design leaking through — an IMET from site A crossed the boundary unre-originated.'
+        },
+        {
+          node: 'Border2', as: 'stitch · VTEP 10.255.31.101 · Lo0 .31.1', gw: true,
+          title: 'Stitch 1 · Border2: decap, flood local, one copy onward',
+          action: 'Border2 decapsulates, floods its local VLAN 10 (no hosts there), and re-encapsulates one copy per its interconnect flood list. Domain split horizon: nothing returns toward Leaf31.',
+          fields: [
+            f('changed', 'Outer IP',    '10.255.31.101 → 10.255.255.101'),
+            f('steady',  'VNI',         '1010'),
+            f('steady',  'Inner frame', 'byte-for-byte the frame R_VPC1 sent'),
+            f('changed', 'Copies',      '1 across the DCI — always (6.2 sent one per site A VTEP)'),
+            f(null,      'Split horizon','the copy never turns back into the domain it came from')
+          ],
+          risk: 'broken split horizon here is a two-site broadcast storm — the per-domain flood boundary is the BUM loop protection.'
+        },
+        {
+          node: 'DCI', as: 'routes outer IP only · Lo0 10.255.99.1', gw: false,
+          title: 'Transit · the DCI routes the outer packet',
+          action: 'To the DCI this is an ordinary IP/UDP packet between two loopbacks it has routes for. No VXLAN awareness, no flood role.',
+          fields: [
+            f('steady',  'Outer IP',    '10.255.31.101 → 10.255.255.101 · UDP 4789'),
+            f('steady',  'Inner frame', 'opaque payload from the DCI\'s point of view'),
+            f(null,      'Routing',     'only gateway VTEPs and peering loopbacks — five /32s total')
+          ],
+          risk: 'an MTU below outer-frame size on a DCI link silently drops big BUM frames while small ARPs work — test with ping df-bit size 1472 before blaming the overlay.'
+        },
+        {
+          node: 'Border1', as: 'stitch · VTEP 10.255.255.101 · Lo0 .1', gw: true,
+          title: 'Stitch 2 · Border1: decap, fan out locally',
+          action: 'Border1 decapsulates and head-end-replicates into site A\'s flood list — the fan-out the 6.2 design did across the DCI now happens here, locally.',
+          fields: [
+            f('changed', 'Outer IP',    '10.255.255.101 → 10.255.255.112 and → 10.255.255.113'),
+            f('steady',  'VNI',         '1010'),
+            f('steady',  'Inner frame', 'still untouched'),
+            f('changed', 'Copies',      '2 — one per site A VTEP in the flood list'),
+            f(null,      'Split horizon','nothing back toward the DCI, the domain it arrived from')
+          ],
+          risk: 'if site A ran a multicast underlay instead (section 4.1 on capable hardware), this hop would translate HER → (S,G) — the gateway is where replication modes meet.'
+        },
+        {
+          node: 'MLAG pair + Leaf3', as: 'deliver · VTEPs .112 / .113 · Lo0 .21/.22/.23', gw: false,
+          title: 'Leg 3 end · site A delivers, VPC1 answers',
+          action: 'One MLAG member wins the .112 copy (section 2.4\'s rules) and floods VLAN 10; Leaf3 floods its copy too. VPC1 answers — and the reply is known unicast riding the same three legs in reverse: case B.',
+          fields: [
+            f('steady',  'Inner frame', 'the broadcast R_VPC1 sent, delivered intact'),
+            f(null,      'MLAG',        'one member forwards the anycast VTEP copy — no duplicates'),
+            f(null,      'Reply',       'unicast: every hop already knows R_VPC1\'s MAC from Walk 4')
+          ],
+          risk: 'duplicate ARPs at VPC1 mean both MLAG members forwarded — an MLAG, not a multi-domain, problem (section 2.4).'
+        }
+      ]
+    },
+    B: {
+      badge: 'Case B · ICMP 192.168.10.150 → 192.168.10.10',
+      summary: 'Steady state: three MAC-table lookups, three tunnels, three underlays. Every lookup result comes from Walk 4\'s re-originated Type-2s.',
+      steps: [
+        {
+          node: 'Leaf31', as: 'lookup 1 · VTEP 10.255.31.113 · Lo0 .31.21', gw: false,
+          title: 'Leg 1 · Leaf31\'s MAC table points at its local gateway',
+          action: 'VPC1-MAC → VTEP 10.255.31.101, installed from Walk 4 hop 6. The tunnel target is inside site B; site A\'s underlay is invisible from here.',
+          fields: [
+            f('changed', 'Outer IP',     '10.255.31.113 → 10.255.31.101'),
+            f(null,      'VNI',          '1010'),
+            f('steady',  'Inner dst MAC','VPC1\'s MAC — bridged, untouched end to end'),
+            f('steady',  'Inner IPs',    '192.168.10.150 → 192.168.10.10'),
+            f(null,      'Underlay path','Leaf31 → SP31 → Border2')
+          ],
+          risk: 'MAC entry pointing at 10.255.255.112 instead = a stale or leaked unre-originated route — the control plane regressed to 6.2 while the underlay filters did not.'
+        },
+        {
+          node: 'Border2', as: 'stitch · VTEP 10.255.31.101 · Lo0 .31.1', gw: true,
+          title: 'Stitch 1 · Border2: decap, look up, re-encap',
+          action: 'Border2\'s own MAC table — populated by the interconnect domain\'s EVPN — says VPC1-MAC lives behind 10.255.255.101.',
+          fields: [
+            f('changed', 'Outer IP',     '10.255.31.101 → 10.255.255.101'),
+            f('steady',  'VNI',          '1010'),
+            f('steady',  'Inner frame',  'untouched — this is bridging, not routing'),
+            f(null,      'Underlay path','Border2 → DCI → Border1')
+          ],
+          risk: 'MAC present in BGP but not in the MAC table = the gateway imported the route but VLAN 10 / VNI 1010 is not configured on its Vxlan1 — a policy-boundary miss.'
+        },
+        {
+          node: 'DCI', as: 'routes outer IP only · Lo0 10.255.99.1', gw: false,
+          title: 'Transit · the DCI routes the outer packet',
+          action: 'Same as case A: an opaque UDP/4789 packet between two gateway loopbacks.',
+          fields: [
+            f('steady',  'Outer IP',    '10.255.31.101 → 10.255.255.101 · UDP 4789'),
+            f('steady',  'Inner frame', 'opaque'),
+            f(null,      'ECMP',        'per-flow on the outer UDP source port, as everywhere')
+          ],
+          risk: 'this is the only traffic the DCI ever carries now — gateway-to-gateway; a leaf loopback in its routing table means a border filter is missing.'
+        },
+        {
+          node: 'Border1', as: 'stitch · VTEP 10.255.255.101 · Lo0 .1', gw: true,
+          title: 'Stitch 2 · Border1: decap, look up, re-encap',
+          action: 'Border1\'s MAC table — populated by site A\'s own EVPN — says VPC1-MAC is behind the anycast VTEP.',
+          fields: [
+            f('changed', 'Outer IP',     '10.255.255.101 → 10.255.255.112'),
+            f('steady',  'VNI',          '1010'),
+            f('steady',  'Inner frame',  'untouched'),
+            f(null,      'Underlay path','either spine, either MLAG member — ECMP')
+          ],
+          risk: 'a site A convergence event (leaf reload, ECMP reshuffle) is absorbed entirely on this leg — Leaf31\'s forwarding state never notices. That is the containment the redesign buys.'
+        },
+        {
+          node: 'MLAG pair', as: 'deliver · anycast VTEP .112 · Lo0 .21 / .22', gw: false,
+          title: 'Leg 3 end · decapsulate and bridge to VPC1',
+          action: 'Whichever member receives the packet decapsulates and bridges into VLAN 10. Compare Walk 1: same host experience, but then it was one tunnel 10.255.31.113 → 10.255.255.112.',
+          fields: [
+            f('steady',  'Inner dst MAC','VPC1\'s MAC — as Leaf31 wrote it, three legs ago'),
+            f('steady',  'Inner IPs',    '192.168.10.150 → 192.168.10.10'),
+            f(null,      'Verification', 'vxlan counters on all three VTEP pairs tell you which leg drops')
+          ],
+          risk: 'end-to-end loss with all three legs individually clean points at a stitch point — check the gateway\'s VNI config and MAC tables, not the underlays.'
+        }
+      ]
+    },
+    C: {
+      badge: 'Case C · ICMP 192.168.10.150 → 192.168.30.30',
+      summary: 'VLAN 30 is never stretched — this is symmetric IRB over VNI 50000, with a fresh VRF lookup at the head of every leg and the RMAC chain from Walk 4\'s Type-5.',
+      steps: [
+        {
+          node: 'Leaf31', as: 'VRF lookup 1 · VTEP 10.255.31.113 · Lo0 .31.21', gw: false,
+          title: 'Leg 1 · Leaf31 routes into the L3 VNI',
+          action: 'VRF TENANT_A: 192.168.30.0/24 via VTEP 10.255.31.101, router MAC Border2\'s — Walk 4\'s re-originated Type-5. The inner DMAC names the router at the far end of this leg.',
+          fields: [
+            f('changed', 'Outer IP',     '10.255.31.113 → 10.255.31.101'),
+            f('changed', 'VNI',          '50000 — the L3 VNI, not a VLAN\'s'),
+            f('changed', 'Inner dst MAC','Border2\'s RMAC'),
+            f('changed', 'Inner src MAC','Leaf31\'s RMAC'),
+            f('steady',  'Inner IPs',    '192.168.10.150 → 192.168.30.30 — constant end to end')
+          ],
+          risk: 'inner DMAC still a site A leaf\'s RMAC = the Type-5 was relayed, not re-originated — the frame arrives at Border2 addressed to a router that is not there, and dies.'
+        },
+        {
+          node: 'Border2', as: 'stitch · VTEP 10.255.31.101 · Lo0 .31.1', gw: true,
+          title: 'Stitch 1 · Border2 routes again',
+          action: 'Decapsulate, route in its own VRF TENANT_A: the prefix points at 10.255.255.101 with Border1\'s RMAC. Re-encapsulate in VNI 50000.',
+          fields: [
+            f('changed', 'Outer IP',     '10.255.31.101 → 10.255.255.101'),
+            f('steady',  'VNI',          '50000'),
+            f('changed', 'Inner dst MAC','Border1\'s RMAC'),
+            f('changed', 'Inner src MAC','Border2\'s RMAC'),
+            f('steady',  'Inner IPs',    '192.168.10.150 → 192.168.30.30')
+          ],
+          risk: 'VRF TENANT_A or VNI 50000 missing on a gateway stops this case cold while cases A and B still work — routed-only reachability is exactly what the gateway VRF config gates.'
+        },
+        {
+          node: 'DCI', as: 'routes outer IP only · Lo0 10.255.99.1', gw: false,
+          title: 'Transit · the DCI routes the outer packet',
+          action: 'Identical to the bridged cases — the DCI cannot tell VNI 50000 from VNI 1010; it routes the outer header and nothing else.',
+          fields: [
+            f('steady',  'Outer IP',    '10.255.31.101 → 10.255.255.101 · UDP 4789'),
+            f('steady',  'Inner frame', 'opaque'),
+            f(null,      'Note',        'bridged and routed traffic share the same gateway-to-gateway leg')
+          ],
+          risk: 'same as ever: MTU. Routed frames are no smaller than bridged ones.'
+        },
+        {
+          node: 'Border1', as: 'stitch · VTEP 10.255.255.101 · Lo0 .1', gw: true,
+          title: 'Stitch 2 · Border1 routes a third time',
+          action: 'Its VRF holds the prefix via .112 and .113 — all three site A leaves originate VLAN 30 — so it ECMPs across both VTEPs, writing the chosen leaf\'s RMAC as inner DMAC.',
+          fields: [
+            f('changed', 'Outer IP',     '10.255.255.101 → 10.255.255.112 or → 10.255.255.113'),
+            f('steady',  'VNI',          '50000'),
+            f('changed', 'Inner dst MAC','the chosen leaf\'s RMAC (MLAG pair shares one)'),
+            f('changed', 'Inner src MAC','Border1\'s RMAC'),
+            f('steady',  'Inner IPs',    '192.168.10.150 → 192.168.30.30')
+          ],
+          risk: 'only one next hop installed = one of the site A Type-5 copies never made it into the gateway\'s VRF — check which leaf\'s copy is missing in show bgp evpn route-type ip-prefix.'
+        },
+        {
+          node: 'Landing leaf', as: 'deliver · VTEPs .112 / .113 · VNI 50000 → VLAN 30', gw: false,
+          title: 'Leg 3 end · the leaf routes into VLAN 30',
+          action: 'The landing leaf decapsulates, recognizes its own RMAC, routes in VRF TENANT_A from VNI 50000 into VLAN 30, and delivers to VPC3 (ARPing locally if needed).',
+          fields: [
+            f('steady',  'Inner IPs',   '192.168.10.150 → 192.168.30.30 — the one constant of case C'),
+            f('changed', 'Inner MACs',  'final rewrite: leaf SVI MAC → VPC3\'s MAC'),
+            f(null,      'Return path', 'VPC3\'s reply repeats the whole chain in reverse — three lookups, three legs')
+          ],
+          risk: 'one-way traffic = the return route is missing — check that 192.168.10.0/24 (stretched, so its Type-2s/Type-5s flow the other way) survived both re-originations toward site A.'
+        }
+      ]
+    }
+  };
+
+  const flow = document.getElementById('flow');
+  const kaseButtons = Array.from(root.querySelectorAll('[data-kase]'));
+  let activeKase = 'A';
+  let activeStep = 0;
+
+  const byId = id => document.getElementById(id);
+
+  const buildFlow = () => {
+    flow.replaceChildren();
+    kases[activeKase].steps.forEach((step, i) => {
+      if (i > 0) {
+        const a = document.createElement('div');
+        a.className = 'arrow';
+        a.setAttribute('aria-hidden', 'true');
+        a.textContent = '→';
+        flow.append(a);
+      }
+      const n = document.createElement('button');
+      n.type = 'button';
+      n.className = 'node';
+      n.dataset.step = String(i);
+      n.dataset.gw = String(!!step.gw);
+      const t = document.createElement('strong');
+      t.textContent = step.node;
+      const s = document.createElement('span');
+      s.className = 'as';
+      s.textContent = step.as;
+      n.append(t, s);
+      n.addEventListener('click', () => { activeStep = i; render(); });
+      flow.append(n);
+    });
+  };
+
+  const render = () => {
+    const kase = kases[activeKase];
+    const step = kase.steps[activeStep];
+
+    kaseButtons.forEach(b =>
+      b.setAttribute('aria-pressed', String(b.dataset.kase === activeKase)));
+
+    Array.from(flow.querySelectorAll('.node')).forEach((n, i) => {
+      n.dataset.active = String(i === activeStep);
+      n.dataset.done = String(i < activeStep);
+    });
+
+    byId('mode').textContent = kase.badge;
+    byId('summary-text').textContent = kase.summary;
+    byId('hop-title').textContent = step.title;
+    byId('hop-action').textContent = step.action;
+
+    const fields = byId('fields');
+    fields.replaceChildren();
+    step.fields.forEach(field => {
+      const row = document.createElement('div');
+      row.className = 'field';
+      if (field.state) row.dataset.state = field.state;
+      const label = document.createElement('span');
+      label.textContent = field.label;
+      const value = document.createElement('code');
+      value.textContent = field.value;
+      row.append(label, value);
+      fields.append(row);
+    });
+
+    byId('hop-risk').innerHTML = '';
+    const strong = document.createElement('strong');
+    strong.textContent = 'Worth knowing: ';
+    byId('hop-risk').append(strong, document.createTextNode(step.risk));
+
+    byId('prev').disabled = activeStep === 0;
+    byId('next').disabled = activeStep === kase.steps.length - 1;
+    byId('prev').style.opacity = activeStep === 0 ? '.45' : '1';
+    byId('next').style.opacity = activeStep === kase.steps.length - 1 ? '.45' : '1';
+  };
+
+  kaseButtons.forEach(b => b.addEventListener('click', () => {
+    activeKase = b.dataset.kase;
+    if (activeStep >= kases[activeKase].steps.length) activeStep = 0;
+    buildFlow();
+    render();
+  }));
+  byId('prev').addEventListener('click', () => { if (activeStep > 0) { activeStep--; render(); } });
+  byId('next').addEventListener('click', () => { if (activeStep < kases[activeKase].steps.length - 1) { activeStep++; render(); } });
+
+  buildFlow();
+  render();
+})();
+</script>
+<script>
+(() => {
+  const report = () => parent.postMessage(
+    { type: "embed-height", height: Math.ceil(document.body.getBoundingClientRect().height) }, "*");
+  new ResizeObserver(report).observe(document.body);
+  window.addEventListener("load", report);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Multi-domain EVPN control-plane walk (Walk 4)</title>
+<style>
+  :root {
+    color-scheme: dark;
+    /* pinned to the blog's m10c palette so the embed blends into the post */
+    --bg: #353b43;
+    --bg2: #3f464f;
+    --text: #d6dde3;
+    --muted: rgb(214 221 227 / 62%);
+    --accent: #57cc8a;
+    --accent-bg: rgb(87 204 138 / 16%);
+    --border: rgb(255 255 255 / 14%);
+    --border2: rgb(255 255 255 / 10%);
+    --changed: #e8b04b;
+    --changed-bg: rgb(232 176 75 / 14%);
+    --steady: #57cc8a;
+    --risk: #e07a5f;
+    background: var(--bg);
+  }
+  html, body { margin: 0; }
+  body {
+    box-sizing: border-box;
+    padding: 6px 2px;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  #md-walk { width: 100%; }
+  #md-walk h2 { font-size: 18px; margin: 2px 0 2px; }
+  #md-walk .sub { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
+  #md-walk code, #md-walk .mono {
+    font-family: Consolas, Menlo, monospace;
+    font-size: 12.5px;
+  }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .btn {
+    font: inherit; font-size: 13px;
+    min-height: 28px; padding: 2px 10px; margin: 0;
+    color: var(--text); background: var(--bg2);
+    border: 1px solid var(--border); border-radius: 999px;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn[aria-pressed="true"] {
+    color: var(--accent); background: var(--accent-bg);
+    border-color: var(--accent); font-weight: 600;
+  }
+
+  .flow {
+    display: grid;
+    grid-template-columns: 1fr 16px 1fr 16px 1fr 16px 1fr 16px 1fr 16px 1fr;
+    align-items: stretch; gap: 4px; margin-bottom: 12px;
+  }
+  .node {
+    border: 1px solid var(--border); border-radius: 10px;
+    background: var(--bg2); padding: 8px 5px; text-align: center;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .node strong { display: block; font-size: 12px; }
+  .node .as { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .node:hover { border-color: var(--accent); }
+  .node[data-active="true"] {
+    border-color: var(--accent); background: var(--accent-bg);
+  }
+  .node[data-done="true"] { border-color: rgb(87 204 138 / 45%); }
+  .node[data-gw="true"] strong::after { content: " ✦"; color: var(--changed); }
+  .arrow {
+    align-self: center; text-align: center;
+    color: var(--muted); font-size: 13px; user-select: none;
+  }
+
+  .summary {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline;
+    border: 1px solid var(--border2); border-radius: 10px;
+    background: var(--bg2); padding: 8px 12px; margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 999px;
+    background: var(--accent-bg); color: var(--accent);
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  .legend i.chg { background: var(--changed); }
+  .legend i.std { background: var(--steady); }
+  .legend b.gw { color: var(--changed); font-weight: 600; }
+
+  .detail {
+    border: 1px solid var(--border2); border-radius: 10px;
+    background: var(--bg2); padding: 12px 14px; margin-bottom: 10px;
+  }
+  .detail-head {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    justify-content: space-between; margin-bottom: 4px;
+  }
+  .detail-head h3 { font-size: 14.5px; margin: 0; }
+  .stepper { display: flex; gap: 6px; }
+  .stepper .btn { min-height: 24px; font-size: 12px; padding: 0 8px; }
+  .detail .action { color: var(--muted); margin: 0 0 10px; font-size: 13px; }
+
+  .fields { display: grid; gap: 4px; }
+  .field {
+    display: grid; grid-template-columns: 150px 1fr;
+    gap: 3px 12px; align-items: baseline;
+    border-left: 3px solid var(--border); border-radius: 3px;
+    padding: 3px 8px; background: rgb(255 255 255 / 3%);
+  }
+  .field > span { font-size: 12.5px; color: var(--muted); }
+  .field > code { text-align: left; word-break: break-word; }
+  .field[data-state="changed"] { border-left-color: var(--changed); background: var(--changed-bg); }
+  .field[data-state="changed"] > span { color: var(--changed); }
+  .field[data-state="steady"] { border-left-color: var(--steady); }
+  .field[data-state="steady"] > span { color: var(--steady); }
+
+  .risk {
+    margin: 10px 0 0; font-size: 12.5px; color: var(--muted);
+    border-top: 1px dashed var(--border2); padding-top: 8px;
+  }
+  .risk strong { color: var(--risk); font-weight: 600; }
+
+  .footnotes { color: var(--muted); font-size: 12.5px; }
+  .footnotes p { margin: 4px 0; }
+
+  @media (max-width: 760px) {
+    .flow { grid-template-columns: 1fr; }
+    .arrow { transform: rotate(90deg); min-height: 16px; }
+    .field { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="md-walk">
+  <h2>Walk 4, clickable — one route, two re-originations</h2>
+  <p class="sub">Site A (domain <code>65100:1</code>) → DCI (<code>65099:1</code>) → site B (<code>65030:1</code>). Toggle the route type, then click a hop or step through. ✦ marks a gateway — the only places anything is rewritten.</p>
+
+  <div class="controls" role="group" aria-label="Choose the route type">
+    <button type="button" class="btn" data-route="T2" aria-pressed="true">Type-2 — VPC1's MAC/IP (bridged, VNI 1010)</button>
+    <button type="button" class="btn" data-route="T5" aria-pressed="false">Type-5 — 192.168.30.0/24 (routed prefix, VNI 50000)</button>
+  </div>
+
+  <div class="flow" id="flow" role="group" aria-label="Route path across the three domains"></div>
+
+  <div class="summary" aria-live="polite">
+    <span class="badge" id="mode"></span>
+    <span id="summary-text"></span>
+  </div>
+
+  <div class="legend">
+    <span><i class="chg"></i>rewritten at this hop</span>
+    <span><i class="std"></i>deliberately preserved</span>
+    <span><b class="gw">✦ gateway</b> = new RD + next-hop-self + D-path stamp (+ router MAC)</span>
+  </div>
+
+  <div class="detail" aria-live="polite">
+    <div class="detail-head">
+      <h3 id="hop-title"></h3>
+      <div class="stepper">
+        <button type="button" class="btn" id="prev">← Prev hop</button>
+        <button type="button" class="btn" id="next">Next hop →</button>
+      </div>
+    </div>
+    <p class="action" id="hop-action"></p>
+    <div class="fields" id="fields"></div>
+    <p class="risk" id="hop-risk"></p>
+  </div>
+
+  <div class="footnotes">
+    <p><strong>Two loopbacks per device:</strong> <code>Lo0</code> = router-id and BGP peering — every overlay session here runs Lo0-to-Lo0 (<code>update-source Loopback0</code>, <code>ebgp-multihop 3</code>). <code>Lo1</code> = the VTEP — what next hops point at and where tunnels terminate. Spines and the DCI have Lo0 only: no VTEP, and after re-origination, never a next hop. Site A addresses abbreviate <code>10.255.255.x</code> to <code>.x</code>; site B uses <code>10.255.31.x</code>.</p>
+    <p><strong>What never changes:</strong> the RT (<code>1:10</code> / <code>1:50000</code>) is static, ASN-free, and domain-free — it imports identically in all three domains with zero rewriting, in both route types, at every hop.</p>
+    <p><strong>What never travels at all:</strong> Type-3 IMET routes are not relayed across domains — each gateway originates its own per domain, which is why the three flood domains in Walk 5 are independent.</p>
+    <p><strong>Why 65030:1 never appears:</strong> D-path is stamped on <em>exit</em> with the domain the route was learned in — a domain's own ID enters the D-path only when a route leaves it. An incoming route already carrying your own ID is a loop, and the gateway drops it.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const root = document.getElementById('md-walk');
+  if (!root) return;
+
+  // f(state, label, value): state = null | 'changed' | 'steady'
+  const f = (state, label, value) => ({ state, label, value });
+
+  const routes = {
+    T2: {
+      badge: 'Type-2 · VPC1 = 192.168.10.10',
+      summary: 'Born behind the MLAG anycast VTEP, installed on Leaf31 behind the site B gateway. Two re-originations; between them, transit hops preserve everything that matters.',
+      steps: [
+        {
+          node: 'Leaf1 + Leaf2', as: 'Lo0 .21 / .22 · VTEP .112', gw: false,
+          title: 'Hop 1 · the MLAG pair originates',
+          action: 'redistribute learned turns VPC1\'s MAC into a Type-2. Each MLAG member advertises the same reachability under its own RD — two copies, one shared next hop.',
+          fields: [
+            f(null,     'RD',        '10.255.255.21:10 — and a twin under 10.255.255.22:10'),
+            f(null,     'RT',        '1:10 — static, ASN-free, domain-free'),
+            f(null,     'Next hop',  '10.255.255.112 — the shared anycast VTEP'),
+            f(null,     'AS path',   'empty — as originated'),
+            f(null,     'D-path',    '(none) — native to site A, like a route inside its own AS')
+          ],
+          risk: 'the host was never learned, or the EVPN session to the spines is down — the route exists nowhere.'
+        },
+        {
+          node: 'Spine1 / Spine2', as: 'AS 65000 · Lo0 .11 / .12', gw: false,
+          title: 'Hop 2 · spines pass it to Border1',
+          action: 'eBGP transit inside the site A domain: prepend and hand over. The spines\' next-hop-unchanged keeps the anycast VTEP as next hop — one of the two knobs the multi-domain redesign keeps.',
+          fields: [
+            f('steady',  'RD',       '10.255.255.21:10 — transit never touches RDs'),
+            f('steady',  'RT',       '1:10'),
+            f('steady',  'Next hop', '10.255.255.112 — spines: next-hop-unchanged'),
+            f('changed', 'AS path',  '65000 65101 — ordinary eBGP prepending'),
+            f(null,      'D-path',   '(none) — still inside the domain it was born in')
+          ],
+          risk: 'deleting the spines\' next-hop-unchanged blackholes intra-site tunnels into the spines — BGP stays healthy, only the data plane dies. Only the borders\' copies of this knob go.'
+        },
+        {
+          node: 'Border1', as: 'AS 65100 · Lo0 10.255.255.1 · GW VTEP .101', gw: true,
+          title: 'Hop 3 · Border1 re-originates → DCI domain',
+          action: 'The gateway imports on 1:10 — both MLAG copies collapse into one MAC-VRF entry — and re-originates one route into the interconnect: own RD, next-hop-self, D-path stamped with the domain it was learned in.',
+          fields: [
+            f('changed', 'RD',       '10.255.255.1:10 — Border1\'s own; the MLAG twin is gone'),
+            f('steady',  'RT',       '1:10 — untouched: the static-RT dividend, third payout'),
+            f('changed', 'Next hop', '10.255.255.101 — next-hop-self, the gateway VTEP'),
+            f('changed', 'AS path',  '65100 65000 65101'),
+            f('changed', 'D-path',   '65100:1 — stamped on exit: the source domain, never the destination')
+          ],
+          risk: 'without domain identifier + neighbor … domain remote this hop degrades to the 6.2 transit design — leaf next hops leak across the DCI and the underlay filters built in 6.4 blackhole them.'
+        },
+        {
+          node: 'DCI', as: 'AS 65099 · Lo0 10.255.99.1 · no VTEP', gw: false,
+          title: 'Hop 4 · the route server relays',
+          action: 'Control-plane transit inside the interconnect domain: no VXLAN, no import, no re-origination. Its next-hop-unchanged now protects a gateway VTEP instead of a leaf VTEP — same job as in section 6.2.',
+          fields: [
+            f('steady',  'RD',       '10.255.255.1:10 — relayed, never re-originated'),
+            f('steady',  'RT',       '1:10'),
+            f('steady',  'Next hop', '10.255.255.101 — DCI: next-hop-unchanged'),
+            f('changed', 'AS path',  '65099 65100 65000 65101 — the self-documenting chain'),
+            f('steady',  'D-path',   '65100:1 — relayed untouched; route servers never stamp')
+          ],
+          risk: 'a forgotten next-hop-unchanged rewrites the next hop to 10.255.99.1 — a router with no VTEP — and every inter-site tunnel blackholes into the DCI.'
+        },
+        {
+          node: 'Border2', as: 'AS 65030 · Lo0 10.255.31.1 · GW VTEP .31.101', gw: true,
+          title: 'Hop 5 · Border2: loop check, then re-originate → site B',
+          action: 'The received D-path [65100:1] contains neither of Border2\'s domains (65030:1, 65099:1) → accepted. Second re-origination: own RD, next-hop-self, the interconnect domain stamped on the way out — into plain iBGP toward SP31.',
+          fields: [
+            f('changed', 'RD',       '10.255.31.1:10 — leaf RDs never reach site B'),
+            f('steady',  'RT',       '1:10'),
+            f('changed', 'Next hop', '10.255.31.101 — a next hop inside site B'),
+            f('steady',  'AS path',  '65099 65100 65000 65101 — iBGP adds nothing'),
+            f('changed', 'D-path',   '65099:1 65100:1 — the route\'s domain history, newest first')
+          ],
+          risk: 'gateways that disagree on the interconnect\'s domain identifier leave the loop check nothing coherent to match — harmless with one gateway pair, a loop generator the day a second pair is added.'
+        },
+        {
+          node: 'Leaf31', as: 'Lo0 .31.21 · VTEP 10.255.31.113', gw: false,
+          title: 'Hop 6 · SP31 reflects, Leaf31 installs',
+          action: 'Leaf31 imports on 1:10 and installs VPC1 behind the site B gateway — a next hop inside its own site, reachable through its own underlay. Walk 5\'s leg 1 spends this entry.',
+          fields: [
+            f('steady',  'Next hop', '10.255.31.101 — installed: the tunnel targets the local gateway'),
+            f(null,      'RD',       '10.255.31.1:10 — one route; site A\'s leaf count is invisible here'),
+            f('steady',  'RT match', '1:10 — identical in both sites by design'),
+            f(null,      'AS path',  '65099 65100 65000 65101 — readable straight off show bgp evpn'),
+            f(null,      'D-path',   '65099:1 65100:1 — and show ip route 10.255.255.112 comes back empty')
+          ],
+          risk: 'VNI 1010 unconfigured or an import filter on this one leaf — blast radius: one device.'
+        }
+      ]
+    },
+    T5: {
+      badge: 'Type-5 · VLAN 30, never stretched',
+      summary: 'Three leaves originate the prefix; the gateway collapses them to one route and swaps the router MAC at every re-origination — the RMAC must always name the router at the far end of the current tunnel leg.',
+      steps: [
+        {
+          node: 'Leaf1+2 & Leaf3', as: 'Lo0 .21/.22/.23 · VTEPs .112 / .113', gw: false,
+          title: 'Hop 1 · three leaves originate the prefix',
+          action: 'All three site A leaves carry VLAN 30, so 192.168.30.0/24 enters EVPN three times — the 6.2 captures show all three copies. Each carries its originator\'s system MAC in the Router\'s MAC extended community.',
+          fields: [
+            f(null,     'RD',         '10.255.255.21/22/23:50000 — three copies'),
+            f(null,     'RT',         '1:50000 — the L3 VNI\'s static RT'),
+            f(null,     'Next hop',   '.112 (MLAG pair) and .113 (Leaf3)'),
+            f(null,     'AS path',    'empty'),
+            f(null,     'D-path',     '(none)'),
+            f(null,     'Router MAC', 'each originator\'s system MAC — the future inner DMAC')
+          ],
+          risk: 'VLAN 30\'s SVI missing from VRF TENANT_A on a leaf — that copy never enters EVPN.'
+        },
+        {
+          node: 'Spine1 / Spine2', as: 'AS 65000 · Lo0 .11 / .12', gw: false,
+          title: 'Hop 2 · spines pass all three copies',
+          action: 'Same transit treatment as the Type-2 — extended communities, the Router\'s MAC included, ride through unmodified.',
+          fields: [
+            f('steady',  'RD',         'three copies, untouched'),
+            f('steady',  'RT',         '1:50000'),
+            f('steady',  'Next hop',   '.112 and .113 — next-hop-unchanged'),
+            f('changed', 'AS path',    '65000 65101 (pair) · 65000 65102 (Leaf3)'),
+            f('steady',  'Router MAC', 'unchanged — communities ride through transit')
+          ],
+          risk: 'same as the Type-2: the spine next-hop-unchanged must survive the redesign.'
+        },
+        {
+          node: 'Border1', as: 'AS 65100 · Lo0 10.255.255.1 · GW VTEP .101', gw: true,
+          title: 'Hop 3 · Border1: collapse, re-originate, swap the RMAC',
+          action: 'Border1 imports all three copies into VRF TENANT_A and re-originates the prefix once, under its own RD — substituting its own system MAC in the Router\'s MAC community: the next routing lookup now happens at the gateway, not three legs away at a leaf.',
+          fields: [
+            f('changed', 'RD',         '10.255.255.1:50000 — three copies collapse to one'),
+            f('steady',  'RT',         '1:50000'),
+            f('changed', 'Next hop',   '10.255.255.101 — next-hop-self'),
+            f('changed', 'AS path',    '65100 65000 65101'),
+            f('changed', 'D-path',     '65100:1 — stamped on exit'),
+            f('changed', 'Router MAC', 'Border1\'s — the next router on the tunnel')
+          ],
+          risk: 'some EOS trains re-originate Type-5s only with next-hop-self received-evpn-routes route-type ip-prefix — relayed instead, leaf RMACs hide behind gateway next hops and routed frames die at the gateway.'
+        },
+        {
+          node: 'DCI', as: 'AS 65099 · Lo0 10.255.99.1 · no VTEP', gw: false,
+          title: 'Hop 4 · the route server relays',
+          action: 'Identical to the Type-2 relay: prepend the AS, preserve everything else — next hop, D-path, and the Router\'s MAC included.',
+          fields: [
+            f('steady',  'RD',         '10.255.255.1:50000'),
+            f('steady',  'Next hop',   '10.255.255.101 — next-hop-unchanged'),
+            f('changed', 'AS path',    '65099 65100 65000 65101'),
+            f('steady',  'D-path',     '65100:1'),
+            f('steady',  'Router MAC', 'Border1\'s — relayed untouched')
+          ],
+          risk: 'same knob, same blackhole: without next-hop-unchanged the tunnel aims at a router with no VTEP.'
+        },
+        {
+          node: 'Border2', as: 'AS 65030 · Lo0 10.255.31.1 · GW VTEP .31.101', gw: true,
+          title: 'Hop 5 · Border2: loop check, re-originate, swap again',
+          action: 'Loop check passes on [65100:1]; Border2 re-originates into site B with its own RD, next-hop-self — and its own system MAC as the Router\'s MAC.',
+          fields: [
+            f('changed', 'RD',         '10.255.31.1:50000'),
+            f('steady',  'RT',         '1:50000'),
+            f('changed', 'Next hop',   '10.255.31.101'),
+            f('steady',  'AS path',    '65099 65100 65000 65101 — iBGP adds nothing'),
+            f('changed', 'D-path',     '65099:1 65100:1'),
+            f('changed', 'Router MAC', 'Border2\'s — what Leaf31 will write as inner DMAC')
+          ],
+          risk: 'VRF TENANT_A + VNI 50000 must exist on both gateways — absent, the prefix stops at the boundary. That is the 13.6 policy boundary working as designed, or an outage, depending on what you intended.'
+        },
+        {
+          node: 'Leaf31', as: 'Lo0 .31.21 · VTEP .31.113 · VRF TENANT_A', gw: false,
+          title: 'Hop 6 · Leaf31 installs in the VRF',
+          action: 'Leaf31 installs 192.168.30.0/24 in VRF TENANT_A: via VTEP 10.255.31.101, inner DMAC Border2\'s RMAC. Walk 5\'s case C spends exactly this route.',
+          fields: [
+            f('steady',  'Next hop',   '10.255.31.101 — one route, one local gateway'),
+            f(null,      'RD',         '10.255.31.1:50000 — three site A originators, invisible'),
+            f('steady',  'RT match',   '1:50000'),
+            f(null,      'D-path',     '65099:1 65100:1'),
+            f(null,      'Router MAC', 'Border2\'s — verify with show bgp evpn route-type ip-prefix ipv4 detail')
+          ],
+          risk: 'the route present but the RMAC still a leaf\'s = a relayed, not re-originated, Type-5 — the hop-3 knob is missing on a gateway.'
+        }
+      ]
+    }
+  };
+
+  const flow = document.getElementById('flow');
+  const routeButtons = Array.from(root.querySelectorAll('[data-route]'));
+  let activeRoute = 'T2';
+  let activeStep = 0;
+
+  const byId = id => document.getElementById(id);
+
+  const buildFlow = () => {
+    flow.replaceChildren();
+    routes[activeRoute].steps.forEach((step, i) => {
+      if (i > 0) {
+        const a = document.createElement('div');
+        a.className = 'arrow';
+        a.setAttribute('aria-hidden', 'true');
+        a.textContent = '→';
+        flow.append(a);
+      }
+      const n = document.createElement('button');
+      n.type = 'button';
+      n.className = 'node';
+      n.dataset.step = String(i);
+      n.dataset.gw = String(!!step.gw);
+      const t = document.createElement('strong');
+      t.textContent = step.node;
+      const s = document.createElement('span');
+      s.className = 'as';
+      s.textContent = step.as;
+      n.append(t, s);
+      n.addEventListener('click', () => { activeStep = i; render(); });
+      flow.append(n);
+    });
+  };
+
+  const render = () => {
+    const route = routes[activeRoute];
+    const step = route.steps[activeStep];
+
+    routeButtons.forEach(b =>
+      b.setAttribute('aria-pressed', String(b.dataset.route === activeRoute)));
+
+    Array.from(flow.querySelectorAll('.node')).forEach((n, i) => {
+      n.dataset.active = String(i === activeStep);
+      n.dataset.done = String(i < activeStep);
+    });
+
+    byId('mode').textContent = route.badge;
+    byId('summary-text').textContent = route.summary;
+    byId('hop-title').textContent = step.title;
+    byId('hop-action').textContent = step.action;
+
+    const fields = byId('fields');
+    fields.replaceChildren();
+    step.fields.forEach(field => {
+      const row = document.createElement('div');
+      row.className = 'field';
+      if (field.state) row.dataset.state = field.state;
+      const label = document.createElement('span');
+      label.textContent = field.label;
+      const value = document.createElement('code');
+      value.textContent = field.value;
+      row.append(label, value);
+      fields.append(row);
+    });
+
+    byId('hop-risk').innerHTML = '';
+    const strong = document.createElement('strong');
+    strong.textContent = 'If it breaks here: ';
+    byId('hop-risk').append(strong, document.createTextNode(step.risk));
+
+    byId('prev').disabled = activeStep === 0;
+    byId('next').disabled = activeStep === route.steps.length - 1;
+    byId('prev').style.opacity = activeStep === 0 ? '.45' : '1';
+    byId('next').style.opacity = activeStep === route.steps.length - 1 ? '.45' : '1';
+  };
+
+  routeButtons.forEach(b => b.addEventListener('click', () => {
+    activeRoute = b.dataset.route;
+    if (activeStep >= routes[activeRoute].steps.length) activeStep = 0;
+    buildFlow();
+    render();
+  }));
+  byId('prev').addEventListener('click', () => { if (activeStep > 0) { activeStep--; render(); } });
+  byId('next').addEventListener('click', () => { if (activeStep < routes[activeRoute].steps.length - 1) { activeStep++; render(); } });
+
+  buildFlow();
+  render();
+})();
+</script>
+<script>
+(() => {
+  const report = () => parent.postMessage(
+    { type: "embed-height", height: Math.ceil(document.body.getBoundingClientRect().height) }, "*");
+  new ResizeObserver(report).observe(document.body);
+  window.addEventListener("load", report);
+})();
+</script>
+</body>
+</html>

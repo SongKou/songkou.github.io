@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="660" viewBox="0 0 1080 660" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="ar3" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1F3B5C"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="660" fill="#ffffff"/>
+  <text x="40" y="36" font-size="20" font-weight="bold" fill="#2C2C2A">Pipeline parallelism &#8212; 4 stages, 4 micro-batches, and the bubble</text>
+
+  <!-- stage mapping -->
+  <g stroke-width="2">
+    <rect x="60" y="70" width="200" height="54" fill="#E3EDFA" stroke="#3A7BD5"/>
+    <rect x="310" y="70" width="200" height="54" fill="#E5F3E2" stroke="#57A64A"/>
+    <rect x="560" y="70" width="200" height="54" fill="#FBEADB" stroke="#E67E22"/>
+    <rect x="810" y="70" width="200" height="54" fill="#FAE3E9" stroke="#E05C7A"/>
+  </g>
+  <g font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">
+    <text x="160" y="92">GPU0 &#8212; stage 0</text>
+    <text x="410" y="92">GPU1 &#8212; stage 1</text>
+    <text x="660" y="92">GPU2 &#8212; stage 2</text>
+    <text x="910" y="92">GPU3 &#8212; stage 3</text>
+  </g>
+  <g font-size="12" fill="#6B6B66" text-anchor="middle">
+    <text x="160" y="112">layers 1&#8211;20</text>
+    <text x="410" y="112">layers 21&#8211;40</text>
+    <text x="660" y="112">layers 41&#8211;60</text>
+    <text x="910" y="112">layers 61&#8211;80</text>
+  </g>
+  <g stroke="#1F3B5C" stroke-width="2">
+    <line x1="260" y1="97" x2="304" y2="97" marker-end="url(#ar3)"/>
+    <line x1="510" y1="97" x2="554" y2="97" marker-end="url(#ar3)"/>
+    <line x1="760" y1="97" x2="804" y2="97" marker-end="url(#ar3)"/>
+  </g>
+
+  <!-- schedule grid -->
+  <text x="40" y="176" font-size="15" font-weight="bold" fill="#2C2C2A">What each GPU is doing over time (forward passes of micro-batches 1&#8211;4):</text>
+
+  <!-- time axis -->
+  <g font-size="12" fill="#6B6B66" text-anchor="middle">
+    <text x="235" y="204">t1</text>
+    <text x="345" y="204">t2</text>
+    <text x="455" y="204">t3</text>
+    <text x="565" y="204">t4</text>
+    <text x="675" y="204">t5</text>
+    <text x="785" y="204">t6</text>
+    <text x="895" y="204">t7</text>
+  </g>
+  <line x1="180" y1="212" x2="960" y2="212" stroke="#4A4A46" stroke-width="1"/>
+  <line x1="960" y1="212" x2="1000" y2="212" stroke="#4A4A46" stroke-width="1" marker-end="url(#ar3)"/>
+  <text x="1006" y="216" font-size="12" fill="#6B6B66">time</text>
+
+  <!-- row labels -->
+  <g font-size="13" font-weight="bold">
+    <text x="120" y="252" fill="#3A7BD5">GPU0</text>
+    <text x="120" y="306" fill="#57A64A">GPU1</text>
+    <text x="120" y="360" fill="#E67E22">GPU2</text>
+    <text x="120" y="414" fill="#E05C7A">GPU3</text>
+  </g>
+
+  <!-- cells: work -->
+  <g stroke="#4A4A46" stroke-width="1.2">
+    <!-- GPU0: t1-t4 -->
+    <rect x="180" y="226" width="110" height="40" fill="#E3EDFA"/>
+    <rect x="290" y="226" width="110" height="40" fill="#E5F3E2"/>
+    <rect x="400" y="226" width="110" height="40" fill="#FBEADB"/>
+    <rect x="510" y="226" width="110" height="40" fill="#FAE3E9"/>
+    <!-- GPU1: t2-t5 -->
+    <rect x="290" y="280" width="110" height="40" fill="#E3EDFA"/>
+    <rect x="400" y="280" width="110" height="40" fill="#E5F3E2"/>
+    <rect x="510" y="280" width="110" height="40" fill="#FBEADB"/>
+    <rect x="620" y="280" width="110" height="40" fill="#FAE3E9"/>
+    <!-- GPU2: t3-t6 -->
+    <rect x="400" y="334" width="110" height="40" fill="#E3EDFA"/>
+    <rect x="510" y="334" width="110" height="40" fill="#E5F3E2"/>
+    <rect x="620" y="334" width="110" height="40" fill="#FBEADB"/>
+    <rect x="730" y="334" width="110" height="40" fill="#FAE3E9"/>
+    <!-- GPU3: t4-t7 -->
+    <rect x="510" y="388" width="110" height="40" fill="#E3EDFA"/>
+    <rect x="620" y="388" width="110" height="40" fill="#E5F3E2"/>
+    <rect x="730" y="388" width="110" height="40" fill="#FBEADB"/>
+    <rect x="840" y="388" width="110" height="40" fill="#FAE3E9"/>
+  </g>
+  <!-- cells: idle -->
+  <g stroke="#C9C9C3" stroke-width="1" stroke-dasharray="4,3">
+    <rect x="620" y="226" width="110" height="40" fill="#F2F2EE"/>
+    <rect x="730" y="226" width="110" height="40" fill="#F2F2EE"/>
+    <rect x="840" y="226" width="110" height="40" fill="#F2F2EE"/>
+    <rect x="180" y="280" width="110" height="40" fill="#F2F2EE"/>
+    <rect x="730" y="280" width="110" height="40" fill="#F2F2EE"/>
+    <rect x="840" y="280" width="110" height="40" fill="#F2F2EE"/>
+    <rect x="180" y="334" width="110" height="40" fill="#F2F2EE"/>
+    <rect x="290" y="334" width="110" height="40" fill="#F2F2EE"/>
+    <rect x="840" y="334" width="110" height="40" fill="#F2F2EE"/>
+    <rect x="180" y="388" width="110" height="40" fill="#F2F2EE"/>
+    <rect x="290" y="388" width="110" height="40" fill="#F2F2EE"/>
+    <rect x="400" y="388" width="110" height="40" fill="#F2F2EE"/>
+  </g>
+
+  <!-- cell labels -->
+  <g font-size="13" font-weight="bold" fill="#2C2C2A" text-anchor="middle">
+    <text x="235" y="251">mb1</text><text x="345" y="251">mb2</text><text x="455" y="251">mb3</text><text x="565" y="251">mb4</text>
+    <text x="345" y="305">mb1</text><text x="455" y="305">mb2</text><text x="565" y="305">mb3</text><text x="675" y="305">mb4</text>
+    <text x="455" y="359">mb1</text><text x="565" y="359">mb2</text><text x="675" y="359">mb3</text><text x="785" y="359">mb4</text>
+    <text x="565" y="413">mb1</text><text x="675" y="413">mb2</text><text x="785" y="413">mb3</text><text x="895" y="413">mb4</text>
+  </g>
+  <g font-size="12" fill="#A8A8A2" text-anchor="middle">
+    <text x="675" y="251">idle</text><text x="785" y="251">idle</text><text x="895" y="251">idle</text>
+    <text x="235" y="305">idle</text><text x="785" y="305">idle</text><text x="895" y="305">idle</text>
+    <text x="235" y="359">idle</text><text x="345" y="359">idle</text><text x="895" y="359">idle</text>
+    <text x="235" y="413">idle</text><text x="345" y="413">idle</text><text x="455" y="413">idle</text>
+  </g>
+
+  <!-- bubble callouts -->
+  <text x="330" y="466" font-size="13" fill="#C0392B" font-weight="bold">fill bubble &#8598;</text>
+  <text x="700" y="466" font-size="13" fill="#C0392B" font-weight="bold">&#8599; drain bubble</text>
+
+  <!-- notes -->
+  <line x1="40" y1="492" x2="1040" y2="492" stroke="#D8D8D2" stroke-width="1"/>
+  <g font-size="13.5" fill="#2C2C2A">
+    <text x="60" y="522">&#8226; With <tspan font-style="italic">p</tspan> stages and <tspan font-style="italic">m</tspan> micro-batches, the idle fraction is <tspan font-weight="bold">(p &#8722; 1) / (m + p &#8722; 1)</tspan> &#8212; here 3/7 &#8776; 43% of GPU-time wasted.</text>
+    <text x="60" y="548">&#8226; More micro-batches shrink the bubble: m = 16 with p = 4 &#8594; 3/19 &#8776; 16%. That is why PP always comes with micro-batching.</text>
+    <text x="60" y="574">&#8226; The stage-to-stage traffic is just one activation tensor per micro-batch (point-to-point send/recv) &#8212;</text>
+    <text x="72" y="598">tiny compared to TP's per-layer AllReduce, which is why PP is the natural choice <tspan font-weight="bold">across nodes or over PCIe</tspan>.</text>
+  </g>
+</svg>

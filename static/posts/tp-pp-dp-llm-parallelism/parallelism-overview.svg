@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="640" viewBox="0 0 1080 640" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="ar" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1F3B5C"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="640" fill="#ffffff"/>
+  <text x="40" y="36" font-size="20" font-weight="bold" fill="#2C2C2A">Three ways to use multiple GPUs &#8212; split the math, split the layers, or copy the model</text>
+
+  <!-- ===================== Panel A: Tensor Parallelism ===================== -->
+  <text x="60" y="86" font-size="17" font-weight="bold" fill="#1F3B5C">TP &#8212; Tensor Parallelism</text>
+  <text x="60" y="106" font-size="13" fill="#6B6B66">split every layer's matrices</text>
+
+  <g stroke="#4A4A46" stroke-width="1.5">
+    <!-- 5 layer bars, each split into two halves -->
+    <g>
+      <rect x="60" y="130" width="130" height="42" fill="#E3EDFA"/>
+      <rect x="190" y="130" width="130" height="42" fill="#E5F3E2"/>
+      <rect x="60" y="182" width="130" height="42" fill="#E3EDFA"/>
+      <rect x="190" y="182" width="130" height="42" fill="#E5F3E2"/>
+      <rect x="60" y="234" width="130" height="42" fill="#E3EDFA"/>
+      <rect x="190" y="234" width="130" height="42" fill="#E5F3E2"/>
+      <rect x="60" y="286" width="130" height="42" fill="#E3EDFA"/>
+      <rect x="190" y="286" width="130" height="42" fill="#E5F3E2"/>
+      <rect x="60" y="338" width="130" height="42" fill="#E3EDFA"/>
+      <rect x="190" y="338" width="130" height="42" fill="#E5F3E2"/>
+    </g>
+  </g>
+  <g font-size="12" fill="#2C2C2A" text-anchor="middle">
+    <text x="125" y="155">layer 1 &#183; half</text>
+    <text x="255" y="155">layer 1 &#183; half</text>
+    <text x="125" y="207">layer 2 &#183; half</text>
+    <text x="255" y="207">layer 2 &#183; half</text>
+    <text x="125" y="259">layer 3 &#183; half</text>
+    <text x="255" y="259">layer 3 &#183; half</text>
+    <text x="125" y="311">layer 4 &#183; half</text>
+    <text x="255" y="311">layer 4 &#183; half</text>
+    <text x="125" y="363">layer 5 &#183; half</text>
+    <text x="255" y="363">layer 5 &#183; half</text>
+  </g>
+  <line x1="190" y1="126" x2="190" y2="384" stroke="#E05C7A" stroke-width="2" stroke-dasharray="5,4"/>
+  <g font-size="13" font-weight="bold" text-anchor="middle">
+    <text x="125" y="404" fill="#3A7BD5">GPU0</text>
+    <text x="255" y="404" fill="#57A64A">GPU1</text>
+  </g>
+  <text x="60" y="436" font-size="13" fill="#2C2C2A">Every GPU holds a slice of</text>
+  <text x="60" y="454" font-size="13" fill="#2C2C2A">every layer. All GPUs work on</text>
+  <text x="60" y="472" font-size="13" fill="#2C2C2A">the same token at the same time.</text>
+  <text x="60" y="498" font-size="13" fill="#E05C7A" font-weight="bold">Cost: AllReduce every layer &#8212;</text>
+  <text x="60" y="516" font-size="13" fill="#E05C7A" font-weight="bold">needs NVLink-class links.</text>
+
+  <!-- ===================== Panel B: Pipeline Parallelism ===================== -->
+  <text x="410" y="86" font-size="17" font-weight="bold" fill="#1F3B5C">PP &#8212; Pipeline Parallelism</text>
+  <text x="410" y="106" font-size="13" fill="#6B6B66">split the model by layers</text>
+
+  <!-- GPU0 stage -->
+  <rect x="410" y="130" width="260" height="118" fill="#E3EDFA" stroke="#3A7BD5" stroke-width="2"/>
+  <g stroke="#4A4A46" stroke-width="1.2" fill="#ffffff">
+    <rect x="430" y="146" width="220" height="26"/>
+    <rect x="430" y="180" width="220" height="26"/>
+  </g>
+  <g font-size="12" fill="#2C2C2A" text-anchor="middle">
+    <text x="540" y="163">layers 1 &#8230; 8</text>
+    <text x="540" y="197">layers 9 &#8230; 16</text>
+  </g>
+  <text x="540" y="234" font-size="13" font-weight="bold" fill="#3A7BD5" text-anchor="middle">GPU0 &#8212; stage 0</text>
+
+  <line x1="540" y1="248" x2="540" y2="284" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="552" y="272" font-size="12" fill="#6B6B66">activations (send/recv)</text>
+
+  <!-- GPU1 stage -->
+  <rect x="410" y="288" width="260" height="118" fill="#E5F3E2" stroke="#57A64A" stroke-width="2"/>
+  <g stroke="#4A4A46" stroke-width="1.2" fill="#ffffff">
+    <rect x="430" y="304" width="220" height="26"/>
+    <rect x="430" y="338" width="220" height="26"/>
+  </g>
+  <g font-size="12" fill="#2C2C2A" text-anchor="middle">
+    <text x="540" y="321">layers 17 &#8230; 24</text>
+    <text x="540" y="355">layers 25 &#8230; 32</text>
+  </g>
+  <text x="540" y="392" font-size="13" font-weight="bold" fill="#57A64A" text-anchor="middle">GPU1 &#8212; stage 1</text>
+
+  <text x="410" y="436" font-size="13" fill="#2C2C2A">Each GPU owns a contiguous</text>
+  <text x="410" y="454" font-size="13" fill="#2C2C2A">block of layers; tokens flow</text>
+  <text x="410" y="472" font-size="13" fill="#2C2C2A">through like an assembly line.</text>
+  <text x="410" y="498" font-size="13" fill="#E05C7A" font-weight="bold">Cost: pipeline bubbles &#8212;</text>
+  <text x="410" y="516" font-size="13" fill="#E05C7A" font-weight="bold">stages wait on each other.</text>
+
+  <!-- ===================== Panel C: Data Parallelism ===================== -->
+  <text x="760" y="86" font-size="17" font-weight="bold" fill="#1F3B5C">DP &#8212; Data Parallelism</text>
+  <text x="760" y="106" font-size="13" fill="#6B6B66">copy the whole model</text>
+
+  <!-- requests fan-out -->
+  <rect x="820" y="122" width="140" height="30" rx="6" fill="#FBEADB" stroke="#E67E22" stroke-width="1.5"/>
+  <text x="890" y="142" font-size="12" fill="#2C2C2A" text-anchor="middle">incoming requests</text>
+  <line x1="860" y1="152" x2="828" y2="186" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar)"/>
+  <line x1="920" y1="152" x2="952" y2="186" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- replica 1 -->
+  <rect x="760" y="190" width="135" height="216" fill="#E3EDFA" stroke="#3A7BD5" stroke-width="2"/>
+  <g stroke="#4A4A46" stroke-width="1.2" fill="#ffffff">
+    <rect x="775" y="206" width="105" height="24"/>
+    <rect x="775" y="238" width="105" height="24"/>
+    <rect x="775" y="270" width="105" height="24"/>
+    <rect x="775" y="302" width="105" height="24"/>
+    <rect x="775" y="334" width="105" height="24"/>
+  </g>
+  <text x="827" y="392" font-size="13" font-weight="bold" fill="#3A7BD5" text-anchor="middle">GPU0 &#8212; full copy</text>
+
+  <!-- replica 2 -->
+  <rect x="915" y="190" width="135" height="216" fill="#E5F3E2" stroke="#57A64A" stroke-width="2"/>
+  <g stroke="#4A4A46" stroke-width="1.2" fill="#ffffff">
+    <rect x="930" y="206" width="105" height="24"/>
+    <rect x="930" y="238" width="105" height="24"/>
+    <rect x="930" y="270" width="105" height="24"/>
+    <rect x="930" y="302" width="105" height="24"/>
+    <rect x="930" y="334" width="105" height="24"/>
+  </g>
+  <text x="982" y="392" font-size="13" font-weight="bold" fill="#57A64A" text-anchor="middle">GPU1 &#8212; full copy</text>
+
+  <g font-size="12" fill="#2C2C2A" text-anchor="middle">
+    <text x="827" y="222">all 32 layers</text>
+    <text x="982" y="222">all 32 layers</text>
+  </g>
+
+  <text x="760" y="436" font-size="13" fill="#2C2C2A">Each GPU serves different</text>
+  <text x="760" y="454" font-size="13" fill="#2C2C2A">requests independently &#8212; like</text>
+  <text x="760" y="472" font-size="13" fill="#2C2C2A">running N service instances.</text>
+  <text x="760" y="498" font-size="13" fill="#E05C7A" font-weight="bold">Cost: N full copies of the</text>
+  <text x="760" y="516" font-size="13" fill="#E05C7A" font-weight="bold">weights &#8212; no memory savings.</text>
+
+  <!-- bottom summary -->
+  <line x1="40" y1="548" x2="1040" y2="548" stroke="#D8D8D2" stroke-width="1"/>
+  <g font-size="14" fill="#2C2C2A">
+    <text x="60" y="580"><tspan font-weight="bold" fill="#1F3B5C">TP / PP</tspan> solve &#8220;the model is too big for one GPU&#8221; &#8212; they split the model.</text>
+    <text x="60" y="606"><tspan font-weight="bold" fill="#1F3B5C">DP</tspan> solves &#8220;too many users for one GPU&#8221; &#8212; it clones the model.</text>
+  </g>
+</svg>

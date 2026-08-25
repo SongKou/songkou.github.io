@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="660" viewBox="0 0 1080 660" font-family="Arial, Helvetica, sans-serif">
+  <defs>
+    <marker id="ar2" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1F3B5C"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="660" fill="#ffffff"/>
+  <text x="40" y="36" font-size="20" font-weight="bold" fill="#2C2C2A">How TP splits one MLP block (Megatron-style) &#8212; and why it costs one AllReduce</text>
+  <text x="40" y="60" font-size="14" fill="#6B6B66">Y = Dropout( GeLU(X &#183; A) &#183; B ) &#8212; A is split by columns, B by rows; the two GPUs sync only once, at the end</text>
+
+  <!-- GPU lanes -->
+  <rect x="200" y="90" width="640" height="200" rx="8" fill="#F0F6FD" stroke="#3A7BD5" stroke-width="1.5"/>
+  <text x="216" y="114" font-size="14" font-weight="bold" fill="#3A7BD5">GPU0</text>
+  <rect x="200" y="310" width="640" height="200" rx="8" fill="#F1F9EF" stroke="#57A64A" stroke-width="1.5"/>
+  <text x="216" y="334" font-size="14" font-weight="bold" fill="#57A64A">GPU1</text>
+
+  <!-- Input X -->
+  <rect x="50" y="255" width="100" height="90" fill="#F4F4F0" stroke="#4A4A46" stroke-width="2"/>
+  <text x="100" y="294" font-size="16" font-weight="bold" fill="#2C2C2A" text-anchor="middle">X</text>
+  <text x="100" y="314" font-size="11" fill="#6B6B66" text-anchor="middle">full input,</text>
+  <text x="100" y="328" font-size="11" fill="#6B6B66" text-anchor="middle">on both GPUs</text>
+
+  <!-- X to both lanes -->
+  <line x1="150" y1="278" x2="248" y2="188" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar2)"/>
+  <line x1="150" y1="322" x2="248" y2="408" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar2)"/>
+
+  <!-- GPU0 lane: A1 -> GeLU -> B1 -> Y1 -->
+  <rect x="252" y="140" width="130" height="96" fill="#ffffff" stroke="#3A7BD5" stroke-width="2"/>
+  <line x1="317" y1="140" x2="317" y2="236" stroke="#3A7BD5" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="317" y="170" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">A&#8321;</text>
+  <text x="317" y="192" font-size="11" fill="#6B6B66" text-anchor="middle">left half of A</text>
+  <text x="317" y="206" font-size="11" fill="#6B6B66" text-anchor="middle">(column split)</text>
+
+  <line x1="382" y1="188" x2="420" y2="188" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar2)"/>
+  <rect x="424" y="164" width="76" height="48" rx="24" fill="#FBEADB" stroke="#E67E22" stroke-width="1.5"/>
+  <text x="462" y="193" font-size="13" fill="#2C2C2A" text-anchor="middle">GeLU</text>
+
+  <line x1="500" y1="188" x2="538" y2="188" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar2)"/>
+  <rect x="542" y="140" width="130" height="96" fill="#ffffff" stroke="#3A7BD5" stroke-width="2"/>
+  <line x1="542" y1="188" x2="672" y2="188" stroke="#3A7BD5" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="607" y="170" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">B&#8321;</text>
+  <text x="607" y="210" font-size="11" fill="#6B6B66" text-anchor="middle">top half of B</text>
+  <text x="607" y="224" font-size="11" fill="#6B6B66" text-anchor="middle">(row split)</text>
+
+  <line x1="672" y1="188" x2="710" y2="188" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar2)"/>
+  <rect x="714" y="158" width="100" height="60" fill="#ffffff" stroke="#3A7BD5" stroke-width="2"/>
+  <text x="764" y="184" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">Y&#8321;</text>
+  <text x="764" y="204" font-size="11" fill="#6B6B66" text-anchor="middle">partial sum</text>
+
+  <!-- GPU1 lane: A2 -> GeLU -> B2 -> Y2 -->
+  <rect x="252" y="360" width="130" height="96" fill="#ffffff" stroke="#57A64A" stroke-width="2"/>
+  <line x1="317" y1="360" x2="317" y2="456" stroke="#57A64A" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="317" y="390" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">A&#8322;</text>
+  <text x="317" y="412" font-size="11" fill="#6B6B66" text-anchor="middle">right half of A</text>
+  <text x="317" y="426" font-size="11" fill="#6B6B66" text-anchor="middle">(column split)</text>
+
+  <line x1="382" y1="408" x2="420" y2="408" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar2)"/>
+  <rect x="424" y="384" width="76" height="48" rx="24" fill="#FBEADB" stroke="#E67E22" stroke-width="1.5"/>
+  <text x="462" y="413" font-size="13" fill="#2C2C2A" text-anchor="middle">GeLU</text>
+
+  <line x1="500" y1="408" x2="538" y2="408" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar2)"/>
+  <rect x="542" y="360" width="130" height="96" fill="#ffffff" stroke="#57A64A" stroke-width="2"/>
+  <line x1="542" y1="408" x2="672" y2="408" stroke="#57A64A" stroke-width="1" stroke-dasharray="4,3"/>
+  <text x="607" y="390" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">B&#8322;</text>
+  <text x="607" y="430" font-size="11" fill="#6B6B66" text-anchor="middle">bottom half of B</text>
+  <text x="607" y="444" font-size="11" fill="#6B6B66" text-anchor="middle">(row split)</text>
+
+  <line x1="672" y1="408" x2="710" y2="408" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar2)"/>
+  <rect x="714" y="378" width="100" height="60" fill="#ffffff" stroke="#57A64A" stroke-width="2"/>
+  <text x="764" y="404" font-size="14" font-weight="bold" fill="#2C2C2A" text-anchor="middle">Y&#8322;</text>
+  <text x="764" y="424" font-size="11" fill="#6B6B66" text-anchor="middle">partial sum</text>
+
+  <!-- AllReduce -->
+  <line x1="814" y1="188" x2="880" y2="272" stroke="#E05C7A" stroke-width="2.5" marker-end="url(#ar2)"/>
+  <line x1="814" y1="408" x2="880" y2="328" stroke="#E05C7A" stroke-width="2.5" marker-end="url(#ar2)"/>
+  <rect x="874" y="272" width="130" height="60" rx="8" fill="#FAE3E9" stroke="#E05C7A" stroke-width="2.5"/>
+  <text x="939" y="298" font-size="14" font-weight="bold" fill="#C0392B" text-anchor="middle">AllReduce</text>
+  <text x="939" y="318" font-size="12" fill="#C0392B" text-anchor="middle">Y = Y&#8321; + Y&#8322;</text>
+
+  <!-- notes -->
+  <line x1="40" y1="540" x2="1040" y2="540" stroke="#D8D8D2" stroke-width="1"/>
+  <g font-size="13.5" fill="#2C2C2A">
+    <text x="60" y="570">&#8226; The column-split output feeds the row-split input directly &#8212; <tspan font-weight="bold">no sync in the middle</tspan> of the block.</text>
+    <text x="60" y="594">&#8226; Self-attention is split the same way (heads across GPUs) &#8594; <tspan font-weight="bold">2 AllReduces per transformer layer per forward pass</tspan>.</text>
+    <text x="60" y="618">&#8226; An 80-layer model syncing 160 times <tspan font-style="italic">per generated token</tspan> is why TP wants NVLink, not PCIe.</text>
+  </g>
+</svg>

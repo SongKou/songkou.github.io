@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1560" height="780" viewBox="0 0 1560 780" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="1560" height="780" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="40" y="42" font-size="22" font-weight="bold" fill="#2C2C2A">Multi-domain EVPN - three overlay domains, gateway borders, stitched tunnels</text>
+  <text x="40" y="66" font-size="13" fill="#5F5E5A">Borders become VTEPs and re-originate EVPN routes (next-hop-self, own RD, D-path)  |  one leaf-to-leaf tunnel becomes three stitched segments</text>
+
+  <!-- Zone separators (through the gateway boxes: a gateway is a member of both domains) -->
+  <line x1="635" y1="96" x2="635" y2="640" stroke="#D3D1C7" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <line x1="1135" y1="96" x2="1135" y2="640" stroke="#D3D1C7" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="330" y="112" font-size="13" font-weight="bold" fill="#0C447C" text-anchor="middle">SITE A - domain 65100:1 - eBGP everywhere</text>
+  <text x="885" y="112" font-size="13" font-weight="bold" fill="#B9770E" text-anchor="middle">DCI INTERCONNECT - domain 65099:1</text>
+  <text x="1360" y="112" font-size="13" font-weight="bold" fill="#085041" text-anchor="middle">SITE B - domain 65030:1 - iBGP + RR</text>
+
+  <!-- ================= UNDERLAY LINKS ================= -->
+  <g stroke="#378ADD" stroke-width="1.6" fill="none">
+    <line x1="220" y1="192" x2="310" y2="248"/>   <!-- LeafPair - Spines -->
+    <line x1="220" y1="330" x2="310" y2="278"/>   <!-- Leaf3 - Spines -->
+    <line x1="470" y1="262" x2="540" y2="262"/>   <!-- Spines - Border1 -->
+    <line x1="730" y1="262" x2="800" y2="262"/>   <!-- Border1 - DCI -->
+    <line x1="970" y1="262" x2="1040" y2="262"/>  <!-- DCI - Border2 -->
+    <line x1="1230" y1="248" x2="1310" y2="196"/> <!-- Border2 - SP31 -->
+    <line x1="1390" y1="226" x2="1390" y2="296"/> <!-- SP31 - Leaf31 -->
+  </g>
+
+  <!-- ================= NODES ================= -->
+  <!-- Site A leaves -->
+  <g>
+    <rect x="30" y="152" width="190" height="80" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="125" y="176" font-size="15" font-weight="bold" fill="#085041" text-anchor="middle">Leaf1 + Leaf2</text>
+    <text x="125" y="195" font-size="11" fill="#0F6E56" text-anchor="middle">MLAG &#183; shared VTEP .112</text>
+    <text x="125" y="213" font-size="11" fill="#0F6E56" text-anchor="middle">AS 65101</text>
+  </g>
+  <g>
+    <rect x="30" y="292" width="190" height="80" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="125" y="316" font-size="15" font-weight="bold" fill="#085041" text-anchor="middle">Leaf3</text>
+    <text x="125" y="335" font-size="11" fill="#0F6E56" text-anchor="middle">VTEP .113</text>
+    <text x="125" y="353" font-size="11" fill="#0F6E56" text-anchor="middle">AS 65102</text>
+  </g>
+  <!-- Spines -->
+  <g>
+    <rect x="310" y="224" width="160" height="76" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.2"/>
+    <text x="390" y="248" font-size="15" font-weight="bold" fill="#0C447C" text-anchor="middle">Spine1 / Spine2</text>
+    <text x="390" y="267" font-size="11" fill="#185FA5" text-anchor="middle">AS 65000 &#183; IP transit</text>
+    <text x="390" y="285" font-size="11" fill="#185FA5" text-anchor="middle">no VXLAN state</text>
+  </g>
+  <!-- Border1 (gateway) -->
+  <g>
+    <rect x="540" y="218" width="190" height="88" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.6"/>
+    <text x="635" y="242" font-size="15" font-weight="bold" fill="#3B3486" text-anchor="middle">Border1</text>
+    <text x="635" y="261" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">EVPN gateway (new role)</text>
+    <text x="635" y="279" font-size="11" fill="#534AB7" text-anchor="middle">GW VTEP 10.255.255.101</text>
+    <text x="635" y="297" font-size="11" fill="#534AB7" text-anchor="middle">AS 65100 &#183; domain 65100:1</text>
+  </g>
+  <!-- DCI -->
+  <g>
+    <rect x="800" y="218" width="170" height="88" rx="8" fill="#FEF5E7" stroke="#B9770E" stroke-width="1.2"/>
+    <text x="885" y="244" font-size="15" font-weight="bold" fill="#8A5A08" text-anchor="middle">DCI</text>
+    <text x="885" y="263" font-size="11" fill="#B9770E" text-anchor="middle">route server &#183; no VXLAN</text>
+    <text x="885" y="281" font-size="11" fill="#B9770E" text-anchor="middle">next-hop-unchanged kept</text>
+    <text x="885" y="299" font-size="11" fill="#B9770E" text-anchor="middle">AS 65099</text>
+  </g>
+  <!-- Border2 (gateway) -->
+  <g>
+    <rect x="1040" y="218" width="190" height="88" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="1.6"/>
+    <text x="1135" y="242" font-size="15" font-weight="bold" fill="#3B3486" text-anchor="middle">Border2</text>
+    <text x="1135" y="261" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">EVPN gateway (new role)</text>
+    <text x="1135" y="279" font-size="11" fill="#534AB7" text-anchor="middle">GW VTEP 10.255.31.101</text>
+    <text x="1135" y="297" font-size="11" fill="#534AB7" text-anchor="middle">AS 65030 &#183; domain 65030:1</text>
+  </g>
+  <!-- SP31 -->
+  <g>
+    <rect x="1310" y="152" width="160" height="74" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="1.2"/>
+    <text x="1390" y="176" font-size="15" font-weight="bold" fill="#0C447C" text-anchor="middle">SP31</text>
+    <text x="1390" y="195" font-size="11" fill="#185FA5" text-anchor="middle">route reflector</text>
+    <text x="1390" y="213" font-size="11" fill="#185FA5" text-anchor="middle">AS 65030</text>
+  </g>
+  <!-- Leaf31 -->
+  <g>
+    <rect x="1310" y="296" width="160" height="80" rx="8" fill="#E1F5EE" stroke="#0F6E56" stroke-width="1.2"/>
+    <text x="1390" y="320" font-size="15" font-weight="bold" fill="#085041" text-anchor="middle">Leaf31</text>
+    <text x="1390" y="339" font-size="11" fill="#0F6E56" text-anchor="middle">VTEP 10.255.31.113</text>
+    <text x="1390" y="357" font-size="11" fill="#0F6E56" text-anchor="middle">hosts R_VPC1 / R_VPC2</text>
+  </g>
+
+  <!-- Drop lines from VTEP owners to the tunnel band -->
+  <g stroke="#B7B5AC" stroke-width="1" stroke-dasharray="2 4">
+    <line x1="125" y1="372" x2="125" y2="482"/>
+    <line x1="635" y1="306" x2="635" y2="482"/>
+    <line x1="1135" y1="306" x2="1135" y2="482"/>
+    <line x1="1390" y1="376" x2="1390" y2="482"/>
+  </g>
+
+  <!-- ================= TUNNEL BAND ================= -->
+  <text x="40" y="452" font-size="13" font-weight="bold" fill="#2C2C2A">Data plane after 6.4 - three stitched VXLAN segments (VNI 1010, R_VPC1 &#8594; VPC1 direction shown right to left)</text>
+
+  <!-- Segment 1: site A -->
+  <line x1="125" y1="490" x2="627" y2="490" stroke="#0F6E56" stroke-width="5" stroke-linecap="round"/>
+  <text x="376" y="479" font-size="11.5" fill="#0F6E56" text-anchor="middle">segment 3:  10.255.255.101 &#8596; .112 / .113</text>
+  <!-- Segment 2: DCI -->
+  <line x1="643" y1="490" x2="1127" y2="490" stroke="#B9770E" stroke-width="5" stroke-linecap="round"/>
+  <text x="885" y="479" font-size="11.5" fill="#B9770E" text-anchor="middle">segment 2:  10.255.31.101 &#8596; 10.255.255.101</text>
+  <!-- Segment 3: site B -->
+  <line x1="1143" y1="490" x2="1390" y2="490" stroke="#185FA5" stroke-width="5" stroke-linecap="round"/>
+  <text x="1266" y="479" font-size="11.5" fill="#185FA5" text-anchor="middle">segment 1:  10.255.31.113 &#8596; 10.255.31.101</text>
+
+  <!-- Tunnel endpoints -->
+  <g fill="#ffffff" stroke-width="1.6">
+    <circle cx="125" cy="490" r="5" stroke="#0F6E56"/>
+    <circle cx="1390" cy="490" r="5" stroke="#185FA5"/>
+  </g>
+  <!-- Stitch points -->
+  <g fill="#FDEDEC" stroke="#B03A2E" stroke-width="1.6">
+    <path d="M 635 480 L 645 490 L 635 500 L 625 490 Z"/>
+    <path d="M 1135 480 L 1145 490 L 1135 500 L 1125 490 Z"/>
+  </g>
+  <text x="635" y="518" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">stitch point - Border1</text>
+  <text x="635" y="533" font-size="10.5" fill="#993C1D" text-anchor="middle">decap &#8594; re-encap &#183; D-path loop check</text>
+  <text x="1135" y="518" font-size="11" font-weight="bold" fill="#B03A2E" text-anchor="middle">stitch point - Border2</text>
+  <text x="1135" y="533" font-size="10.5" fill="#993C1D" text-anchor="middle">decap &#8594; re-encap &#183; D-path loop check</text>
+
+  <!-- Before: single end-to-end tunnel -->
+  <line x1="125" y1="580" x2="1390" y2="580" stroke="#B7B5AC" stroke-width="3" stroke-dasharray="8 6" stroke-linecap="round"/>
+  <g fill="#ffffff" stroke="#B7B5AC" stroke-width="1.4">
+    <circle cx="125" cy="580" r="5"/>
+    <circle cx="1390" cy="580" r="5"/>
+  </g>
+  <text x="757" y="569" font-size="11.5" fill="#888780" text-anchor="middle">before (6.2 design): one end-to-end tunnel 10.255.31.113 &#8596; 10.255.255.112 - leaf VTEP /32s routed across the DCI, borders are control-plane transit only</text>
+
+  <!-- ================= REFERENCE BAND ================= -->
+  <rect x="40" y="628" width="1480" height="124" rx="10" fill="#F8F7F3" stroke="#D3D1C7" stroke-width="1"/>
+  <text x="60" y="652" font-size="13" font-weight="bold" fill="#2C2C2A">Control plane at each gateway: re-originate, don't relay</text>
+  <g font-size="11.5" fill="#444441">
+    <text x="60" y="674">Type-2 / Type-3: re-originated at each boundary with a new RD (gateway's own), next-hop-self (gateway VTEP), source domain prepended to D-path &#183; IMET per domain</text>
+    <text x="60" y="694">Type-5 (VRF TENANT_A &#183; VNI 50000): same rewrite plus a new Router's-MAC ext. community - each gateway substitutes its own system MAC (VLAN 30 stays routed-only)</text>
+    <text x="60" y="714">Leaf31 installs VPC1 behind 10.255.31.101, and 192.168.30.0/24 via 10.255.31.101 + Border2's RMAC &#183; leaf RDs, next hops, and the MLAG duplicate stop at the boundary</text>
+    <text x="60" y="734">Only /32s crossing the DCI: 10.255.255.101, 10.255.255.1, 10.255.31.101, 10.255.31.1, 10.255.99.1 &#183; from Leaf31, ping 10.255.255.112 must FAIL</text>
+  </g>
+  <line x1="1150" y1="638" x2="1150" y2="742" stroke="#D3D1C7" stroke-width="1"/>
+  <g font-size="11" fill="#444441">
+    <rect x="1170" y="646" width="14" height="14" rx="3" fill="#EEEDFE" stroke="#534AB7"/><text x="1190" y="657">EVPN gateway (VTEP)</text>
+    <path d="M 1177 672 L 1184 679 L 1177 686 L 1170 679 Z" fill="#FDEDEC" stroke="#B03A2E" stroke-width="1.4"/><text x="1190" y="683">stitch point</text>
+    <line x1="1170" y1="702" x2="1184" y2="702" stroke="#0F6E56" stroke-width="4" stroke-linecap="round"/><text x="1190" y="706">stitched tunnel segment</text>
+    <line x1="1330" y1="702" x2="1344" y2="702" stroke="#B7B5AC" stroke-width="3" stroke-dasharray="6 4"/><text x="1350" y="706">old end-to-end tunnel</text>
+    <line x1="1330" y1="650" x2="1344" y2="650" stroke="#378ADD" stroke-width="2"/><text x="1350" y="657">underlay link</text>
+    <line x1="1330" y1="676" x2="1344" y2="676" stroke="#D3D1C7" stroke-width="1.5" stroke-dasharray="5 4"/><text x="1350" y="680">domain boundary</text>
+  </g>
+</svg>

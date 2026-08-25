@@ -17,7 +17,7 @@ This lab builds the same Arista fabric four times, once per combination:
 | 4       | HER (dynamic flood list)    | BGP EVPN (Type-3 IMET) | Works                                              |
 | 4.1     | Multicast underlay          | BGP EVPN (IMET + PMSI) | Config correct, same vEOS-lab limitation           |
 
-All four sections above only get traffic between hosts in the **same** VLAN. Section 5 covers inter-VLAN routing (IRB) — the asymmetric and symmetric models, the two prerequisites that break it silently, and the MLAG-specific configuration it needs. Section 6 then uses the finished fabric as the starting point of a second lab: a new iBGP EVPN site and a DCI route server are attached, and the original fabric is live-migrated from iBGP EVPN to eBGP everywhere, leaf by leaf, with packet walks for the before, interim, and final states. Section 7 continues with the deferred follow-up — a method of procedure for converting the numbered eBGP underlay to BGP unnumbered, link by link and make-before-break. Section 8 closes with the theory the lab keeps bumping into: HER vs multicast trade-offs, IGMP snooping, the differences between IGMPv1/v2/v3, and when an IGMP querier is required.
+All four sections above only get traffic between hosts in the **same** VLAN. Section 5 covers inter-VLAN routing (IRB) — the asymmetric and symmetric models, the two prerequisites that break it silently, and the MLAG-specific configuration it needs. Section 6 then uses the finished fabric as the starting point of a second lab: a new iBGP EVPN site and a DCI route server are attached, and the original fabric is live-migrated from iBGP EVPN to eBGP everywhere, leaf by leaf, with packet walks for the before, interim, and final states — and closes by designing the true multi-domain version of the two-site build (EVPN gateways at the borders, D-path, stitched tunnels), with its own control- and data-plane walks. Section 7 continues with the deferred follow-up — a method of procedure for converting the numbered eBGP underlay to BGP unnumbered, link by link and make-before-break. Section 8 closes with the theory the lab keeps bumping into: HER vs multicast trade-offs, IGMP snooping, the differences between IGMPv1/v2/v3, and when an IGMP querier is required.
 
 ## 1. Lab setup and introduction
 
@@ -1979,7 +1979,7 @@ Everything up to here runs as one fabric with one AS: 65000 everywhere, spines a
 
 To make the exercise honest, the fabric first stops being alone. A second, smaller fabric running its own iBGP EVPN is attached through a DCI route server, VLANs 10 and 20 are stretched across, and only then does the migration start — so every step has to preserve not just intra-fabric traffic but a working inter-site overlay. The end state is the eBGP-everywhere site of the architecture post's [section 12.3](/posts/vxlan-evpn-architecture/#123-multi-fabric-and-multi-site): per-leaf ASNs, a spine transit AS, a border with its own ASN, a route server in the middle, and an iBGP site on the far side that never notices any of it.
 
-One honest scope note before building: this is the **generic, single-overlay-domain** version of a two-site design. vEOS-lab has no VXLAN stitching or Cisco-style border-gateway re-origination, so the borders here are EVPN *control-plane* transit hops, VXLAN tunnels run end to end between leaf VTEPs, and the VTEP loopbacks therefore must cross the DCI. The [architecture post's section 13](/posts/vxlan-evpn-architecture/#13-vxlan-multi-site-architecture) covers what a true Multi-Site BGW adds on top (VIP next-hop rewrite, site-scoped RDs, per-site BUM domains); everything else in this lab — the ASN plan, the session shapes, the next-hop discipline — is the same design.
+One honest scope note before building: this is the **generic, single-overlay-domain** version of a two-site design. vEOS-lab has no VXLAN stitching or Cisco-style border-gateway re-origination, so the borders here are EVPN *control-plane* transit hops, VXLAN tunnels run end to end between leaf VTEPs, and the VTEP loopbacks therefore must cross the DCI. The [architecture post's section 13](/posts/vxlan-evpn-architecture/#13-vxlan-multi-site-architecture) covers what a true Multi-Site BGW adds on top (VIP next-hop rewrite, site-scoped RDs, per-site BUM domains); everything else in this lab — the ASN plan, the session shapes, the next-hop discipline — is the same design. Section 6.4, once the migration is done, comes back and designs that gateway version onto this exact topology, with its own control-plane and data-plane walks.
 
 **The whole migration at a glance.** Seven phases, executed one by one with live captures in 6.3:
 
@@ -7011,6 +7011,182 @@ Site B was never touched: same configs, same iBGP, same RR — and, per walk 3, 
 | Decommission applied unevenly across devices → leftover neighbors parked in `Active` forever                               | Run Phase 6 from a per-device checklist and finish with a fabric-wide sweep for non-Established sessions (the SP2 leftover in Phase 6 is the exhibit)          |
 | A dead link masquerades as a BGP problem — session stuck in `Connect`                                                      | Connect-state debugging starts below BGP: prove the /31 forwards before touching neighbor statements (the EVE-NG wire in Phase 4)                              |
 | Rollback                                                                                                                   | Old config is a saved file; `configure replace` on a drained leaf restores its iBGP identity in seconds                                                        |
+
+### 6.4 The deferred design: multi-domain EVPN with gateway borders
+
+The scope note back in 6.1 has been hanging over this whole section: everything built and migrated so far is the **single-overlay-domain** version of a two-site design. The borders are EVPN control-plane transit hops, one VXLAN tunnel runs leaf to leaf straight across the DCI, and every leaf VTEP loopback has to be routed end to end to make that possible. This section pays the note off: the same topology, redesigned as true multi-domain with **EVPN gateways** at the borders — EOS's multi-domain EVPN VXLAN, the Arista counterpart of the Cisco Multi-Site BGW architecture in the [architecture post's sections 13–14](/posts/vxlan-evpn-architecture/#13-vxlan-multi-site-architecture).
+
+Same honesty as sections 3 and 4.1 about what this lab can demonstrate: vEOS-lab does not forward stitched VXLAN, so this is a design-and-walks section, not a captures section. The control plane below *is* fully observable on vEOS — re-originated RDs, rewritten next hops, and the D-path attribute all appear in `show bgp evpn` — but the data-plane walk is written, not pinged, and the gateway CLI shown is representative: verify it against the Multi-Domain EVPN VXLAN TOI for your EOS release before taking it to production.
+
+The starting point is 6.3's final state: site A eBGP everywhere, site B iBGP forever, the route server between them.
+
+#### What multi-domain changes
+
+One overlay domain becomes three, each with its own **domain identifier**:
+
+| Domain               | Members                            | Control plane                | Domain identifier |
+|----------------------|------------------------------------|------------------------------|-------------------|
+| **Site A**           | Leaf1/2/3, Spine1/2, Border1       | eBGP everywhere (6.3's work) | `65100:1`         |
+| **DCI interconnect** | Border1 ↔ DCI ↔ Border2            | eBGP, DCI stays route server | `65099:1`         |
+| **Site B**           | Border2, SP31, Leaf31              | iBGP + RR, unchanged forever | `65030:1`         |
+
+![Multi-domain EVPN design: three overlay domains, gateway borders with their own VTEPs, three stitched VXLAN tunnel segments with stitch points at each border, contrasted with the old single end-to-end tunnel](/posts/arista-vxlan-bum-her-vs-multicast/multidomain-gateway-topology.svg)
+
+The same design as text:
+
+```text
+      Site A domain (65100:1)      |  DCI domain (65099:1)  |      Site B domain (65030:1)
+                                   |                        |
+  Leaf1/Leaf2 --\                  |                        |                  /-- Leaf31
+  VTEP .112      >-- spines -- Border1 ----- DCI ----- Border2 -- SP31 -------<   VTEP 10.255.31.113
+  Leaf3 --------/         VTEP .101|      (no VXLAN)    |VTEP 10.255.31.101   \-- (hosts R_VPC1/R_VPC2)
+  VTEP .113                        |                        |
+                                   |                        |
+  tunnels:   leaf <-> 10.255.255.101   10.255.255.101 <-> 10.255.31.101   10.255.31.101 <-> 10.255.31.113
+                                   ^                        ^
+                            stitch point             stitch point
+```
+
+And the migration contract that section 6 spent seven phases protecting — *VTEP IPs, next hops, and the data plane never change* — is now **deliberately broken**, because breaking it is the point of multi-domain. Four mechanics replace it:
+
+1. **The borders become VTEPs.** Border1 and Border2 each get a `Loopback1` and an `interface Vxlan1` carrying the stretched VNIs (1010, 1020) and the L3 VNI 50000. A gateway must terminate tunnels in both of its domains; a router with no VTEP can relay the routes (section 6.2's design) but never stitch the traffic.
+2. **Routes are re-originated, not relayed.** A gateway imports a route from one domain and advertises it into the next with **next-hop-self** (its own VTEP), **its own RD**, and a **D-path** (Domain Path) attribute recording the domain the route came from — the draft-ietf-bess-evpn-ipvpn-interworking machinery. Every `next-hop-unchanged` that section 6 so carefully protected on the borders is deleted: its entire job — stopping a transit hop from rewriting next hops — is obsolete when rewriting the next hop is precisely what the gateway is *for*. Only the DCI route server keeps its pair, because it is still transit *inside* the interconnect domain.
+3. **Tunnels are stitched, not end-to-end.** One leaf-to-leaf tunnel becomes three independent segments: site-B leaf → Border2, Border2 → Border1 across the DCI, Border1 → site-A leaf. Each gateway decapsulates and re-encapsulates; the inner frame rides through untouched.
+4. **Loop prevention moves to D-path.** A gateway rejects any EVPN route whose D-path already contains one of its own domain identifiers — the EVPN equivalent of the AS-path loop check, one layer up. This is also what makes a second gateway per site safe later: neither can re-inject the other's re-originations back into the domain they came from.
+
+#### Addressing, and what stops crossing the DCI
+
+Two new loopbacks, following the same conventions as everything else:
+
+| Device  | Loopback1 (gateway VTEP) |
+|---------|--------------------------|
+| Border1 | 10.255.255.101/32        |
+| Border2 | 10.255.31.101/32         |
+
+The underlay consequence is the biggest operational win of the whole design. In the section 6 build, Border1 has to advertise every site A loopback to the DCI — the leaf VTEPs `.112` and `.113` *must* be routable from Leaf31, or the end-to-end tunnels die. In multi-domain, the only /32s that cross the DCI IPv4 sessions are the **gateway VTEPs and the overlay peering loopbacks**: `10.255.255.101`, `10.255.255.1`, `10.255.31.101`, `10.255.31.1`, `10.255.99.1`. Both borders filter everything else outbound. Inside each site the diet is even stricter: no site A device except Border1 needs a single site B prefix, because no site A device except Border1 ever encapsulates toward site B — the spines route stitched traffic only as far as `10.255.255.101`.
+
+That makes the design **testable from day one**: from Leaf31, `ping 10.255.255.112` must now *fail* while VPC1 still answers. In section 6.2 that same ping succeeding was a health check; here it succeeding means a filter is missing. A site A underlay convergence event — a leaf reload, an ECMP reshuffle, a VTEP moving — is now invisible to Leaf31's forwarding state, which points at `10.255.31.101` and nothing else. That is the failure containment the architecture post's 13.2 promises, realized on this addressing plan.
+
+RDs and RTs need no new design at all — they need the old design to keep doing its job a third time:
+
+- **RTs stay `1:10` / `1:20` / `1:50000` everywhere.** They are ASN-free *and* domain-free, so both gateways import and re-export with zero rewriting. A fabric on auto-derived RTs would be writing RT-rewrite policy at every gateway right now.
+- **RDs stay per-device** — and become domain-scoped automatically. Leaf1 mints `10.255.255.21:10`; Border1's re-origination replaces it with `10.255.255.1:10`; site B never sees a leaf RD at all. The MLAG pair's two copies of every MAC (RDs `...21:10` and `...22:10`, same next hop) collapse into **one** route at the gateway, because Border1 re-originates its imported MAC-VRF entry, not the raw NLRI. Remote-site EVPN state stops scaling with the remote site's leaf count and starts scaling with its gateway count.
+
+#### BUM at the boundary
+
+Each domain floods independently; the gateways translate between flood domains:
+
+- Site A leaves' VNI 1010 flood lists hold the other site A VTEPs **plus `10.255.255.101`** (Border1's Type-3) — and no longer `10.255.31.113`.
+- Border1's interconnect-domain flood list for VNI 1010 holds exactly `10.255.31.101`.
+- Border2 floods into site B per its own domain's IMET set.
+
+This decouples the replication modes per domain — a future site running a multicast underlay internally (section 4.1's config, on hardware that forwards it) attaches without any other site knowing, the gateway doing the translation at the boundary. It also fixes a scaling quirk the section 6 design quietly carries: an ARP from R_VPC1 today crosses the DCI as one HER copy *per site A VTEP* in the flood list. Multi-domain sends **one** copy across, and Border1 fans out locally.
+
+#### Configuration
+
+Border1's delta from its Phase 4 final state. Three blocks: become a VTEP, become a gateway, put the underlay on its diet:
+
+```text
+interface Loopback1
+   ip address 10.255.255.101/32
+!
+vlan 10,20
+!
+vrf instance TENANT_A
+ip routing vrf TENANT_A
+!
+interface Vxlan1
+   vxlan source-interface Loopback1
+   vxlan udp-port 4789
+   vxlan vlan 10 vni 1010
+   vxlan vlan 20 vni 1020
+   vxlan vrf TENANT_A vni 50000
+!
+ip prefix-list DCI-OUT seq 10 permit 10.255.255.101/32   ! gateway VTEP
+ip prefix-list DCI-OUT seq 20 permit 10.255.255.1/32     ! overlay peering loopback
+!
+route-map DCI-OUT permit 10
+   match ip address prefix-list DCI-OUT
+!
+router bgp 65100
+   !
+   address-family ipv4
+      network 10.255.255.101/32                 ! gateway VTEP into both underlays
+      neighbor 10.0.103.0 route-map DCI-OUT out ! leaf VTEPs stop crossing the DCI
+   !
+   address-family evpn
+      domain identifier 65100:1                 ! this device's local domain
+      neighbor 10.255.99.1 domain remote        ! the DCI session is the domain boundary
+      no neighbor EVPN next-hop-unchanged       ! transit-hop knob, obsolete: the gateway
+      no neighbor 10.255.99.1 next-hop-unchanged !  now rewrites next hops on purpose
+   !
+   vlan 10
+      rd 10.255.255.1:10
+      route-target both 1:10
+   vlan 20
+      rd 10.255.255.1:20
+      route-target both 1:20
+   vrf TENANT_A
+      rd 10.255.255.1:50000
+      route-target both evpn 1:50000
+```
+
+`domain identifier` plus `neighbor … domain remote` is the entire gateway switch: routes crossing that session boundary are re-originated with next-hop-self and D-path stamping, in both directions. (One more item for the TOI check: some EOS trains want the L3 side made explicit with `neighbor … next-hop-self received-evpn-routes route-type ip-prefix` before Type-5s are re-originated rather than relayed.) Border2 is the mirror image — AS 65030, `domain identifier 65030:1`, VTEP `10.255.31.101`, RDs `10.255.31.1:*`, the same outbound prefix filter — re-advertising into site B over its ordinary iBGP session to SP31. The **DCI router changes nothing**: still no `interface Vxlan1`, still `next-hop-unchanged` on both sessions (it is intra-domain transit for the interconnect), just five /32s on its IPv4 sessions instead of two sites' worth of loopbacks. Note what is *absent* from the borders' MAC-VRF blocks: no `redistribute learned` — a gateway has no access ports; its EVPN job is re-origination, not origination.
+
+Two deployment notes. First, **redundancy**: with one border per site the gateway is a single point of failure for inter-site traffic — but it already was in section 6.2, as the Phase 4 outage window demonstrated. The multi-domain fix is a second gateway per site: same domain identifier on both, distinct VTEP loopbacks, and D-path keeps them from re-importing each other's re-originations, so remote traffic simply ECMPs across two gateway next hops. It slots in without touching a single leaf. What EOS's D-path model *doesn't* need is most of the NX-OS Multi-Site apparatus the architecture post's section 13 catalogs — no Multi-Site VIP, no `evpn multisite border-gateway` site-id, no dedicated DCI-tracking state machine; the trade is that without a shared VIP, per-gateway PIP next hops are what remote sites load-balance across. Second, **MTU**: the DCI links still need the +50-byte VXLAN headroom — stitching changes *whose* packets cross (gateway-to-gateway only), not what wraps them.
+
+#### Walk 4 — control plane: the same routes, re-originated twice
+
+The multi-domain successor to Walk 3. How VPC1 (192.168.10.10, behind the MLAG anycast VTEP) becomes reachable from Leaf31 now:
+
+1. **Site A domain — byte-for-byte Walk 3.** Leaf1 and Leaf2 originate the Type-2 under RDs `10.255.255.21:10` / `10.255.255.22:10`, RT `1:10`, next hop `10.255.255.112`; the spines pass it to Border1 with AS path `65000 65101`. Nothing inside a site knows multi-domain exists — leaves are the one tier this entire redesign never touches.
+2. **Border1 imports — and collapses.** As a VTEP carrying VLAN 10, Border1 imports on `1:10` like any leaf and installs VPC1's MAC behind `10.255.255.112`. The MLAG pair's two RD copies become one MAC-VRF entry.
+3. **Border1 re-originates into the interconnect domain.** One new Type-2 toward the DCI: RD `10.255.255.1:10` (its own), RT `1:10` (untouched — the static-RT dividend, third payout), next hop **`10.255.255.101`** by next-hop-self, D-path now carrying `65100:1`, AS path growing to `65100 65000 65101`. The leaf's RD, the leaf's next hop, and the duplicate MLAG copy all stop at the boundary.
+4. **The DCI relays it** to Border2 unchanged — its `next-hop-unchanged` now preserves a *gateway* VTEP instead of a leaf VTEP, but its job description hasn't changed. AS path: `65099 65100 65000 65101`, still the readable chain from Walk 3.
+5. **Border2 runs the loop check, imports, re-originates again.** D-path carries `65100:1` and the interconnect domain — not `65030:1` — so the route is accepted. Border2 installs VPC1's MAC behind `10.255.255.101`, then advertises into site B over iBGP: RD `10.255.31.1:10`, next hop **`10.255.31.101`**, D-path extended again. Had this route ever looped back toward site A, Border1 would find `65100:1` in the D-path and drop it silently — no policy, no communities, no hand-written filters.
+6. **SP31 reflects to Leaf31**, which imports on `1:10` and installs VPC1 behind **`10.255.31.101`** — a next hop *inside its own site*, reachable through its own underlay, owned by its own operations team.
+
+The Type-3s run the same three-stage relay: Leaf31's IMET reaches only site B and Border2; Border2 originates its own IMET into the interconnect domain; Border1 originates into site A. Three flood domains, joined only at the gateways.
+
+The Type-5s add one rewrite the bridged walk never needed. VLAN 30 is deliberately not stretched, so its subnet crosses the fabric only as routed reachability in VRF `TENANT_A`: Leaf3 originates `192.168.30.0/24` as a Type-5 — RD `10.255.255.23:50000`, RT `1:50000`, next hop `10.255.255.113`, and Leaf3's system MAC in the Router's MAC extended community. Each gateway gives it the full Type-2 treatment — own RD, next-hop-self, D-path stamp, RT untouched — **plus a new Router's MAC: its own.** That community is not bookkeeping; it is the inner destination MAC a remote VTEP writes on every routed VXLAN packet, and it has to name the device that performs the *next* routing lookup — which is now the gateway at the far end of the first tunnel segment, not Leaf3 three segments away. A relayed Type-5 keeping Leaf3's RMAC behind a rewritten next hop would have Leaf31 building inner frames addressed to a router that is not at the other end of its tunnel. So Leaf31 installs `192.168.30.0/24` in VRF `TENANT_A` via VTEP `10.255.31.101` with **Border2's** router MAC — where the 6.2 design held next hop `10.255.255.113` with **Leaf3's** — and Walk 5's routed case is exactly this route being spent. The symmetric-IRB Type-2s for the stretched VLANs — MAC-IP routes carrying the L2 RT and the L3 context together — collect both rewrites at once: RD/next-hop/D-path as in step 3, RMAC substitution as here.
+
+The verification signatures — the multi-domain equivalents of Phase 3's gates, and everything the control plane shows even on vEOS-lab: on Leaf31, `show bgp evpn route-type mac-ip 192.168.10.10 detail` must show next hop `10.255.31.101`, RD `10.255.31.1:10`, and a D-path attribute — three fields that read `10.255.255.112`, `10.255.255.21:10`, and *absent* in the 6.2 captures. On Border1, `show bgp evpn` holds the same MAC twice: the leaf-originated route in the site A domain and its own re-origination in the interconnect domain. The routed check is `show bgp evpn route-type ip-prefix ipv4 detail` on Leaf31 — `192.168.30.0/24` arriving with next hop `10.255.31.101` and Border2's MAC in the Router's MAC community — and `show ip route vrf TENANT_A 192.168.30.30` resolving over Vxlan1 toward the gateway, not toward Leaf3. And the underlay check inverts: `show ip route 10.255.255.112` on Border2 must come back **empty**.
+
+#### Walk 5 — data plane: three stitched tunnels
+
+**First packet — R_VPC1's ARP for 192.168.10.10 (BUM).**
+
+1. R_VPC1 broadcasts; Leaf31 floods per its VNI 1010 HER list, which now names `10.255.31.101`, not `10.255.255.112`. **Segment 1:** outer `10.255.31.113 → 10.255.31.101`, routed Leaf31 → SP31 → Border2, decapsulated at Border2.
+2. Border2 floods the inner frame into its local VLAN 10 (no hosts there) **and re-encapsulates one copy** per its interconnect flood list. **Segment 2:** outer `10.255.31.101 → 10.255.255.101`, routed Border2 → DCI → Border1. Domain split horizon means the copy never turns back toward Leaf31.
+3. Border1 decapsulates and head-end-replicates into site A's flood list. **Segments 3a/3b:** outer `10.255.255.101 → 10.255.255.112` and `→ 10.255.255.113`. From here section 2.4's rules own the packet — one MLAG member wins the anycast VTEP copy, floods VLAN 10, VPC1 hears the ARP. Nothing goes back toward the DCI: that is the domain the frame arrived from.
+4. VPC1's unicast reply rides the same three segments in reverse; every hop already holds R_VPC1's MAC from the Walk 4 relay.
+
+**Steady state — known unicast, R_VPC1 → VPC1.** Three lookups, three tunnels, three underlays:
+
+| Hop                       | MAC table says                     | Outer VXLAN header                          | Underlay path                            |
+|---------------------------|------------------------------------|---------------------------------------------|------------------------------------------|
+| Leaf31                    | VPC1-MAC → VTEP `10.255.31.101`    | `10.255.31.113 → 10.255.31.101`, VNI 1010   | Leaf31 → SP31 → Border2                  |
+| Border2 (decap, re-encap) | VPC1-MAC → VTEP `10.255.255.101`   | `10.255.31.101 → 10.255.255.101`, VNI 1010  | Border2 → DCI → Border1                  |
+| Border1 (decap, re-encap) | VPC1-MAC → VTEP `10.255.255.112`   | `10.255.255.101 → 10.255.255.112`, VNI 1010 | Border1 → either spine → either MLAG member |
+
+The inner Ethernet frame is untouched end to end; only the outer header is rewritten at each stitch point. Walk 1 carried the same frame in one `10.255.31.113 → 10.255.255.112` tunnel — same host experience, but every site A underlay event was Leaf31's problem. Now each segment converges, ECMPs, and fails independently.
+
+**Routed traffic — R_VPC1 → VPC3 (VLAN 30, deliberately never stretched).** Symmetric IRB composes with stitching exactly as section 5.6 built it, one domain at a time. Leaf3's routes for VLAN 30 arrive at Leaf31 re-originated twice in VNI 50000, next hop `10.255.31.101`, **router MAC = Border2's** — each gateway substitutes its own RMAC when it re-originates into the L3 VNI. The packet then takes three *routed* VXLAN segments: Leaf31 routes into VNI 50000 toward Border2, Border2 toward Border1, Border1 toward `10.255.255.113`, where Leaf3's VRF `TENANT_A` lookup delivers into VLAN 30. Both gateways therefore must carry the VRF and VNI 50000 — and that requirement is the **policy boundary** the architecture post's 13.6 describes: a VLAN or VRF absent from a gateway's config simply does not exist outside its site. VLAN 30 is unreachable at L2 from site B not because a filter says so, but because no gateway ever re-originated it.
+
+#### Section 6.2's design vs. this one
+
+|                                          | 6.2 (single overlay domain)          | 6.4 (multi-domain gateways)                       |
+|------------------------------------------|--------------------------------------|---------------------------------------------------|
+| Borders are                              | EVPN transit (`next-hop-unchanged`)  | EVPN gateways (VTEPs, re-origination)             |
+| Tunnels                                  | One, leaf to leaf                    | Three stitched segments                           |
+| Leaf VTEP /32s cross the DCI             | Required                             | Filtered out; only gateway VTEPs cross            |
+| Remote site sees                         | Every leaf's RD and next hop         | One RD and next hop per gateway                   |
+| BUM across the DCI                       | One HER copy per remote VTEP         | One copy total; far gateway fans out              |
+| Loop prevention                          | AS path only                         | D-path domain check                               |
+| Blast radius of a site's underlay event  | Both sites' forwarding state         | Contained at the gateway                          |
+| Cost                                     | Nothing extra                        | Borders become VTEPs (hardware VXLAN + gateway feature); one decap/re-encap per boundary |
+
+Neither design is *wrong* — 6.2 is legitimately simpler and this lab ran a live migration through it without the overlay noticing. The honest selection rule falls out of the table: two sites under one operations team with modest scale can live on the single-domain design and its shared fate; the moment the sites have separate failure budgets, separate teams, or a leaf count that makes "every leaf's /32 and RD, everywhere" read as a liability, the borders stop being transit and start being gateways. And section 7's MOP is unaffected either way: BGP unnumbered is a fabric-link pattern, and the DCI links stay numbered on purpose — an administrative boundary between ASes under different control is exactly where explicit addressing keeps earning its keep.
 
 ## 7. MOP: converting the eBGP underlay to BGP unnumbered
 

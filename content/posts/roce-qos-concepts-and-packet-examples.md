@@ -1099,6 +1099,32 @@ Everything this section stacked up — the RoCEv2 encapsulation from the top, th
 
 {{< embed src="/posts/roce-qos-concepts-and-packet-examples/rocev2-vxlan-evpn-workflow.html" title="RoCEv2 over VXLAN EVPN packet workflow" height="1000" >}}
 
+#### ECN across the tunnel: how underlay congestion reaches the RNIC
+
+The walkthrough above lists DSCP/ECN among the mutable fields normalized out of the iCRC — here is why that matters operationally. The entire DCQCN loop of section 10 depends on one thing: a CE mark reaching the destination RNIC. But once the packet is VXLAN-encapsulated, the RNIC's copy of the IP header is buried inside the tunnel — a congested spine parses only as far as the outer header, so the outer header is the only place it can mark. Getting that mark back into the header the RNIC actually reads is a three-step relay, defined by the tunnel-ECN rules of RFC 6040 and extended to shim-header tunnels like VXLAN by RFC 9601:
+
+1. **Encapsulation (ingress VTEP):** copy the inner ECN field into the outer IPv4 header, so the packet enters the underlay as ECN-capable there too. The same copying applies to DSCP — the underlay's queues, WRED/ECN thresholds, and PFC classification all act on the outer header, because it is the only header they see.
+2. **Underlay congestion (a spine, or any transit hop):** the congested queue marks the **outer** header CE. The inner header is untouched — no transit hop rewrites anything behind the VXLAN header.
+3. **Decapsulation (egress VTEP):** fold the mark back in — outer CE + inner ECT becomes inner CE. (The other decap rule worth knowing: outer CE + inner Not-ECT is *dropped*, not forwarded — a sender that never claimed ECN capability must not receive a signal it cannot interpret.)
+
+The packet's two ECN fields, state by state:
+
+```text
+before congestion (ingress leaf → spine):   outer ECN = ECT  | VXLAN | inner ECN = ECT
+at the congested spine:                     outer ECN = CE   | VXLAN | inner ECN = ECT
+after egress-VTEP decapsulation:                    (no outer)          inner ECN = CE
+```
+
+From there the story rejoins section 10 as if the tunnel had never existed: the destination RNIC sees CE in the restored inner header and answers with a CNP (section 11) to the sender's QP, and DCQCN reduces the sending rate. And when congestion hits a **host-facing** link — where the packet rides natively, as in steps 1 and 4 of the walkthrough — there is no tunnel and no relay: the inner RoCEv2 IPv4 header is marked directly.
+
+So the rule set is:
+
+- **VXLAN underlay congestion** → mark the *outer* IP ECN — the only header a transit hop owns
+- **Egress VTEP** → propagate outer CE into the *inner* IP ECN at decapsulation
+- **Host-facing congestion** → mark the *inner* IP ECN directly — it is the only IP header on the wire
+
+The operational catch: the outer-to-inner CE propagation at decap is a capability, not a law of nature — it must be supported and enabled on the VTEPs. Cisco documents this behavior for Nexus VXLAN fabrics, and it follows RFC 6040/9601, but verify it per platform and per encapsulation before trusting DCQCN across a fabric. Without it, the underlay marks CE diligently and the egress VTEP throws the mark away with the rest of the outer header: the RNIC never learns about underlay congestion, no CNPs flow, DCQCN never engages, and the queues grow until PFC (if the underlay carries it end to end) or tail drops do the signaling instead — the exact escalation section 10's PFC-versus-ECN comparison warns about, reproduced by one missing tunnel knob. The one thing this marking never breaks is the RoCE payload itself: ECN and DSCP rewrites at any hop are safe because both fields are normalized out of the iCRC calculation.
+
 ## 16. References
 
 - [Cisco Nexus 9000 Series NX-OS QoS Configuration Guide](https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/103x/configuration/qos/cisco-nexus-9000-nx-os-quality-of-service-configuration-guide-103x.pdf)
@@ -1106,3 +1132,5 @@ Everything this section stacked up — the RoCEv2 encapsulation from the top, th
 - [SONiC configuration reference](https://github.com/sonic-net/SONiC/wiki/Configuration)
 - [NVIDIA: Matching RoCEv2 BTH opcode and destination QP](https://docs.nvidia.com/networking/display/mlnxdpdk2211231051lts/matching%2Broce%2Bib%2Bbth%2Bopcode/dest_qp)
 - [Broadcom: Introduction to Congestion Control for RoCE](https://docs.broadcom.com/doc/NCC-WP1XX)
+- [RFC 6040: Tunnelling of Explicit Congestion Notification](https://www.rfc-editor.org/rfc/rfc6040)
+- [RFC 9601: Propagating Explicit Congestion Notification Across IP Tunnel Headers Separated by a Shim](https://www.rfc-editor.org/rfc/rfc9601)

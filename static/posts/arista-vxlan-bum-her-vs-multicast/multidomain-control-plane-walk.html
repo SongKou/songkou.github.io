@@ -145,6 +145,7 @@
   <div class="controls" role="group" aria-label="Choose the route type">
     <button type="button" class="btn" data-route="T2" aria-pressed="true">Type-2 — VPC1's MAC/IP (bridged, VNI 1010)</button>
     <button type="button" class="btn" data-route="T5" aria-pressed="false">Type-5 — 192.168.30.0/24 (routed prefix, VNI 50000)</button>
+    <button type="button" class="btn" data-route="T3" aria-pressed="false">Type-3 — IMET / flood lists (never relayed)</button>
   </div>
 
   <div class="flow" id="flow" role="group" aria-label="Route path across the three domains"></div>
@@ -176,7 +177,7 @@
   <div class="footnotes">
     <p><strong>Two loopbacks per device:</strong> <code>Lo0</code> = router-id and BGP peering — every overlay session here runs Lo0-to-Lo0 (<code>update-source Loopback0</code>, <code>ebgp-multihop 3</code>). <code>Lo1</code> = the VTEP — what next hops point at and where tunnels terminate. Spines and the DCI have Lo0 only: no VTEP, and after re-origination, never a next hop. Site A addresses abbreviate <code>10.255.255.x</code> to <code>.x</code>; site B uses <code>10.255.31.x</code>.</p>
     <p><strong>What never changes:</strong> the RT (<code>1:10</code> / <code>1:50000</code>) is static, ASN-free, and domain-free — it imports identically in all three domains with zero rewriting, in both route types, at every hop.</p>
-    <p><strong>What never travels at all:</strong> Type-3 IMET routes are not relayed across domains — each gateway originates its own per domain, which is why the three flood domains in Walk 5 are independent.</p>
+    <p><strong>What never travels at all:</strong> Type-3 IMET routes are not relayed across domains — each gateway originates its own per domain, which is why the three flood domains in Walk 5 are independent. The Type-3 mode above steps through exactly that: two terminations, three originations, zero relays.</p>
     <p><strong>Why 65030:1 never appears:</strong> D-path is stamped on <em>exit</em> with the domain the route was learned in — a domain's own ID enters the D-path only when a route leaves it. An incoming route already carrying your own ID is a loop, and the gateway drops it.</p>
   </div>
 </div>
@@ -358,6 +359,82 @@
             f(null,      'Router MAC', 'Border2\'s — verify with show bgp evpn route-type ip-prefix ipv4 detail')
           ],
           risk: 'the route present but the RMAC still a leaf\'s = a relayed, not re-originated, Type-5 — the hop-3 knob is missing on a gateway.'
+        }
+      ]
+    },
+    T3: {
+      badge: 'Type-3 · IMET, VNI 1010',
+      summary: 'The one route type a gateway never relays: each domain builds its own flood list from its own IMETs. A gateway terminates one flood domain and originates a brand-new IMET into the next — what crosses the boundary is behavior, not the route.',
+      steps: [
+        {
+          node: 'Leaf1+2 & Leaf3', as: 'Lo0 .21/.22/.23 · VTEPs .112 / .113', gw: false,
+          title: 'Hop 1 · every site A VTEP originates an IMET',
+          action: 'The moment VLAN 10 maps to VNI 1010 on a VTEP, EOS originates a Type-3 for it — no redistribute needed. One route per VNI per VTEP, announcing: flood this VNI\'s BUM to me.',
+          fields: [
+            f(null,     'RD',              '10.255.255.21:10 · ...22:10 · ...23:10 — one per VTEP'),
+            f(null,     'RT',              '1:10 — the same import machinery as the Type-2'),
+            f(null,     'Tunnel endpoint', '.112 (advertised by both MLAG members) and .113'),
+            f(null,     'PMSI',            'ingress replication — the section 4 flood mode'),
+            f(null,     'D-path',          '(none) — and unlike the Type-2, it will never earn one')
+          ],
+          risk: 'a VNI with no IMET is a VTEP that can send but never gets flooded to — check show bgp evpn route-type imet before debugging silent ARP loss.'
+        },
+        {
+          node: 'Spine1 / Spine2', as: 'AS 65000 · Lo0 .11 / .12', gw: false,
+          title: 'Hop 2 · ordinary relay — but only inside site A',
+          action: 'Within a domain, IMET is just another EVPN route: the spines pass every copy to Border1 with the next hop untouched. Border1 imports them, and its VNI 1010 flood list becomes .112 + .113.',
+          fields: [
+            f('steady',  'Next hop',            '.112 / .113 — next-hop-unchanged, as for every route type'),
+            f('changed', 'Border1 flood list',  '.112, .113 — built from these IMETs'),
+            f(null,      'Reach',               'this is as far as these routes will ever travel')
+          ],
+          risk: 'in the 6.2 design these same IMETs crossed the DCI into Leaf31\'s flood list — which is exactly why BUM cost one copy per site A VTEP there.'
+        },
+        {
+          node: 'Border1', as: 'AS 65100 · Lo0 10.255.255.1 · GW VTEP .101', gw: true,
+          title: 'Hop 3 · the leaf IMETs stop dead; Border1 originates its own',
+          action: 'No re-origination this time — termination. The gateway ends site A\'s flood domain and originates a brand-new IMET into the interconnect: RD, tunnel endpoint, and PMSI all its own.',
+          fields: [
+            f('changed', 'Leaf IMETs',      'dropped at the boundary — never advertised onward in any form'),
+            f('changed', 'New IMET, RD',    '10.255.255.1:10 — an origination, not a rewrite'),
+            f('changed', 'Tunnel endpoint', '10.255.255.101 — the gateway VTEP'),
+            f(null,      'PMSI',            'ingress replication → 10.255.255.101')
+          ],
+          risk: 'this hop is what turns N BUM copies across the DCI into one — if Leaf31\'s flood list ever shows .112/.113, this boundary has failed.'
+        },
+        {
+          node: 'DCI', as: 'AS 65099 · Lo0 10.255.99.1 · no VTEP', gw: false,
+          title: 'Hop 4 · the route server relays the gateway IMET',
+          action: 'Inside the interconnect domain the two gateway IMETs are ordinary routes: relayed with next hop unchanged, exactly like the Type-2. The interconnect is its own flood domain with exactly two members.',
+          fields: [
+            f('steady',  'Next hop',     '10.255.255.101 — next-hop-unchanged'),
+            f(null,      'Flood domain', 'two members: 10.255.255.101 and 10.255.31.101'),
+            f(null,      'The DCI itself','no Vxlan1 → in no flood list, receives no BUM — it only relays the routes that build the lists')
+          ],
+          risk: 'nothing here to break that the Type-2 walk has not already covered — the DCI treats every EVPN route type identically.'
+        },
+        {
+          node: 'Border2', as: 'AS 65030 · Lo0 10.255.31.1 · GW VTEP .31.101', gw: true,
+          title: 'Hop 5 · Border2: import one, originate another',
+          action: 'Border2 imports Border1\'s IMET — its interconnect flood list becomes exactly {10.255.255.101}, Walk 5\'s leg 2 — and originates its own fresh IMET into site B over plain iBGP.',
+          fields: [
+            f('changed', 'Interconnect flood list', '10.255.255.101 — one entry'),
+            f('changed', 'New IMET, RD',            '10.255.31.1:10'),
+            f('changed', 'Tunnel endpoint',         '10.255.31.101'),
+            f(null,      'PMSI',                    'ingress replication → 10.255.31.101')
+          ],
+          risk: 'the mirror of hop 3: site B\'s BUM toward site A rides one copy to 10.255.255.101, and Border1 fans out locally.'
+        },
+        {
+          node: 'Leaf31', as: 'Lo0 .31.21 · VTEP 10.255.31.113', gw: false,
+          title: 'Hop 6 · Leaf31\'s flood list: one entry',
+          action: 'Leaf31 imports Border2\'s IMET on 1:10. Its VNI 1010 flood list holds 10.255.31.101 and nothing else — Walk 5 case A\'s leg 1, and the same list whether site A has three leaves or fifty.',
+          fields: [
+            f('changed', 'Flood list',  '10.255.31.101 — one entry, regardless of site A\'s size'),
+            f('steady',  'Not present', '.112 / .113 — show vxlan flood vtep must not list them'),
+            f(null,      'Scale',       'remote flood state now scales with gateway count, not leaf count')
+          ],
+          risk: 'the cheapest health check in the whole design: one entry in this list is correct; any site A VTEP in it means an IMET crossed a boundary it should have died at.'
         }
       ]
     }

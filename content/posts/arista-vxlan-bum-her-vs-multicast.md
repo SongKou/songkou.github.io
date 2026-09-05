@@ -7152,7 +7152,7 @@ The whole walk as one grid — five stages, what each one rewrites (amber) and w
 
 ![Walk 4 control-plane grid: RD, next hop, AS path, D-path, and router MAC of VPC1's route across five stages and two gateway re-originations](/posts/arista-vxlan-bum-her-vs-multicast/walk4-control-plane.svg)
 
-And the same walk clickable — step through the hops, toggling between the bridged Type-2 and the routed Type-5 to watch the one extra rewrite (the Router-MAC) appear:
+And the same walk clickable — step through the hops, toggling between the bridged Type-2, the routed Type-5 (watch the extra Router-MAC rewrite appear), and the Type-3 IMET mode, which walks the one route type gateways never relay — two terminations, three originations:
 
 {{< embed src="/posts/arista-vxlan-bum-her-vs-multicast/multidomain-control-plane-walk.html" title="Multi-domain control-plane walk, hop by hop" height="820" >}}
 

@@ -1093,6 +1093,12 @@ For how VXLAN segments are stitched together with EVPN control-plane learning, s
 
 The overall contrast worth remembering: TCP carries connection state, reliability, flow control, and congestion feedback in every header; RoCEv2 keeps the wire format minimal (UDP) and pushes all of that into RNIC hardware and the BTH layer.
 
+### Putting it together: a RoCEv2 packet through VXLAN EVPN, interactively
+
+Everything this section stacked up — the RoCEv2 encapsulation from the top, the VXLAN wrapper, the VTEP processing — composes into a single packet's journey, and the walkthrough below lets you follow one. It tracks one RC RDMA Write Only packet (1,024 B of data) from Host A's RNIC through a VXLAN EVPN leaf-spine fabric into Host B's registered memory: step through the five stages, toggle between same-subnet forwarding (L2 VNI) and inter-subnet symmetric IRB, and click any header block — outer Ethernet/IPv4/UDP/VXLAN, the inner tenant headers, BTH, RETH, iCRC, FCS — to inspect its fields and what happens to them at that hop. Watch the two integrity scopes it demonstrates: the iCRC that survives routing end to end because the mutable fields (TTL, IP checksum, DSCP/ECN) are normalized out of its calculation, and the link FCS that dies and is reborn on every wire.
+
+{{< embed src="/posts/roce-qos-concepts-and-packet-examples/rocev2-vxlan-evpn-workflow.html" title="RoCEv2 over VXLAN EVPN packet workflow" height="1000" >}}
+
 ## 16. References
 
 - [Cisco Nexus 9000 Series NX-OS QoS Configuration Guide](https://www.cisco.com/c/en/us/td/docs/dcn/nx-os/nexus9000/103x/configuration/qos/cisco-nexus-9000-nx-os-quality-of-service-configuration-guide-103x.pdf)

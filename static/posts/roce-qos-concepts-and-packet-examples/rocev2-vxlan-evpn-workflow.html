@@ -1,0 +1,1919 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>RoCEv2 over VXLAN EVPN Packet Workflow</title>
+<style>:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, "Segoe UI", sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --radius: var(--border-radius-lg, 12.5px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 17 17'%3E%3Cpath d='M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z'/%3E%3C/svg%3E");
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html > body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: 5px;
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive > .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align="right"]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align="center"]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: superellipse(1.5);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget > :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress {
+  display: flex;
+  height: 6px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 6px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls > .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls > .form-label > :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type="file"] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type="file"]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type="file"]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type="color"] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: superellipse(1.5);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: superellipse(1.5);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: superellipse(1.5);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type="checkbox"]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type="checkbox"]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: "";
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type="radio"] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type="radio"]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: "";
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed="true"],
+  [aria-selected="true"],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed="true"], [aria-selected="true"], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .btn,
+  .form-control,
+  .form-select {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control,
+  .form-select {
+    font-size: max(16px, var(--font-size-normal));
+  }
+
+  .form-control[type="file"]::file-selector-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control-color[type="color"] {
+    width: 44px;
+    height: 44px;
+  }
+
+  .form-control:is(
+    [type="date"],
+    [type="datetime-local"],
+    [type="month"],
+    [type="time"],
+    [type="week"]
+  ) {
+    min-width: 0;
+    max-width: 100%;
+    padding-block: 8px;
+  }
+
+  .form-check {
+    min-height: 44px;
+    padding-inline: 15px;
+  }
+
+  .form-check-input {
+    position: relative;
+  }
+
+  .form-check-input::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    content: "";
+    transform: translate(-50%, -50%);
+  }
+
+  .form-check-label {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .form-range {
+    height: 44px;
+    touch-action: pan-y;
+  }
+
+  .form-range::-webkit-slider-runnable-track {
+    height: 44px;
+  }
+
+  .form-range::-moz-range-track {
+    height: 44px;
+  }
+
+  .form-range::-webkit-slider-thumb {
+    margin-top: 12px;
+  }
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget > svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: 16px !important;
+  height: 16px !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html>body{padding:0}</style>
+<style>
+  /* pinned to the blog's m10c palette so the embed blends into the post */
+  :root {
+    --color-background-primary: rgb(53 59 67);
+    --color-text-primary: rgb(214 221 227);
+  }
+</style>
+</head>
+<body>
+<div id="rocev2-vxlan-evpn-packet-journey" class="rvx-root">
+  <style>
+    #rocev2-vxlan-evpn-packet-journey {
+      color: var(--foreground);
+      display: grid;
+      gap: 1rem;
+      width: 100%;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey * {
+      box-sizing: border-box;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-header {
+      align-items: start;
+      display: flex;
+      gap: 1rem;
+      justify-content: space-between;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-title-group {
+      min-width: 0;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey h2,
+    #rocev2-vxlan-evpn-packet-journey h3,
+    #rocev2-vxlan-evpn-packet-journey p {
+      margin: 0;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-mode {
+      border: 0;
+      display: flex;
+      flex: 0 1 auto;
+      gap: 0.75rem;
+      margin: 0;
+      min-width: min(100%, 19rem);
+      padding: 0;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-mode legend {
+      padding: 0;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-mode-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 0.75rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-control-plane {
+      align-items: center;
+      border-left: 3px solid var(--viz-series-2);
+      display: flex;
+      gap: 0.625rem;
+      padding: 0.25rem 0 0.25rem 0.75rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-control-label {
+      color: var(--viz-series-2);
+      flex: 0 0 auto;
+      font-weight: 500;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-route {
+      display: grid;
+      gap: 0.75rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-track-wrap {
+      padding: 0 0.25rem;
+      position: relative;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-track,
+    #rocev2-vxlan-evpn-packet-journey .rvx-track-progress {
+      height: 2px;
+      left: 10%;
+      position: absolute;
+      top: 1.55rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-track {
+      background: var(--border);
+      right: 10%;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-track-progress {
+      background: var(--viz-series-1);
+      max-width: 80%;
+      transition: width 260ms ease;
+      width: 0;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-packet-marker {
+      align-items: center;
+      background: var(--primary);
+      color: var(--primary-foreground);
+      display: flex;
+      height: 1.25rem;
+      justify-content: center;
+      left: 10%;
+      pointer-events: none;
+      position: absolute;
+      top: 0.98rem;
+      transform: translateX(-50%);
+      transition: left 260ms ease;
+      width: 1.8rem;
+      z-index: 2;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-stages {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      position: relative;
+      z-index: 3;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-stage-btn {
+      align-items: center;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      min-width: 0;
+      width: 100%;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-node {
+      align-items: center;
+      background: var(--background);
+      border: 2px solid var(--border);
+      border-radius: 50%;
+      color: var(--foreground);
+      display: flex;
+      height: 3rem;
+      justify-content: center;
+      width: 3rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-stage-btn[aria-current="step"] .rvx-node {
+      background: var(--primary);
+      border-color: transparent;
+      color: var(--primary-foreground);
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-stage-copy {
+      display: grid;
+      gap: 0.1rem;
+      max-width: 8rem;
+      min-width: 0;
+      text-align: center;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-stage-name {
+      font-weight: 500;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-step-summary {
+      align-items: start;
+      display: flex;
+      gap: 0.75rem;
+      justify-content: space-between;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-step-copy {
+      display: grid;
+      gap: 0.25rem;
+      min-width: 0;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-step-kicker {
+      color: var(--viz-series-1);
+      font-weight: 500;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-delta {
+      align-items: center;
+      display: inline-flex;
+      gap: 0.35rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-delta-mark {
+      color: var(--viz-series-1);
+      font-weight: 500;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-step-controls {
+      display: flex;
+      flex: 0 0 auto;
+      gap: 0.5rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-packet-head {
+      align-items: end;
+      display: flex;
+      gap: 1rem;
+      justify-content: space-between;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-packet-meta {
+      text-align: right;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-stack {
+      display: grid;
+      gap: 0.65rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-layer-row {
+      display: grid;
+      gap: 0.35rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-layer-label {
+      align-items: center;
+      display: flex;
+      gap: 0.5rem;
+      justify-content: space-between;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-segments {
+      display: grid;
+      gap: 0.25rem;
+      grid-template-columns: repeat(auto-fit, minmax(5.25rem, 1fr));
+    }
+
+    #rocev2-vxlan-evpn-packet-journey #rvx-trailer {
+      grid-template-columns: minmax(5.25rem, 8rem);
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-seg {
+      align-content: start;
+      display: grid;
+      gap: 0.15rem;
+      justify-items: start;
+      min-height: 4.8rem;
+      min-width: 0;
+      text-align: left;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-seg-index,
+    #rocev2-vxlan-evpn-packet-journey .rvx-seg-status {
+      color: var(--muted-foreground);
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-seg-name {
+      font-weight: 500;
+      overflow-wrap: anywhere;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-tone-outer {
+      background: color-mix(in srgb, var(--viz-series-1) 14%, transparent);
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-tone-vxlan {
+      background: color-mix(in srgb, var(--viz-series-2) 14%, transparent);
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-tone-inner {
+      background: color-mix(in srgb, var(--viz-series-3) 14%, transparent);
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-tone-rdma {
+      background: color-mix(in srgb, var(--viz-series-4) 14%, transparent);
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-tone-integrity {
+      background: color-mix(in srgb, var(--viz-series-5) 14%, transparent);
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-empty-outer {
+      border-top: 1px dashed var(--border);
+      padding-top: 0.5rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-detail {
+      display: grid;
+      gap: 0.65rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-detail-head {
+      align-items: start;
+      display: flex;
+      gap: 0.75rem;
+      justify-content: space-between;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-detail-title {
+      display: grid;
+      gap: 0.15rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-detail-grid {
+      display: grid;
+      gap: 0.65rem 1rem;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin: 0;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-detail-grid > div {
+      min-width: 0;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-detail-grid dt {
+      color: var(--muted-foreground);
+      margin: 0 0 0.15rem;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-detail-grid dd {
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    #rocev2-vxlan-evpn-packet-journey .rvx-foot {
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem 1rem;
+      padding-top: 0.65rem;
+    }
+
+    @media (max-width: 680px) {
+      #rocev2-vxlan-evpn-packet-journey .rvx-header,
+      #rocev2-vxlan-evpn-packet-journey .rvx-step-summary {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      #rocev2-vxlan-evpn-packet-journey .rvx-mode {
+        min-width: 0;
+      }
+
+      #rocev2-vxlan-evpn-packet-journey .rvx-step-controls {
+        justify-content: space-between;
+      }
+
+      #rocev2-vxlan-evpn-packet-journey .rvx-detail-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 520px) {
+      #rocev2-vxlan-evpn-packet-journey .rvx-control-plane {
+        align-items: start;
+        flex-direction: column;
+        gap: 0.2rem;
+      }
+
+      #rocev2-vxlan-evpn-packet-journey .rvx-stage-copy {
+        display: none;
+      }
+
+      #rocev2-vxlan-evpn-packet-journey .rvx-node {
+        height: 2.75rem;
+        width: 2.75rem;
+      }
+
+      #rocev2-vxlan-evpn-packet-journey .rvx-track,
+      #rocev2-vxlan-evpn-packet-journey .rvx-track-progress {
+        top: 1.4rem;
+      }
+
+      #rocev2-vxlan-evpn-packet-journey .rvx-packet-marker {
+        top: 0.83rem;
+      }
+
+      #rocev2-vxlan-evpn-packet-journey .rvx-packet-head {
+        align-items: start;
+        flex-direction: column;
+        gap: 0.2rem;
+      }
+
+      #rocev2-vxlan-evpn-packet-journey .rvx-packet-meta {
+        text-align: left;
+      }
+
+      #rocev2-vxlan-evpn-packet-journey .rvx-segments {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      #rocev2-vxlan-evpn-packet-journey .rvx-seg {
+        min-height: 4.35rem;
+      }
+
+      #rocev2-vxlan-evpn-packet-journey .rvx-detail-head {
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #rocev2-vxlan-evpn-packet-journey .rvx-track-progress,
+      #rocev2-vxlan-evpn-packet-journey .rvx-packet-marker {
+        transition: none;
+      }
+    }
+  </style>
+
+  <div class="rvx-header">
+    <div class="rvx-title-group">
+      <h2 id="rvx-title">RoCEv2 packet through VXLAN EVPN</h2>
+      <p class="text-small text-muted">IPv4 example · leaf switches are VTEPs · one RC RDMA Write Only packet</p>
+    </div>
+    <fieldset class="rvx-mode">
+      <legend class="sr-only">Choose forwarding case</legend>
+      <div class="rvx-mode-options">
+        <label class="form-check">
+          <input class="form-check-input" type="radio" name="rvx-mode" value="l2" checked>
+          <span class="form-check-label">Same subnet · L2 VNI</span>
+        </label>
+        <label class="form-check">
+          <input class="form-check-input" type="radio" name="rvx-mode" value="irb">
+          <span class="form-check-label">Inter-subnet · symmetric IRB</span>
+        </label>
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="rvx-control-plane text-small" aria-label="EVPN control-plane state">
+    <span class="rvx-control-label">EVPN preloads</span>
+    <span id="rvx-evpn"></span>
+  </div>
+
+  <section class="rvx-route" aria-labelledby="rvx-route-title">
+    <h3 id="rvx-route-title" class="sr-only">Packet journey</h3>
+    <div class="rvx-track-wrap">
+      <div class="rvx-track" aria-hidden="true"></div>
+      <div class="rvx-track-progress" id="rvx-progress" aria-hidden="true"></div>
+      <div class="rvx-packet-marker text-small" id="rvx-marker" aria-hidden="true">PDU</div>
+      <ol class="rvx-stages" id="rvx-stages"></ol>
+    </div>
+
+    <div class="rvx-step-summary">
+      <div class="rvx-step-copy" aria-live="polite">
+        <div class="rvx-step-kicker text-small" id="rvx-step-kicker"></div>
+        <p id="rvx-step-text"></p>
+        <div class="rvx-delta text-small">
+          <span class="rvx-delta-mark" aria-hidden="true">Δ</span>
+          <span id="rvx-delta"></span>
+        </div>
+      </div>
+      <div class="rvx-step-controls">
+        <button class="btn" type="button" id="rvx-prev">Previous</button>
+        <button class="btn btn-primary" type="button" id="rvx-next">Next</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="rvx-stack" aria-labelledby="rvx-packet-title">
+    <div class="rvx-packet-head">
+      <div>
+        <h3 id="rvx-packet-title">Packet on this link</h3>
+        <p class="text-small text-muted">Click a header to inspect its fields · blocks are not to scale</p>
+      </div>
+      <div class="rvx-packet-meta text-small tabular-nums" id="rvx-total"></div>
+    </div>
+
+    <div class="rvx-layer-row" id="rvx-outer-row">
+      <div class="rvx-layer-label text-small">
+        <span>Outer underlay tunnel</span>
+        <span class="text-muted">added and removed by VTEPs</span>
+      </div>
+      <div class="rvx-segments" id="rvx-outer"></div>
+      <div class="rvx-empty-outer text-small text-muted" id="rvx-no-outer">No VXLAN wrapper on this host-facing link.</div>
+    </div>
+
+    <div class="rvx-layer-row">
+      <div class="rvx-layer-label text-small">
+        <span>Inner tenant RoCEv2 frame</span>
+        <span class="text-muted">end-to-end IP + RDMA transport</span>
+      </div>
+      <div class="rvx-segments" id="rvx-inner"></div>
+    </div>
+
+    <div class="rvx-layer-row">
+      <div class="rvx-layer-label text-small">
+        <span>Current-link trailer</span>
+        <span class="text-muted" id="rvx-trailer-note">fresh access-link FCS</span>
+      </div>
+      <div class="rvx-segments" id="rvx-trailer"></div>
+    </div>
+
+    <div class="card rvx-detail" id="rvx-detail" aria-live="polite"></div>
+  </section>
+
+  <div class="rvx-foot text-small text-muted">
+    <span>Example data: 1,024 B</span>
+    <span>No VLAN tags</span>
+    <span>FCS included; preamble/SFD and inter-frame gap excluded</span>
+    <span>VXLAN adds 50 B before the inner frame with IPv4</span>
+  </div>
+
+  <script>
+    (() => {
+      const root = document.getElementById('rocev2-vxlan-evpn-packet-journey');
+      if (!root) return;
+
+      const stageDefs = [
+        { short: 'RNIC', name: 'Host A RNIC', sub: '10.10.10.11' },
+        { short: 'VTEP', name: 'Leaf 1 VTEP', sub: '192.0.2.11' },
+        { short: 'IP', name: 'Spine fabric', sub: 'underlay only' },
+        { short: 'VTEP', name: 'Leaf 2 VTEP', sub: '192.0.2.12' },
+        { short: 'RNIC', name: 'Host B RNIC', sub: 'destination' }
+      ];
+
+      const commonInner = {
+        innerUdp: {
+          name: 'Inner UDP', bytes: '8 B', tone: 'inner',
+          facts: [
+            ['Source port', '52174 · opaque flow ID'],
+            ['Destination port', '4791 · RoCEv2'],
+            ['Checksum', 'Usually 0 for RoCEv2'],
+            ['Used by', 'RNIC; VTEP entropy hash']
+          ],
+          why: 'This is the real RoCEv2 UDP header. Keep its source port stable for packets whose ordering matters.'
+        },
+        bth: {
+          name: 'BTH', bytes: '12 B', tone: 'rdma',
+          facts: [
+            ['Opcode', '0x0A · RC RDMA_WRITE_ONLY'],
+            ['Destination QP', '0x012345'],
+            ['Packet sequence', '0x00042A'],
+            ['P_Key / AckReq', '0xFFFF / 1']
+          ],
+          why: 'The Base Transport Header identifies the RDMA operation, destination queue pair, ordering sequence, partition, and acknowledgment behavior.'
+        },
+        reth: {
+          name: 'RETH', bytes: '16 B', tone: 'rdma',
+          facts: [
+            ['Virtual address', '0x0000000100007000'],
+            ['R_Key', '0x00ABC123'],
+            ['DMA length', '1,024 B'],
+            ['Present on', 'Write Only / first Write packet']
+          ],
+          why: 'The RDMA Extended Transport Header tells the receiver where, under which remote key, and how many bytes to place directly into registered memory.'
+        },
+        data: {
+          name: 'RDMA data', bytes: '1,024 B', tone: 'rdma',
+          facts: [
+            ['Content', 'Application bytes'],
+            ['Placement', 'Remote registered memory'],
+            ['CPU copy', 'Not required in the data path'],
+            ['Example size', '1,024 B']
+          ],
+          why: 'This is the payload that the destination RNIC places directly at the address described by the RETH.'
+        },
+        pad: {
+          name: 'Pad', bytes: '0–3 B', tone: 'rdma',
+          facts: [
+            ['This example', '0 B'],
+            ['Purpose', '4-byte alignment'],
+            ['Length source', 'BTH Pad Count'],
+            ['Protected by', 'iCRC']
+          ],
+          why: 'InfiniBand transport padding aligns the packet to a 4-byte boundary. It is not application data.'
+        },
+        icrc: {
+          name: 'iCRC', bytes: '4 B', tone: 'integrity',
+          facts: [
+            ['Scope', 'Inner IP datagram through IB payload/pad'],
+            ['Width', '32 bits'],
+            ['Mutable fields', 'Normalized before calculation'],
+            ['Checked by', 'Destination RNIC']
+          ],
+          why: 'The end-to-end invariant CRC survives routing because inner TTL, IP checksum, DSCP/ECN, and UDP checksum are normalized for its calculation. Outer VXLAN headers are outside its scope.'
+        },
+        fcs: {
+          name: 'Link FCS', bytes: '4 B', tone: 'integrity',
+          facts: [
+            ['Scope', 'Current Ethernet frame'],
+            ['Lifetime', 'One physical link'],
+            ['At each egress', 'Recomputed'],
+            ['Inside VXLAN payload', 'Original FCS is omitted']
+          ],
+          why: 'FCS protects one Ethernet hop. Each switch validates and emits a new FCS; the RoCE iCRC provides separate end-to-end protection.'
+        }
+      };
+
+      const outerFields = (step, vni, vniRole) => ({
+        outerEth: {
+          name: 'Outer Ethernet', bytes: '14 B', tone: 'outer',
+          facts: step === 1 ? [
+            ['Source MAC', 'Leaf 1 uplink MAC'],
+            ['Destination MAC', 'Spine next-hop MAC'],
+            ['EtherType', '0x0800 · IPv4'],
+            ['Lifetime', 'Rewritten each routed hop']
+          ] : [
+            ['Source MAC', 'Spine egress MAC'],
+            ['Destination MAC', 'Leaf 2 uplink MAC'],
+            ['EtherType', '0x0800 · IPv4'],
+            ['Change here', 'New L2 header + new FCS']
+          ],
+          why: 'The underlay Ethernet header reaches only the next physical hop. It is not the tenant Ethernet header.'
+        },
+        outerIp: {
+          name: 'Outer IPv4', bytes: '20 B', tone: 'outer',
+          facts: [
+            ['Source VTEP', '192.0.2.11'],
+            ['Destination VTEP', '192.0.2.12'],
+            ['Protocol', '17 · UDP'],
+            ['TTL', step === 1 ? '64' : '63 · decremented by spine']
+          ],
+          why: 'Spines route on this destination VTEP IP. Tenant IP addresses stay hidden inside the VXLAN payload.'
+        },
+        outerUdp: {
+          name: 'Outer UDP', bytes: '8 B', tone: 'outer',
+          facts: [
+            ['Source port', '55001 · inner-flow hash'],
+            ['Destination port', '4789 · VXLAN'],
+            ['Purpose of source', 'Underlay ECMP entropy'],
+            ['Checksum', '0 allowed with outer IPv4']
+          ],
+          why: 'This UDP header belongs to VXLAN. Its source port lets an IP fabric spread different inner flows while keeping one ordered flow on one path.'
+        },
+        vxlan: {
+          name: 'VXLAN', bytes: '8 B', tone: 'vxlan',
+          facts: [
+            ['I flag', '1 · VNI valid'],
+            ['VNI', vni],
+            ['VNI role', vniRole],
+            ['Reserved bits', '0 on transmit']
+          ],
+          why: 'The 24-bit VNI selects the tenant forwarding context at the egress VTEP. EVPN learned the mapping; EVPN itself adds no packet header.'
+        }
+      });
+
+      const scenarios = {
+        l2: {
+          evpn: 'RT-2 maps Host B MAC/IP to VTEP 192.0.2.12 and L2 VNI 10100. BGP EVPN is control-plane state—not a data-packet header.',
+          hostB: '10.10.10.22',
+          steps: [
+            {
+              kicker: 'Step 1 of 5 · source access link',
+              text: 'Host A’s RNIC builds an IPv4 RoCEv2 datagram and sends an Ethernet frame directly to Host B’s MAC.',
+              delta: 'Created: UDP 4791 + BTH + RETH + data + end-to-end iCRC.',
+              encapsulated: false, total: '1,102 B on wire',
+              innerEth: ['02:00:00:00:10:11', '02:00:00:00:10:22', 'Host A → Host B', 'created'],
+              innerIp: ['10.10.10.11', '10.10.10.22', '64', 'created']
+            },
+            {
+              kicker: 'Step 2 of 5 · after VXLAN encapsulation',
+              text: 'Leaf 1 looks up Host B’s EVPN entry, removes the access-link FCS, and prepends the underlay/VXLAN wrapper for Leaf 2.',
+              delta: 'Added: 50 B of outer Ethernet + IPv4 + UDP 4789 + VXLAN; inner frame preserved.',
+              encapsulated: true, total: '1,152 B on wire',
+              innerEth: ['02:00:00:00:10:11', '02:00:00:00:10:22', 'Host A → Host B', 'preserved'],
+              innerIp: ['10.10.10.11', '10.10.10.22', '64', 'preserved']
+            },
+            {
+              kicker: 'Step 3 of 5 · spine forwarding',
+              text: 'The spine reads only the outer destination VTEP IP. VXLAN stays encapsulated while the outer Ethernet header and outer TTL change.',
+              delta: 'Changed: outer MACs and outer TTL 64 → 63. Inner RoCEv2 bytes stay untouched.',
+              encapsulated: true, total: '1,152 B on wire',
+              innerEth: ['02:00:00:00:10:11', '02:00:00:00:10:22', 'Host A → Host B', 'preserved'],
+              innerIp: ['10.10.10.11', '10.10.10.22', '64', 'preserved']
+            },
+            {
+              kicker: 'Step 4 of 5 · destination access link',
+              text: 'Leaf 2 removes the VXLAN wrapper, bridges on Host B’s inner MAC, and emits the original tenant frame with a new link FCS.',
+              delta: 'Removed: outer tunnel. Preserved: inner MACs, IPs, UDP 4791, BTH, data, and iCRC.',
+              encapsulated: false, total: '1,102 B on wire',
+              innerEth: ['02:00:00:00:10:11', '02:00:00:00:10:22', 'Host A → Host B', 'preserved'],
+              innerIp: ['10.10.10.11', '10.10.10.22', '64', 'preserved']
+            },
+            {
+              kicker: 'Step 5 of 5 · destination RNIC',
+              text: 'Host B’s RNIC validates the iCRC, destination QP, R_Key, and PSN, then places the 1,024 data bytes directly into registered memory.',
+              delta: 'Consumed: transport headers. Result: DMA placement plus completion/ACK behavior required by RC.',
+              encapsulated: false, total: '1,102 B received',
+              innerEth: ['02:00:00:00:10:11', '02:00:00:00:10:22', 'Host A → Host B', 'received'],
+              innerIp: ['10.10.10.11', '10.10.10.22', '64', 'received']
+            }
+          ]
+        },
+        irb: {
+          evpn: 'RT-2 host routes (and optionally RT-5 prefixes) populate Tenant VRF BLUE; the remote router MAC and L3 VNI 50000 resolve to VTEP 192.0.2.12. No EVPN header rides with the data.',
+          hostB: '10.20.20.22',
+          steps: [
+            {
+              kicker: 'Step 1 of 5 · source subnet',
+              text: 'Host A’s RNIC builds the same RoCEv2/IP payload, but Ethernet destination is the local anycast gateway because Host B is off-subnet.',
+              delta: 'Created: end-to-end RoCEv2 packet; destination MAC is GW-ANYCAST, not Host B.',
+              encapsulated: false, total: '1,102 B on wire',
+              innerEth: ['02:00:00:00:10:11', '00:00:5e:00:01:01', 'Host A → anycast gateway', 'created'],
+              innerIp: ['10.10.10.11', '10.20.20.22', '64', 'created']
+            },
+            {
+              kicker: 'Step 2 of 5 · ingress symmetric IRB',
+              text: 'Leaf 1 routes in VRF BLUE, decrements inner TTL, rewrites the inner Ethernet header to the two VTEP router MACs, then encapsulates in L3 VNI 50000.',
+              delta: 'Changed: inner MACs and TTL 64 → 63. Added: VXLAN underlay wrapper carrying the L3 VNI.',
+              encapsulated: true, total: '1,152 B on wire',
+              innerEth: ['02:00:00:00:a1:01', '02:00:00:00:b2:02', 'Leaf 1 router → Leaf 2 router', 'rewritten'],
+              innerIp: ['10.10.10.11', '10.20.20.22', '63', 'TTL changed']
+            },
+            {
+              kicker: 'Step 3 of 5 · spine forwarding',
+              text: 'The spine still performs only underlay IP forwarding. It does not enter VRF BLUE and does not inspect the RoCEv2 BTH.',
+              delta: 'Changed: outer MACs and outer TTL 64 → 63. Tenant packet remains inside L3 VNI 50000.',
+              encapsulated: true, total: '1,152 B on wire',
+              innerEth: ['02:00:00:00:a1:01', '02:00:00:00:b2:02', 'Leaf 1 router → Leaf 2 router', 'preserved'],
+              innerIp: ['10.10.10.11', '10.20.20.22', '63', 'preserved in transit']
+            },
+            {
+              kicker: 'Step 4 of 5 · egress symmetric IRB',
+              text: 'Leaf 2 decapsulates into VRF BLUE, performs the egress IP and MAC lookups, decrements inner TTL again, and sends the packet to Host B.',
+              delta: 'Removed: tunnel. Changed: TTL 63 → 62 and Ethernet to anycast gateway → Host B.',
+              encapsulated: false, total: '1,102 B on wire',
+              innerEth: ['00:00:5e:00:01:01', '02:00:00:00:20:22', 'anycast gateway → Host B', 'rewritten'],
+              innerIp: ['10.10.10.11', '10.20.20.22', '62', 'TTL changed']
+            },
+            {
+              kicker: 'Step 5 of 5 · destination RNIC',
+              text: 'Host B’s RNIC receives the routed RoCEv2 datagram, validates the invariant CRC and RDMA keys/sequence, then performs the direct memory placement.',
+              delta: 'The iCRC remains valid even though routers changed TTL, IP checksum, and potentially DSCP/ECN.',
+              encapsulated: false, total: '1,102 B received',
+              innerEth: ['00:00:5e:00:01:01', '02:00:00:00:20:22', 'anycast gateway → Host B', 'received'],
+              innerIp: ['10.10.10.11', '10.20.20.22', '62', 'received']
+            }
+          ]
+        }
+      };
+
+      let mode = 'l2';
+      let stepIndex = 0;
+      let selectedKey = 'innerUdp';
+
+      const els = {
+        evpn: root.querySelector('#rvx-evpn'),
+        stages: root.querySelector('#rvx-stages'),
+        progress: root.querySelector('#rvx-progress'),
+        marker: root.querySelector('#rvx-marker'),
+        kicker: root.querySelector('#rvx-step-kicker'),
+        text: root.querySelector('#rvx-step-text'),
+        delta: root.querySelector('#rvx-delta'),
+        prev: root.querySelector('#rvx-prev'),
+        next: root.querySelector('#rvx-next'),
+        total: root.querySelector('#rvx-total'),
+        outer: root.querySelector('#rvx-outer'),
+        noOuter: root.querySelector('#rvx-no-outer'),
+        inner: root.querySelector('#rvx-inner'),
+        trailer: root.querySelector('#rvx-trailer'),
+        trailerNote: root.querySelector('#rvx-trailer-note'),
+        detail: root.querySelector('#rvx-detail')
+      };
+
+      const makeInnerFields = (step) => ({
+        innerEth: {
+          name: 'Inner Ethernet', bytes: '14 B', tone: 'inner',
+          status: step.innerEth[3],
+          facts: [
+            ['Source MAC', step.innerEth[0]],
+            ['Destination MAC', step.innerEth[1]],
+            ['Meaning', step.innerEth[2]],
+            ['EtherType', '0x0800 · IPv4']
+          ],
+          why: mode === 'l2'
+            ? 'In an L2 VNI, this tenant Ethernet header is carried across the fabric unchanged.'
+            : 'In symmetric IRB, the leafs route the tenant IP packet, so this Ethernet header is rewritten at the ingress and egress VTEPs.'
+        },
+        innerIp: {
+          name: 'Inner IPv4', bytes: '20 B', tone: 'inner',
+          status: step.innerIp[3],
+          facts: [
+            ['Source IP', step.innerIp[0]],
+            ['Destination IP', step.innerIp[1]],
+            ['TTL', step.innerIp[2]],
+            ['Protocol / flags', '17 UDP / DF=1']
+          ],
+          why: mode === 'l2'
+            ? 'The host-to-host RoCEv2 IP header remains unchanged while the fabric bridges the frame through the L2 VNI.'
+            : 'This is the routed tenant IP header. Symmetric IRB decrements its TTL at both ingress and egress leaf lookups.'
+        },
+        innerUdp: { ...commonInner.innerUdp, status: stepIndex === 0 ? 'created' : (stepIndex === 4 ? 'received' : 'preserved') },
+        bth: { ...commonInner.bth, status: stepIndex === 0 ? 'created' : (stepIndex === 4 ? 'consumed' : 'end-to-end') },
+        reth: { ...commonInner.reth, status: stepIndex === 0 ? 'created' : (stepIndex === 4 ? 'consumed' : 'end-to-end') },
+        data: { ...commonInner.data, status: stepIndex === 4 ? 'DMA placed' : 'end-to-end' },
+        pad: { ...commonInner.pad, status: '0 B here' },
+        icrc: { ...commonInner.icrc, status: stepIndex === 4 ? 'validated' : 'end-to-end' },
+        fcs: { ...commonInner.fcs, status: stepIndex === 4 ? 'validated' : 'new on link' }
+      });
+
+      const fieldButton = (key, field, index) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `btn viz-tile rvx-seg rvx-tone-${field.tone}`;
+        button.dataset.key = key;
+        button.setAttribute('aria-pressed', key === selectedKey ? 'true' : 'false');
+        button.innerHTML = `
+          <span class="rvx-seg-index text-small tabular-nums">${String(index + 1).padStart(2, '0')}</span>
+          <span class="rvx-seg-name">${field.name}</span>
+          <span class="text-small tabular-nums">${field.bytes}</span>
+          <span class="rvx-seg-status text-small">${field.status}</span>`;
+        button.addEventListener('click', () => {
+          selectedKey = key;
+          renderPacket();
+        });
+        return button;
+      };
+
+      const renderStages = () => {
+        els.stages.innerHTML = '';
+        stageDefs.forEach((stage, index) => {
+          const li = document.createElement('li');
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'btn btn-ghost rvx-stage-btn';
+          button.setAttribute('aria-label', `Step ${index + 1}: ${stage.name}`);
+          if (index === stepIndex) button.setAttribute('aria-current', 'step');
+          button.innerHTML = `
+            <span class="rvx-node text-small" aria-hidden="true">${stage.short}</span>
+            <span class="rvx-stage-copy">
+              <span class="rvx-stage-name">${stage.name}</span>
+              <span class="text-small text-muted">${stage.sub}</span>
+            </span>`;
+          button.addEventListener('click', () => {
+            stepIndex = index;
+            render();
+          });
+          li.appendChild(button);
+          els.stages.appendChild(li);
+        });
+      };
+
+      const renderPacket = () => {
+        const scenario = scenarios[mode];
+        const step = scenario.steps[stepIndex];
+        const inner = makeInnerFields(step);
+        const trailer = { fcs: inner.fcs };
+        delete inner.fcs;
+        const outer = step.encapsulated
+          ? outerFields(stepIndex, mode === 'l2' ? '10100' : '50000', mode === 'l2' ? 'L2 bridge domain' : 'Tenant VRF BLUE')
+          : {};
+
+        Object.values(outer).forEach((field) => {
+          field.status = stepIndex === 1 ? 'added' : (field.name === 'Outer Ethernet' || field.name === 'Outer IPv4' ? 'changed' : 'carried');
+        });
+
+        const allFields = { ...outer, ...inner, ...trailer };
+        if (!allFields[selectedKey]) selectedKey = step.encapsulated ? 'vxlan' : 'innerUdp';
+
+        els.outer.innerHTML = '';
+        els.inner.innerHTML = '';
+        els.trailer.innerHTML = '';
+        els.noOuter.hidden = step.encapsulated;
+        els.outer.hidden = !step.encapsulated;
+        els.trailerNote.textContent = step.encapsulated ? 'new FCS for the outer Ethernet frame' : 'fresh access-link FCS';
+
+        let index = 0;
+        Object.entries(outer).forEach(([key, field]) => {
+          els.outer.appendChild(fieldButton(key, field, index++));
+        });
+        Object.entries(inner).forEach(([key, field]) => {
+          els.inner.appendChild(fieldButton(key, field, index++));
+        });
+        Object.entries(trailer).forEach(([key, field]) => {
+          els.trailer.appendChild(fieldButton(key, field, index++));
+        });
+
+        const selected = allFields[selectedKey];
+        const facts = selected.facts.map(([term, value]) => `
+          <div><dt class="text-small">${term}</dt><dd class="tabular-nums">${value}</dd></div>`).join('');
+        els.detail.innerHTML = `
+          <div class="rvx-detail-head">
+            <div class="rvx-detail-title">
+              <h3>${selected.name} · ${selected.bytes}</h3>
+              <span class="text-small text-muted">Status here: ${selected.status}</span>
+            </div>
+            <span class="viz-badge">${selectedKey === 'fcs' ? 'current-link integrity' : (selected.tone === 'outer' || selected.tone === 'vxlan' ? 'underlay / overlay wrapper' : 'inner tenant packet')}</span>
+          </div>
+          <dl class="rvx-detail-grid">${facts}</dl>
+          <p class="text-small">${selected.why}</p>`;
+      };
+
+      const render = () => {
+        const scenario = scenarios[mode];
+        const step = scenario.steps[stepIndex];
+        stageDefs[4].sub = scenario.hostB;
+        els.evpn.textContent = scenario.evpn;
+        els.kicker.textContent = step.kicker;
+        els.text.textContent = step.text;
+        els.delta.textContent = step.delta;
+        els.total.textContent = `${step.total} · ${step.encapsulated ? 'VXLAN encapsulated' : 'native RoCEv2 frame'}`;
+        els.progress.style.width = `${stepIndex * 20}%`;
+        els.marker.style.left = `${10 + stepIndex * 20}%`;
+        els.prev.disabled = stepIndex === 0;
+        els.next.disabled = stepIndex === 4;
+        renderStages();
+        renderPacket();
+      };
+
+      root.querySelectorAll('input[name="rvx-mode"]').forEach((radio) => {
+        radio.addEventListener('change', (event) => {
+          mode = event.target.value;
+          stepIndex = 0;
+          selectedKey = 'innerUdp';
+          render();
+        });
+      });
+
+      els.prev.addEventListener('click', () => {
+        if (stepIndex > 0) {
+          stepIndex -= 1;
+          render();
+        }
+      });
+
+      els.next.addEventListener('click', () => {
+        if (stepIndex < 4) {
+          stepIndex += 1;
+          render();
+        }
+      });
+
+      render();
+    })();
+  </script>
+</div>
+
+
+
+
+<script>
+(() => {
+  const report = () => parent.postMessage(
+    { type: "embed-height", height: Math.ceil(document.body.getBoundingClientRect().height) }, "*");
+  new ResizeObserver(report).observe(document.body);
+  window.addEventListener("load", report);
+})();
+</script>
+</body>
+</html>

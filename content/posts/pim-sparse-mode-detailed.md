@@ -450,6 +450,41 @@ The behaviors worth internalizing:
 
 A practical reminder tying back to the earlier sections: IGMP only ever runs **between hosts and their first-hop router** — it never builds the router-to-router tree. Everything from section 4 onward (the `(*,G)`/`(S,G)` joins, Register, RP) is PIM, driven by the membership IGMP reports to the DR.
 
+### 18.2 IGMP snooping, packet by packet
+
+How a switch turns those IGMP messages into per-port forwarding state — step through ten packets on a five-port switch (querier on `p1`, source on `p2`, three receivers): the General Query that finds the router port, two joins building the group table, data replicated to exactly the member ports, and the full normal-leave sequence — Leave, Group-Specific Queries, timeout, removal:
+
+{{< embed src="/posts/pim-sparse-mode-detailed/igmp-snooping.html" title="IGMP snooping packet walkthrough" height="1500" >}}
+
+### 18.3 Fast leave (immediate leave)
+
+Steps 6–9 of the walkthrough above are deliberately slow: when Receiver A leaves, the switch keeps forwarding to `p3` while Group-Specific Queries check whether anyone else still listens there, and removes `p3` only after the last-member timeout. **Fast leave** (Cisco calls it *immediate leave*) skips all of that: the switch removes the port from the group the moment the Leave arrives.
+
+| | Normal leave (walkthrough steps 6–9) | Fast leave |
+|---|---|---|
+| Receiver A sends Leave on `p3` | Leave received | Leave received |
+| Switch reaction | Group-Specific Queries; keep forwarding while waiting for reports | Remove `p3` from the group **immediately** |
+| Traffic to `p3` stops | after no response and the last-member timeout (seconds) | instantly |
+
+![Normal leave versus fast leave on a snooping switch, and the shared-port hazard: fast leave removes port p3 on Receiver A's Leave, cutting off Receiver B behind the same downstream switch](/posts/pim-sparse-mode-detailed/pim-igmp-fast-leave.svg)
+
+The catch: **a port is not a receiver.** The whole reason normal leave waits is that one switch port may lead to several hosts:
+
+```text
+Snooping switch ── p3 ── downstream switch ──► Receiver A
+                                          └──► Receiver B
+```
+
+If A leaves while B still wants the same group, fast leave removes the shared port `p3` — cutting off both. B never sent a Leave, but its traffic stops anyway, and it stays dark until the next periodic General Query prompts it to report again — up to a full query interval (typically minutes) of outage.
+
+The rule of thumb: enable fast leave only where **exactly one receiver sits behind each port** — the classic case being a directly attached IPTV set-top box, which is exactly why the knob exists: channel zapping wants sub-second leave latency, and an STB port has exactly one host behind it.
+
+```text
+ip igmp snooping vlan 10 immediate-leave     ! Cisco IOS
+```
+
+Ports toward downstream switches, APs, or hubs need normal leave processing — unless the switch explicitly supports safe fast leave through per-host tracking (often called *explicit tracking*, built on IGMPv3's independent per-host reports from section 18.1), which lets it remove the port only when the *last* tracked host behind it has left.
+
 ## 19. Troubleshooting Order
 
 When PIM-SM traffic is not reaching a receiver, verify:

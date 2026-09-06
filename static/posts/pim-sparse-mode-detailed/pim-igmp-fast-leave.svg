@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="850" viewBox="0 0 1200 850" role="img" aria-labelledby="title desc">
+  <title id="title">IGMP snooping fast leave versus normal leave</title>
+  <desc id="desc">Left: normal leave — the switch answers a Leave with Group-Specific Queries and removes port p3 only after the last-member timeout. Right: fast leave — port p3 is removed the instant the Leave arrives. Bottom: the shared-port hazard — Receiver A's Leave removes port p3 and cuts off Receiver B behind the same downstream switch.</desc>
+  <defs>
+    <style>
+      .bg{fill:#fff}.node{fill:#eef6ff;stroke:#7c9bbd;stroke-width:2}.label{font:600 19px Arial,sans-serif;fill:#17212b;text-anchor:middle}.sub{font:15px Arial,sans-serif;fill:#506070;text-anchor:middle}.step{font:600 17px Arial,sans-serif;fill:#17212b}.detail{font:15px Arial,sans-serif;fill:#506070}.line{stroke:#d2dbe5;stroke-width:2;fill:none}.igmp{stroke:#7257c7;stroke-width:4;fill:none}.pim{stroke:#1677c8;stroke-width:4;fill:none}.cut{stroke:#d0342c;stroke-width:5;stroke-linecap:round;fill:none}.phase{font:600 18px Arial,sans-serif;fill:#17212b}.t-igmp{font:600 15px Arial,sans-serif;fill:#7257c7}.t-pim{font:600 15px Arial,sans-serif;fill:#1677c8}.t-stop{font:600 15px Arial,sans-serif;fill:#d06b25}.t-cut{font:600 15px Arial,sans-serif;fill:#d0342c}.divider{stroke:#e3e9f0;stroke-width:2}
+    </style>
+    <marker id="igmp-arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#7257c7"/></marker>
+    <marker id="pim-arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#1677c8"/></marker>
+  </defs>
+  <rect class="bg" width="1200" height="850"/>
+  <text x="50" y="42" class="phase">IGMP snooping fast leave — normal leave vs immediate leave, and when it is safe</text>
+
+  <!-- Left panel: normal leave -->
+  <text x="60" y="84" class="step">Normal leave (what the walkthrough shows)</text>
+  <rect class="node" x="140" y="104" width="320" height="64" rx="10"/>
+  <text class="label" x="300" y="130">Snooping switch</text>
+  <text class="sub" x="300" y="152">239.1.1.1 → { p3, … }</text>
+  <rect class="node" x="230" y="336" width="140" height="60" rx="10"/>
+  <text class="label" x="300" y="362">Receiver A</text>
+  <text class="sub" x="300" y="384">on port p3</text>
+  <path class="line" d="M300 168V336"/>
+  <text class="detail" x="308" y="188">p3</text>
+  <path class="igmp" marker-end="url(#igmp-arrow)" d="M268 326L268 178"/>
+  <text class="t-igmp" text-anchor="end" x="250" y="256">1 · Leave Group</text>
+  <text class="detail" text-anchor="end" x="250" y="276">(0x17)</text>
+  <path class="pim" marker-end="url(#pim-arrow)" d="M332 178L332 326"/>
+  <text class="t-pim" x="350" y="246">2 · Group-Specific Query</text>
+  <text class="detail" x="350" y="268">forwarding to p3 continues</text>
+  <text class="step" x="60" y="440">3</text>
+  <text class="detail" x="80" y="440">no report before the last-member timeout (≈ a few seconds)</text>
+  <text class="detail" x="80" y="464">→ only then is p3 removed and its traffic stopped</text>
+
+  <line class="divider" x1="600" y1="80" x2="600" y2="480"/>
+
+  <!-- Right panel: fast leave -->
+  <text x="640" y="84" class="step">Fast leave (immediate leave)</text>
+  <rect class="node" x="720" y="104" width="320" height="64" rx="10"/>
+  <text class="label" x="880" y="130">Snooping switch</text>
+  <text class="sub" x="880" y="152">fast leave enabled</text>
+  <rect class="node" x="810" y="336" width="140" height="60" rx="10"/>
+  <text class="label" x="880" y="362">Receiver A</text>
+  <text class="sub" x="880" y="384">on port p3</text>
+  <path class="line" d="M880 168V336"/>
+  <text class="detail" x="888" y="188">p3</text>
+  <path class="igmp" marker-end="url(#igmp-arrow)" d="M848 326L848 178"/>
+  <text class="t-igmp" text-anchor="end" x="830" y="256">1 · Leave Group</text>
+  <text class="detail" text-anchor="end" x="830" y="276">(0x17)</text>
+  <path class="cut" d="M868 288L892 312"/>
+  <path class="cut" d="M892 288L868 312"/>
+  <text class="t-stop" x="912" y="246">2 · p3 removed immediately</text>
+  <text class="detail" x="912" y="268">no query, no timeout</text>
+  <text class="step" x="640" y="440">3</text>
+  <text class="detail" x="660" y="440">traffic to p3 stops the instant the Leave arrives —</text>
+  <text class="detail" x="660" y="464">safe only if A was the last listener behind p3</text>
+
+  <line class="divider" x1="50" y1="505" x2="1150" y2="505"/>
+
+  <!-- The catch: shared port -->
+  <text x="50" y="545" class="phase">The catch — one port can hide several receivers</text>
+  <rect class="node" x="80" y="575" width="230" height="64" rx="10"/>
+  <text class="label" x="195" y="601">Snooping switch</text>
+  <text class="sub" x="195" y="623">fast leave enabled</text>
+  <rect class="node" x="470" y="575" width="240" height="64" rx="10"/>
+  <text class="label" x="590" y="601">Downstream switch</text>
+  <text class="sub" x="590" y="623">(or AP / media converter)</text>
+  <path class="line" d="M310 607H470"/>
+  <text class="detail" x="322" y="596">p3</text>
+  <path class="cut" d="M378 595L402 619"/>
+  <path class="cut" d="M402 595L378 619"/>
+  <text class="t-cut" text-anchor="middle" x="390" y="672">fast leave removes p3 on A’s Leave</text>
+  <rect class="node" x="860" y="540" width="170" height="56" rx="10"/>
+  <text class="label" x="945" y="562">Receiver A</text>
+  <text class="sub" x="945" y="584">sends Leave</text>
+  <rect class="node" x="860" y="650" width="170" height="56" rx="10"/>
+  <text class="label" x="945" y="672">Receiver B</text>
+  <text class="sub" x="945" y="694">still wants 239.1.1.1</text>
+  <path class="line" d="M710 602L860 568"/>
+  <path class="line" d="M710 612L860 678"/>
+  <path class="igmp" marker-end="url(#igmp-arrow)" d="M856 560L722 592"/>
+  <text class="t-igmp" x="748" y="542">Leave from A</text>
+
+  <text class="step" x="50" y="750">If A leaves while B is still listening, fast leave removes the shared port p3 — and cuts off B too.</text>
+  <text class="detail" x="50" y="782">Use fast leave only where exactly one receiver sits behind each port (e.g. a directly attached set-top box).</text>
+  <text class="detail" x="50" y="808">Ports toward downstream switches need normal leave processing — or explicit per-host tracking, where supported.</text>
+</svg>

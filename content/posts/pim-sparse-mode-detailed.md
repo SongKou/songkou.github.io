@@ -32,6 +32,10 @@ The whole control-plane and data-plane progression at a glance — the twelve nu
 
 ![PIM Sparse Mode control-plane and data-plane progression across Receiver, LHR, RP, FHR, and Source: IGMP report, shared-tree join, source registration, native source tree, Register-Stop, optional SPT switchover, and RPT prune](/posts/pim-sparse-mode-detailed/pim-sparse-mode-steps.svg)
 
+The same progression, clickable — step through the twelve steps one at a time (or jump to a phase) and watch each message drawn against the trees the earlier steps already built:
+
+{{< embed src="/posts/pim-sparse-mode-detailed/pim-complete-process-walk.html" title="PIM Sparse Mode complete process, step by step" height="920" >}}
+
 ## 3. Receiver Announces Membership
 
 The receiving host sends an IGMP Membership Report for group `G`.

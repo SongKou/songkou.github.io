@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>PIM-SM complete process, step by step</title>
+<style>
+  :root {
+    color-scheme: dark;
+    /* pinned to the blog's m10c palette so the embed blends into the post */
+    --bg: #353b43;
+    --bg2: #3f464f;
+    --text: #d6dde3;
+    --muted: rgb(214 221 227 / 62%);
+    --accent: #57cc8a;
+    --accent-bg: rgb(87 204 138 / 16%);
+    --border: rgb(255 255 255 / 14%);
+    --border2: rgb(255 255 255 / 10%);
+    --changed: #e8b04b;
+    --changed-bg: rgb(232 176 75 / 14%);
+    --steady: #57cc8a;
+    --risk: #e07a5f;
+    --igmp: #b294f5;
+    --pim: #6cb6ff;
+    --data: #57cc8a;
+    --reg: #e8b04b;
+    --stop: #e07a5f;
+    background: var(--bg);
+  }
+  html, body { margin: 0; }
+  body {
+    box-sizing: border-box;
+    padding: 6px 2px;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  #pim-walk { width: 100%; }
+  #pim-walk h2 { font-size: 18px; margin: 2px 0 2px; }
+  #pim-walk .sub { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
+  #pim-walk code, #pim-walk .mono {
+    font-family: Consolas, Menlo, monospace;
+    font-size: 12.5px;
+  }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .btn {
+    font: inherit; font-size: 13px;
+    min-height: 28px; padding: 2px 10px; margin: 0;
+    color: var(--text); background: var(--bg2);
+    border: 1px solid var(--border); border-radius: 999px;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn[aria-pressed="true"] {
+    color: var(--accent); background: var(--accent-bg);
+    border-color: var(--accent); font-weight: 600;
+  }
+
+  .steps { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .chip {
+    font: inherit; font-size: 12px;
+    min-height: 26px; padding: 1px 9px; margin: 0;
+    color: var(--text); background: var(--bg2);
+    border: 1px solid var(--border); border-radius: 999px;
+    cursor: pointer; white-space: nowrap;
+  }
+  .chip:hover { border-color: var(--accent); }
+  .chip[data-active="true"] {
+    color: var(--accent); background: var(--accent-bg);
+    border-color: var(--accent); font-weight: 600;
+  }
+  .chip[data-done="true"]:not([data-active="true"]) { border-color: rgb(87 204 138 / 45%); }
+
+  .topo {
+    border: 1px solid var(--border2); border-radius: 10px;
+    background: var(--bg2); padding: 6px 4px 2px; margin-bottom: 12px;
+    overflow-x: auto;
+  }
+  .topo svg { display: block; width: 100%; min-width: 640px; height: auto; }
+  .topo .nodebox { fill: var(--bg); stroke: var(--border); stroke-width: 1.2; }
+  .topo .nodebox[data-active="true"] { stroke: var(--accent); fill: rgb(87 204 138 / 10%); }
+  .topo .nodelabel { font: 600 15px -apple-system, "Segoe UI", Roboto, sans-serif; fill: var(--text); text-anchor: middle; }
+  .topo .nodesub { font: 11px -apple-system, "Segoe UI", Roboto, sans-serif; fill: var(--muted); text-anchor: middle; }
+  .topo .lifeline { stroke: var(--border2); stroke-width: 1; stroke-dasharray: 2 4; }
+  .topo .est { stroke: rgb(87 204 138 / 45%); stroke-width: 3; }
+  .topo .est-pruned { stroke: rgb(224 122 95 / 55%); stroke-width: 3; stroke-dasharray: 5 5; }
+  .topo .est-cap { font: 11px -apple-system, "Segoe UI", Roboto, sans-serif; text-anchor: middle; fill: rgb(87 204 138 / 70%); }
+  .topo .est-cap.pruned { fill: rgb(224 122 95 / 80%); }
+  .topo .msg { stroke: var(--mc); stroke-width: 2.5; fill: none; stroke-dasharray: 9 6; }
+  .topo .msglabel { font: 12.5px -apple-system, "Segoe UI", Roboto, sans-serif; text-anchor: middle; fill: var(--mc); }
+  .topo .k-igmp { --mc: var(--igmp); }
+  .topo .k-pim { --mc: var(--pim); }
+  .topo .k-data { --mc: var(--data); }
+  .topo .k-reg { --mc: var(--reg); }
+  .topo .k-stop { --mc: var(--stop); }
+  @media (prefers-reduced-motion: no-preference) {
+    .topo.live .msg { animation: dashflow 1.1s linear infinite; }
+  }
+  @keyframes dashflow { to { stroke-dashoffset: -15; } }
+
+  .summary {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline;
+    border: 1px solid var(--border2); border-radius: 10px;
+    background: var(--bg2); padding: 8px 12px; margin-bottom: 12px;
+    font-size: 13px;
+  }
+  .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 999px;
+    background: var(--accent-bg); color: var(--accent);
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; margin-right: 5px; vertical-align: 3px; }
+  .legend i.igmp { background: var(--igmp); }
+  .legend i.pim { background: var(--pim); }
+  .legend i.data { background: var(--data); }
+  .legend i.reg { background: var(--reg); }
+  .legend i.stop { background: var(--stop); }
+  .legend i.est { background: rgb(87 204 138 / 45%); }
+  .legend i.pruned { background: rgb(224 122 95 / 55%); }
+
+  .detail {
+    border: 1px solid var(--border2); border-radius: 10px;
+    background: var(--bg2); padding: 12px 14px; margin-bottom: 10px;
+  }
+  .detail-head {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    justify-content: space-between; margin-bottom: 4px;
+  }
+  .detail-head h3 { font-size: 14.5px; margin: 0; }
+  .stepper { display: flex; gap: 6px; }
+  .stepper .btn { min-height: 24px; font-size: 12px; padding: 0 8px; }
+  .detail .action { color: var(--muted); margin: 0 0 10px; font-size: 13px; }
+
+  .fields { display: grid; gap: 4px; }
+  .field {
+    display: grid; grid-template-columns: 150px 1fr;
+    gap: 3px 12px; align-items: baseline;
+    border-left: 3px solid var(--border); border-radius: 3px;
+    padding: 3px 8px; background: rgb(255 255 255 / 3%);
+  }
+  .field > span { font-size: 12.5px; color: var(--muted); }
+  .field > code { text-align: left; word-break: break-word; }
+  .field[data-state="changed"] { border-left-color: var(--changed); background: var(--changed-bg); }
+  .field[data-state="changed"] > span { color: var(--changed); }
+  .field[data-state="steady"] { border-left-color: var(--steady); }
+  .field[data-state="steady"] > span { color: var(--steady); }
+
+  .risk {
+    margin: 10px 0 0; font-size: 12.5px; color: var(--muted);
+    border-top: 1px dashed var(--border2); padding-top: 8px;
+  }
+  .risk strong { color: var(--risk); font-weight: 600; }
+
+  .footnotes { color: var(--muted); font-size: 12.5px; }
+  .footnotes p { margin: 4px 0; }
+
+  @media (max-width: 760px) {
+    .field { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="pim-walk">
+  <h2>The complete process, clickable — from IGMP report to steady state</h2>
+  <p class="sub">The same twelve steps as the figure above, one at a time. Click a step or use the stepper; the phase buttons jump ahead. The diagram shows each message against the trees the earlier steps already built.</p>
+
+  <div class="controls" role="group" aria-label="Jump to a phase">
+    <button type="button" class="btn" data-phase="A">A · Shared tree (1–2)</button>
+    <button type="button" class="btn" data-phase="B">B · Register the source (3–5)</button>
+    <button type="button" class="btn" data-phase="C">C · Native source tree (6–8)</button>
+    <button type="button" class="btn" data-phase="D">D · SPT switchover (9–12)</button>
+  </div>
+
+  <div class="steps" id="steps" role="group" aria-label="Choose a step"></div>
+
+  <div class="topo">
+    <svg viewBox="0 0 1000 224" role="img" aria-label="PIM-SM topology: Receiver, LHR, RP, FHR, Source, with the current step's messages and established trees">
+      <defs>
+        <marker id="m-igmp" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="var(--igmp)"/></marker>
+        <marker id="m-pim" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="var(--pim)"/></marker>
+        <marker id="m-data" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="var(--data)"/></marker>
+        <marker id="m-reg" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="var(--reg)"/></marker>
+        <marker id="m-stop" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="var(--stop)"/></marker>
+      </defs>
+      <g id="lifelines"></g>
+      <g id="est"></g>
+      <g id="arrows"></g>
+      <g id="nodes"></g>
+    </svg>
+  </div>
+
+  <div class="summary" aria-live="polite">
+    <span class="badge" id="mode"></span>
+    <span id="summary-text"></span>
+  </div>
+
+  <div class="legend">
+    <span><i class="igmp"></i>IGMP</span>
+    <span><i class="pim"></i>PIM Join / Prune</span>
+    <span><i class="data"></i>multicast data</span>
+    <span><i class="reg"></i>Register (unicast)</span>
+    <span><i class="stop"></i>Register-Stop</span>
+    <span><i class="est"></i>tree already built</span>
+    <span><i class="pruned"></i>S pruned off the RPT</span>
+  </div>
+
+  <div class="detail" aria-live="polite">
+    <div class="detail-head">
+      <h3 id="hop-title"></h3>
+      <div class="stepper">
+        <button type="button" class="btn" id="prev">← Prev step</button>
+        <button type="button" class="btn" id="next">Next step →</button>
+      </div>
+    </div>
+    <p class="action" id="hop-action"></p>
+    <div class="fields" id="fields"></div>
+    <p class="risk" id="hop-risk"></p>
+  </div>
+
+  <div class="footnotes">
+    <p><strong>Joins are hop-by-hop:</strong> a PIM Join is addressed to the RPF neighbor, not to the RP or source. Every router on the path creates its own <code>(*,G)</code> or <code>(S,G)</code> state and sends its own Join upstream — the arrows spanning several hops above are shorthand for that chain.</p>
+    <p><strong>Two different RPF lookups:</strong> <code>(*,G)</code> RPF points toward the RP, <code>(S,G)</code> RPF points toward the source — one tree is rooted at the RP, the other at S, so the incoming interfaces can differ. Both come straight from the unicast routing table.</p>
+    <p><strong>Register-Stop is not proof of receivers:</strong> the RP sends it when it receives the traffic natively (<code>SPTbit</code> set) <em>or</em> when it has no receivers at all — a zero-listener source gets a Register-Stop too, just for the opposite reason.</p>
+    <p><strong>Everything is soft state:</strong> Joins must be refreshed periodically or the state expires — including the steady state of step 12, which is held up by refreshed Joins and the ~once-a-minute Null-Register / Register-Stop heartbeat.</p>
+  </div>
+</div>
+
+<script>
+(() => {
+  const root = document.getElementById('pim-walk');
+  if (!root) return;
+
+  const SVG = 'http://www.w3.org/2000/svg';
+  const NODES = [
+    { id: 'receiver', x: 85,  label: 'Receiver', sub: 'Interested in G' },
+    { id: 'lhr',      x: 280, label: 'LHR',      sub: 'Receiver-side DR' },
+    { id: 'rp',       x: 500, label: 'RP',       sub: 'Meeting point' },
+    { id: 'fhr',      x: 720, label: 'FHR',      sub: 'Source-side DR' },
+    { id: 'source',   x: 915, label: 'Source S', sub: 'Sends to G' }
+  ];
+  const X = Object.fromEntries(NODES.map(n => [n.id, n.x]));
+  const LANES = [118, 148, 178, 208];
+
+  // established-tree lanes: rpt = receiver..RP, src = RP..FHR, spt = LHR..FHR
+  const EST = {
+    rpt: { x1: X.receiver, x2: X.rp,  y: 66, cap: '(*,G) shared tree (RPT)' },
+    src: { x1: X.rp,       x2: X.fhr, y: 81, cap: '(S,G) native tree to the RP' },
+    spt: { x1: X.lhr,      x2: X.fhr, y: 96, cap: '(S,G) shortest-path tree (SPT)' }
+  };
+
+  // f(state, label, value): state = null | 'changed' | 'steady'
+  const f = (state, label, value) => ({ state, label, value });
+  // a(kind, from, to, label): one message arrow; kinds: igmp | pim | data | reg | stop
+  const a = (kind, from, to, label) => ({ kind, from, to, label });
+
+  const phases = {
+    A: { badge: 'Phase A · Build the shared tree',
+         summary: 'Receiver-driven: PIM-SM builds nothing until a receiver asks. IGMP tells the LHR; the LHR’s hop-by-hop (*,G) Join builds the shared tree back to the RP.' },
+    B: { badge: 'Phase B · Register the source',
+         summary: 'The FHR unicasts the source’s packets to the RP inside Register messages — receivers get data before any multicast tree reaches the source.' },
+    C: { badge: 'Phase C · Native source tree',
+         summary: 'The RP joins toward the source to replace the Register tunnel with native (S,G) forwarding, then tells the FHR to stop encapsulating.' },
+    D: { badge: 'Phase D · SPT switchover',
+         summary: 'The LHR may join the source directly, prune S off the shared tree, and leave the RP as a discovery point that established traffic bypasses.' }
+  };
+
+  const steps = [
+    {
+      phase: 'A', chip: '1 · IGMP',
+      title: 'Step 1 · Receiver announces membership',
+      est: {},
+      arrows: [a('igmp', 'receiver', 'lhr', 'IGMP Membership Report for G')],
+      action: 'The host sends an IGMP Membership Report for group G. IGMP runs only between hosts and their local router — it never builds trees between routers. The DR on the receiver subnet becomes the LHR.',
+      fields: [
+        f('changed', 'New state at LHR', 'group G — outgoing-interface list: { Receiver LAN }'),
+        f(null,      'Scope',            'host ↔ first-hop router only; the report is not forwarded'),
+        f(null,      'Many receivers',   'one OIL entry per LAN, not one routed entry per receiver')
+      ],
+      risk: 'the receiver never sent the correct report, or the LHR did not learn the membership — verify these two before touching any PIM state.'
+    },
+    {
+      phase: 'A', chip: '2 · (*,G) Join',
+      title: 'Step 2 · LHR joins the shared tree',
+      est: {},
+      arrows: [a('pim', 'lhr', 'rp', '(*,G) Join — hop-by-hop toward the RP')],
+      action: 'The LHR resolves the RP for G, does a unicast RPF lookup toward it, and sends a (*,G) Join to that RPF neighbor. Each intermediate router creates (*,G) state, adds the downstream interface to its OIL, and sends its own Join upstream — until the Join reaches the RP.',
+      fields: [
+        f('changed', 'RPF lookup',   'interface + neighbor toward the RP — the unicast table decides'),
+        f('changed', 'New state',    '(*,G) on every router from LHR to RP'),
+        f('steady',  'Result',       'RP └ transit └ LHR └ receiver LAN — the shared tree (RPT)')
+      ],
+      risk: 'a wrong RP mapping for G, or a Join sent to the wrong RPF neighbor — the branch never reaches the RP and the tree silently fails to form.'
+    },
+    {
+      phase: 'B', chip: '3 · Source on',
+      title: 'Step 3 · Source begins transmitting',
+      est: { rpt: 'on' },
+      arrows: [a('data', 'source', 'fhr', 'Multicast data addressed to G')],
+      action: 'The source just sends — a sender never joins its own group. The PIM DR on the source subnet becomes the FHR, detects the directly connected active source, and creates (S,G) state.',
+      fields: [
+        f('changed', 'New state at FHR', '(S,G) — incoming interface: Source LAN'),
+        f(null,      'RPF',              'for a directly connected source, the source-facing interface is the correct RPF interface'),
+        f(null,      'So far',           'the shared tree exists, but nothing connects it to the source yet')
+      ],
+      risk: 'the source-side DR does not detect the source — no (S,G), no Register, and nothing downstream can ever happen.'
+    },
+    {
+      phase: 'B', chip: '4 · Register',
+      title: 'Step 4 · FHR registers the source with the RP',
+      est: { rpt: 'on' },
+      arrows: [
+        a('data', 'source', 'fhr', 'Multicast data to G'),
+        a('reg',  'fhr',    'rp',  'PIM Register — unicast, full data packet inside')
+      ],
+      action: 'No multicast tree exists between FHR and RP yet, so the FHR encapsulates the complete multicast packet inside a unicast PIM Register. Because it is unicast, transit routers need no multicast state to carry it.',
+      fields: [
+        f('changed', 'Outer packet',  'source FHR → destination RP, protocol PIM'),
+        f('changed', 'Payload',       'the original multicast packet, source S → destination G'),
+        f(null,      'Why unicast',   'reaches the RP over plain unicast routing — no (S,G) state required en route')
+      ],
+      risk: 'the FHR registers to a different RP than the one the LHR joined (inconsistent RP mapping) — source and receivers never meet.'
+    },
+    {
+      phase: 'B', chip: '5 · RPT data',
+      title: 'Step 5 · RP forwards down the shared tree — first delivery',
+      est: { rpt: 'on' },
+      arrows: [
+        a('data', 'source', 'fhr',      'Data keeps flowing to G'),
+        a('reg',  'fhr',    'rp',       'Register keeps carrying the data'),
+        a('data', 'rp',     'receiver', 'Decapsulated data down the RPT to the receiver')
+      ],
+      action: 'The RP decapsulates the Register, learns that source S is active for G, checks its (*,G) receiver state, and forwards the packet down the shared tree. The receiver is now getting traffic — before any multicast tree reaches the source.',
+      fields: [
+        f('changed', 'Data path', 'Source → FHR == Register ==> RP → RPT → LHR → Receiver'),
+        f('steady',  'State used', '(S,G) at the FHR only — the FHR→RP leg is unicast; (*,G) from RP down to the receiver'),
+        f(null,      'RP’s role', 'maps traffic from a now-known source into the shared-tree branches')
+      ],
+      risk: 'the RP holds receiver state but no source state, or the reverse — check that both (*,G) and the Register-learned source appear on the RP.'
+    },
+    {
+      phase: 'C', chip: '6 · RP (S,G) Join',
+      title: 'Step 6 · RP joins toward the source',
+      est: { rpt: 'on' },
+      arrows: [a('pim', 'rp', 'fhr', '(S,G) Join — hop-by-hop along the RPF path to S')],
+      action: 'Register encapsulation is fine for discovery but inefficient for sustained traffic. The RP sends an (S,G) Join toward S along its unicast RPF path; every router on the way creates (S,G) state.',
+      fields: [
+        f('changed', 'New state',  '(S,G) on every router from RP to FHR'),
+        f('changed', 'Per router', 'incoming interface: toward S · OIL: toward RP'),
+        f(null,      'Goal',       'native multicast from FHR to RP, no encapsulation')
+      ],
+      risk: 'an RPF failure toward S on any path router (missing or wrong route to S) — the native tree never builds and Registers continue indefinitely.'
+    },
+    {
+      phase: 'C', chip: '7 · Native to RP',
+      title: 'Step 7 · Native (S,G) traffic reaches the RP',
+      est: { rpt: 'on', src: true },
+      arrows: [
+        a('data', 'fhr', 'rp', 'Native (S,G) data — no encapsulation'),
+        a('reg',  'fhr', 'rp', 'Register copy still arriving — the RP briefly gets two copies')
+      ],
+      action: 'Native multicast now flows down the new (S,G) tree. For a moment the RP receives each packet twice — once natively, once inside a Register. It starts discarding the encapsulated copy and sets SPTbit(S,G).',
+      fields: [
+        f('changed', 'At the RP',  'SPTbit(S,G) set — “I receive this natively now”'),
+        f(null,      'Duplicates', 'expected and brief: native + encapsulated, until step 8'),
+        f('steady',  'Delivery',   'receivers keep getting traffic throughout the transition')
+      ],
+      risk: 'native traffic never arrives even though the Join was sent — walk the (S,G) path router by router checking RPF toward S.'
+    },
+    {
+      phase: 'C', chip: '8 · Register-Stop',
+      title: 'Step 8 · Register-Stop',
+      est: { rpt: 'on', src: true },
+      arrows: [a('stop', 'rp', 'fhr', 'Register-Stop — “stop encapsulating”')],
+      action: 'Receiving natively, the RP tells the FHR to stop sending data Registers. The FHR enters register suppression: native data keeps flowing, and a Null-Register probe goes out roughly once a minute, each answered by a fresh Register-Stop.',
+      fields: [
+        f('changed', 'Two triggers', 'SPTbit set (receiving natively) — or an empty OIL (no receivers at all)'),
+        f('steady',  'Steady state', 'FHR → native data · Null-Register every ~55 s → answered by Register-Stop'),
+        f(null,      'Failsafe',     'a probe that goes unanswered means the native path broke — the FHR resumes full data Registers')
+      ],
+      risk: 'reading Register-Stop as proof of receivers — a source with zero listeners also gets one, just because the RP declined the traffic.'
+    },
+    {
+      phase: 'D', chip: '9 · SPT Join',
+      title: 'Step 9 · LHR joins the SPT (optional)',
+      est: { rpt: 'on', src: true },
+      arrows: [a('pim', 'lhr', 'fhr', '(S,G) Join — hop-by-hop along the shortest path to S')],
+      action: 'Having seen traffic on the RPT, the LHR now knows the source address. Policy permitting, it does a fresh RPF lookup — toward S this time, not the RP — and sends an (S,G) Join along the shortest unicast-derived path to the source.',
+      fields: [
+        f('changed', 'RPF lookup', 'interface + neighbor toward S — can differ completely from the path to the RP'),
+        f('changed', 'New state',  '(S,G) on every router along the shortest path from S to LHR'),
+        f(null,      'Policy',     'switch on first packet · switch above a rate threshold · or stay on the RPT forever')
+      ],
+      risk: 'a missing route to S breaks (S,G) while (*,G) still works — the RPT keeps delivering and the switchover silently never completes.'
+    },
+    {
+      phase: 'D', chip: '10 · SPT data',
+      title: 'Step 10 · Native data over the SPT',
+      est: { rpt: 'on', src: true, spt: true },
+      arrows: [
+        a('data', 'fhr', 'lhr', 'Native (S,G) data over the SPT'),
+        a('data', 'rp',  'lhr', 'RPT copy still arriving — brief duplication')
+      ],
+      action: 'Traffic now reaches the LHR over the direct source tree. During convergence the LHR may briefly receive the same stream twice — once via the SPT, once via the RPT.',
+      fields: [
+        f('changed', 'Data path',  'Source → shortest path → LHR → Receiver'),
+        f(null,      'Duplicates', 'expected only during convergence — step 11 removes them'),
+        f('steady',  'Delivery',   'the receiver never stops getting the stream')
+      ],
+      risk: 'duplicates that persist mean the upcoming (S,G,rpt) Prune never took effect — or two forwarders on one LAN need a PIM Assert to settle it.'
+    },
+    {
+      phase: 'D', chip: '11 · RPT Prune',
+      title: 'Step 11 · LHR prunes S from the shared tree',
+      est: { rpt: 'on', src: true, spt: true },
+      arrows: [a('pim', 'lhr', 'rp', '(S,G,rpt) Prune — “stop sending S down this branch”')],
+      action: 'With valid native traffic arriving on the SPT interface, the LHR no longer wants S via the RP. It sends an (S,G,rpt) Prune toward the RP: stop forwarding source S down this shared-tree branch for group G.',
+      fields: [
+        f('changed', 'New state',  '(S,G,rpt) — blocks S from also arriving through the RPT'),
+        f('steady',  'Retained',   '(*,G) stays up for unknown or other sources of G'),
+        f('steady',  '(S,G) at LHR', 'incoming: toward S · outgoing: receiver LAN')
+      ],
+      risk: 'the prune removes only source S from this branch — if other sources of G stop arriving too, something pruned more than it should have.'
+    },
+    {
+      phase: 'D', chip: '12 · Steady state',
+      title: 'Step 12 · Steady state — traffic bypasses the RP',
+      est: { rpt: 'pruned', spt: true },
+      arrows: [
+        a('data', 'source', 'lhr',      '(S,G) data over the SPT — the RP is bypassed'),
+        a('data', 'lhr',    'receiver', 'Delivered to the receiver LAN'),
+        a('reg',  'fhr',    'rp',       'Null-Register probe, ~every 55 s — “S is still active”'),
+        a('stop', 'rp',     'fhr',      'Register-Stop answer — “stay quiet”')
+      ],
+      action: 'Established source traffic follows the SPT and never touches the RP — with no shared-tree branch left that needs S, the RP has also pruned itself off the source tree. It remains the meeting point for new ASM sources and receivers, kept aware of S by the Null-Register / Register-Stop heartbeat. All of this is soft state — refreshed Joins hold it up.',
+      fields: [
+        f('steady',  'Data path',   'Source → SPT → LHR → Receiver'),
+        f('steady',  'RP’s role',  'discovery point for sources and receivers that have not met yet'),
+        f(null,      'Heartbeat',   'FHR ─ Null-Register → RP · RP ─ Register-Stop → FHR · every ~55–60 s'),
+        f(null,      'Soft state',  'unrefreshed Joins expire — the trees above are continuously re-asserted')
+      ],
+      risk: 'a unicast route change re-steers RPF and silently moves these trees — multicast forwarding always follows the unicast table.'
+    }
+  ];
+
+  const stepsBox = document.getElementById('steps');
+  const phaseButtons = Array.from(root.querySelectorAll('[data-phase]'));
+  let activeStep = 0;
+
+  const byId = id => document.getElementById(id);
+  const el = (tag, attrs) => {
+    const e = document.createElementNS(SVG, tag);
+    for (const [k, v] of Object.entries(attrs || {})) e.setAttribute(k, v);
+    return e;
+  };
+
+  // static SVG furniture: lifelines + node boxes
+  const lifelines = byId('lifelines');
+  const nodesG = byId('nodes');
+  NODES.forEach(n => {
+    lifelines.append(el('line', { class: 'lifeline', x1: n.x, y1: 54, x2: n.x, y2: 216 }));
+    const box = el('rect', { class: 'nodebox', id: 'node-' + n.id, x: n.x - 65, y: 8, width: 130, height: 44, rx: 9 });
+    const label = el('text', { class: 'nodelabel', x: n.x, y: 27 });
+    label.textContent = n.label;
+    const sub = el('text', { class: 'nodesub', x: n.x, y: 44 });
+    sub.textContent = n.sub;
+    nodesG.append(box, label, sub);
+  });
+
+  // step chips
+  steps.forEach((s, i) => {
+    const c = document.createElement('button');
+    c.type = 'button';
+    c.className = 'chip';
+    c.dataset.step = String(i);
+    c.textContent = s.chip;
+    c.addEventListener('click', () => { activeStep = i; render(); });
+    stepsBox.append(c);
+  });
+
+  const drawEst = (g, est) => {
+    for (const [key, mode] of Object.entries(est)) {
+      const seg = EST[key];
+      if (!seg || !mode) continue;
+      const pruned = mode === 'pruned';
+      g.append(el('line', {
+        class: pruned ? 'est-pruned' : 'est',
+        x1: seg.x1, y1: seg.y, x2: seg.x2, y2: seg.y
+      }));
+      const cap = el('text', {
+        class: 'est-cap' + (pruned ? ' pruned' : ''),
+        x: (seg.x1 + seg.x2) / 2, y: seg.y - 5
+      });
+      cap.textContent = pruned ? '(*,G) kept — S pruned off via (S,G,rpt)' : seg.cap;
+      g.append(cap);
+    }
+  };
+
+  const drawArrows = (g, arrows) => {
+    arrows.forEach((ar, i) => {
+      const y = LANES[i] || LANES[LANES.length - 1];
+      const x1 = X[ar.from], x2 = X[ar.to];
+      // pull ends in slightly so arrowheads sit clear of the lifelines
+      const dir = x2 > x1 ? 1 : -1;
+      const line = el('line', {
+        class: `msg k-${ar.kind}`,
+        x1: x1 + dir * 4, y1: y, x2: x2 - dir * 8, y2: y,
+        'marker-end': `url(#m-${ar.kind})`
+      });
+      const label = el('text', { class: `msglabel k-${ar.kind}`, x: (x1 + x2) / 2, y: y - 8 });
+      label.textContent = ar.label;
+      g.append(line, label);
+    });
+  };
+
+  const render = () => {
+    const step = steps[activeStep];
+    const phase = phases[step.phase];
+
+    phaseButtons.forEach(b =>
+      b.setAttribute('aria-pressed', String(b.dataset.phase === step.phase)));
+
+    Array.from(stepsBox.querySelectorAll('.chip')).forEach((c, i) => {
+      c.dataset.active = String(i === activeStep);
+      c.dataset.done = String(i < activeStep);
+    });
+
+    const active = new Set(step.arrows.flatMap(ar => [ar.from, ar.to]));
+    NODES.forEach(n =>
+      byId('node-' + n.id).dataset.active = String(active.has(n.id)));
+
+    const est = byId('est');
+    est.replaceChildren();
+    drawEst(est, step.est);
+
+    const arrows = byId('arrows');
+    arrows.replaceChildren();
+    drawArrows(arrows, step.arrows);
+
+    byId('mode').textContent = phase.badge;
+    byId('summary-text').textContent = phase.summary;
+    byId('hop-title').textContent = step.title;
+    byId('hop-action').textContent = step.action;
+
+    const fields = byId('fields');
+    fields.replaceChildren();
+    step.fields.forEach(field => {
+      const row = document.createElement('div');
+      row.className = 'field';
+      if (field.state) row.dataset.state = field.state;
+      const label = document.createElement('span');
+      label.textContent = field.label;
+      const value = document.createElement('code');
+      value.textContent = field.value;
+      row.append(label, value);
+      fields.append(row);
+    });
+
+    byId('hop-risk').innerHTML = '';
+    const strong = document.createElement('strong');
+    strong.textContent = 'If it breaks here: ';
+    byId('hop-risk').append(strong, document.createTextNode(step.risk));
+
+    byId('prev').disabled = activeStep === 0;
+    byId('next').disabled = activeStep === steps.length - 1;
+    byId('prev').style.opacity = activeStep === 0 ? '.45' : '1';
+    byId('next').style.opacity = activeStep === steps.length - 1 ? '.45' : '1';
+  };
+
+  phaseButtons.forEach(b => b.addEventListener('click', () => {
+    activeStep = steps.findIndex(s => s.phase === b.dataset.phase);
+    render();
+  }));
+  byId('prev').addEventListener('click', () => { if (activeStep > 0) { activeStep--; render(); } });
+  byId('next').addEventListener('click', () => { if (activeStep < steps.length - 1) { activeStep++; render(); } });
+
+  render();
+
+  // run the dash animation only while the diagram is actually on screen
+  const topo = root.querySelector('.topo');
+  new IntersectionObserver(entries =>
+    entries.forEach(e => topo.classList.toggle('live', e.isIntersecting))
+  ).observe(topo);
+})();
+</script>
+<script>
+(() => {
+  let last = 0;
+  const report = () => {
+    const height = Math.ceil(document.body.getBoundingClientRect().height);
+    if (height === last) return;
+    last = height;
+    parent.postMessage({ type: "embed-height", height }, "*");
+  };
+  new ResizeObserver(report).observe(document.body);
+  window.addEventListener("load", report);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="560" viewBox="0 0 1280 560" font-family="Inter,Segoe UI,Arial,sans-serif">
+  <rect width="1280" height="560" fill="#07111f"/>
+  <defs>
+    <filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/></filter>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#9fb0c5"/></marker>
+  </defs>
+
+  <text x="64" y="60" font-size="30" font-weight="750" fill="#e5eef9">CQE &#8212; Completion Queue Entry</text>
+  <text x="64" y="92" font-size="16" font-weight="450" fill="#9fb0c5">A small status record from the RNIC to software &#8212; not a network packet, no application payload</text>
+
+  <!-- flow -->
+  <g filter="url(#shadow)">
+    <rect x="64" y="140" width="380" height="56" rx="10" fill="#152944" stroke="#49627e" stroke-width="2"/>
+    <text x="254" y="173" text-anchor="middle" font-size="14" font-weight="600" fill="#e5eef9">Application posts a Work Request (WR/WQE)</text>
+    <rect x="64" y="236" width="380" height="56" rx="10" fill="#152944" stroke="#49627e" stroke-width="2"/>
+    <text x="254" y="269" text-anchor="middle" font-size="14" font-weight="600" fill="#e5eef9">RNIC performs the operation</text>
+    <rect x="64" y="332" width="380" height="56" rx="10" fill="#2b230f" stroke="#fbbf24" stroke-width="2.5"/>
+    <text x="254" y="365" text-anchor="middle" font-size="14" font-weight="650" fill="#fbbf24">RNIC writes a CQE to the Completion Queue</text>
+    <rect x="64" y="428" width="380" height="56" rx="10" fill="#152944" stroke="#49627e" stroke-width="2"/>
+    <text x="254" y="461" text-anchor="middle" font-size="14" font-weight="600" fill="#e5eef9">Application polls the CQ &#8212; ibv_poll_cq()</text>
+  </g>
+  <line x1="254" y1="196" x2="254" y2="228" stroke="#9fb0c5" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="254" y1="292" x2="254" y2="324" stroke="#9fb0c5" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="254" y1="388" x2="254" y2="420" stroke="#9fb0c5" stroke-width="2" marker-end="url(#arr)"/>
+
+  <!-- comparison cards -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="140" width="696" height="116" rx="10" fill="#0d1b2e" stroke="#49627e" stroke-width="2"/>
+    <text x="544" y="172" font-size="16" font-weight="650" fill="#e5eef9">Plain RDMA Write</text>
+    <text x="544" y="202" font-size="14" fill="#9fb0c5">Sender &#8212; CQE when the whole Write is ACKed (if signaled)</text>
+    <text x="544" y="228" font-size="14" font-weight="600" fill="#fbbf24">Receiver &#8212; no CQE</text>
+
+    <rect x="520" y="288" width="696" height="116" rx="10" fill="#0d1b2e" stroke="#49627e" stroke-width="2"/>
+    <text x="544" y="320" font-size="16" font-weight="650" fill="#e5eef9">RDMA Write With Immediate</text>
+    <text x="544" y="350" font-size="14" fill="#9fb0c5">Sender &#8212; CQE when the whole Write is ACKed (if signaled)</text>
+    <text x="544" y="376" font-size="14" font-weight="600" fill="#34d399">Receiver &#8212; CQE after all 3 packets are placed in memory</text>
+
+    <rect x="520" y="436" width="696" height="52" rx="10" fill="#0f2b22" stroke="#34d399" stroke-width="2"/>
+    <text x="868" y="468" text-anchor="middle" font-size="14" font-weight="600" fill="#34d399">Receiver CQE from Write With Immediate = &#8220;the complete Write has arrived &#8212; the buffer is ready&#8221;</text>
+  </g>
+
+  <text x="1216" y="532" text-anchor="end" font-size="14" font-weight="500" fill="#9fb0c5">RoCE QoS Concepts</text>
+</svg>

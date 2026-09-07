@@ -1132,6 +1132,41 @@ Ethernet / VXLAN underlay MTU:   9000 or 9216 B
 
 In short: grow the RDMA operation size freely within device and application limits, and treat 4,096 B as the normal maximum RoCE data chunk per packet.
 
+#### Packet-by-packet placement: the receiver has no reassembly buffer
+
+What does the destination RNIC do with those three slices? It normally writes each valid, in-order RoCE packet **directly into its final registered-memory location** — it does not park the pieces in a separate reassembly buffer until all 9,000 bytes have arrived:
+
+![Three RoCE Write packets — First at PSN n, Middle at PSN n+1, Last at PSN n+2 — each DMA-ing directly into its slice of a 9,000-byte registered memory buffer: bytes 0–4095, 4096–8191, and 8192–8999, with the operation completing only when the Last packet lands](/posts/roce-qos-concepts-and-packet-examples/roce-write-placement.svg)
+
+The First packet's RETH carries the destination virtual address, R_Key, and total length; the RNIC latches that context and simply advances the destination address for the Middle and Last packets. Linux's soft-RoCE responder shows this packet-by-packet placement directly in code ([`rxe_resp.c`](https://elixir.bootlin.com/linux/latest/source/drivers/infiniband/sw/rxe/rxe_resp.c)).
+
+The consequences worth internalizing:
+
+- This is **RoCE transport segmentation, not IP fragmentation** — nothing here involves the IP layer.
+- The 9,000-byte write is **not atomic**. After packet 1, the first 4,096 bytes may already be visible while the remaining memory still contains old data.
+- If packet 2 is lost, packet 3 is rejected as out-of-sequence. RC requests retransmission — but packet 1's data is not rolled back.
+- A plain RDMA Write generates **no receiver-side CQE** at all.
+- **RDMA Write With Immediate** generates a receiver CQE only after the Last packet completes — which is exactly what lets the application know the complete buffer is ready.
+
+So the receiver application should never consume the buffer merely because some bytes changed. It should wait for a Write With Immediate, an ordered SEND, or another application-level completion signal. The hardware may internally buffer or combine writes, but software must assume progressive, non-atomic placement.
+
+#### CQE: the completion signal software actually waits for
+
+A **CQE — Completion Queue Entry** — is the small status record the RNIC creates to tell software that a work request has completed. It is not a network packet and carries no application payload:
+
+![The completion path — the application posts a work request, the RNIC performs the operation and writes a CQE to the completion queue, and the application polls it with ibv_poll_cq — alongside a comparison: a plain RDMA Write produces a sender CQE only, while Write With Immediate adds a receiver CQE once all three packets are placed](/posts/roce-qos-concepts-and-packet-examples/roce-cqe-flow.svg)
+
+A CQE typically contains:
+
+- success or error status
+- the operation type, such as RDMA Write or Receive
+- the application-provided `wr_id`
+- the transferred byte count
+- the QP number
+- the immediate value, when applicable
+
+For the three-packet write above, the two variants differ only at the receiver: a plain RDMA Write completes with a sender-side CQE (if the work request was signaled) once the whole write is acknowledged, and the receiver sees nothing; Write With Immediate adds a receiver CQE that fires only after all three packets have been placed into memory. That receiver CQE is effectively the signal *"the complete RDMA Write has arrived; the destination buffer is now ready"* — and the receiver application retrieves it with [`ibv_poll_cq()`](https://man7.org/linux/man-pages/man3/ibv_poll_cq.3.html).
+
 #### ECN across the tunnel: how underlay congestion reaches the RNIC
 
 The walkthrough above lists DSCP/ECN among the mutable fields normalized out of the iCRC — here is why that matters operationally. The entire DCQCN loop of section 10 depends on one thing: a CE mark reaching the destination RNIC. But once the packet is VXLAN-encapsulated, the RNIC's copy of the IP header is buried inside the tunnel — a congested spine parses only as far as the outer header, so the outer header is the only place it can mark. Getting that mark back into the header the RNIC actually reads is a three-step relay, defined by the tunnel-ECN rules of RFC 6040 and extended to shim-header tunnels like VXLAN by RFC 9601:
@@ -1167,6 +1202,8 @@ The operational catch: the outer-to-inner CE propagation at decap is a capabilit
 - [Broadcom: Introduction to Congestion Control for RoCE](https://docs.broadcom.com/doc/NCC-WP1XX)
 - [`ibv_modify_qp(3)` man page — QP path-MTU values](https://man7.org/linux/man-pages/man3/ibv_modify_qp.3.html)
 - [NVIDIA RDMA Aware Networks Programming User Manual](https://docs.nvidia.com/networking/display/rdmaawareprogrammingv17)
+- [`ibv_poll_cq(3)` man page — retrieving CQEs](https://man7.org/linux/man-pages/man3/ibv_poll_cq.3.html)
+- [Linux soft-RoCE responder source (`rxe_resp.c`) — packet-by-packet placement](https://elixir.bootlin.com/linux/latest/source/drivers/infiniband/sw/rxe/rxe_resp.c)
 - [RFC 7348: Virtual eXtensible Local Area Network (VXLAN)](https://www.rfc-editor.org/rfc/rfc7348)
 - [RFC 6040: Tunnelling of Explicit Congestion Notification](https://www.rfc-editor.org/rfc/rfc6040)
 - [RFC 9601: Propagating Explicit Congestion Notification Across IP Tunnel Headers Separated by a Shim](https://www.rfc-editor.org/rfc/rfc9601)

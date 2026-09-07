@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="680" viewBox="0 0 1280 680" font-family="Inter,Segoe UI,Arial,sans-serif">
+  <rect width="1280" height="680" fill="#07111f"/>
+  <defs><filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".25"/></filter></defs>
+
+  <text x="64" y="60" font-size="30" font-weight="750" fill="#e5eef9">RDMA operation size vs. RoCE data per packet</text>
+  <text x="64" y="92" font-size="16" font-weight="450" fill="#9fb0c5">The application posts one work request of any size; the RNIC slices it into path-MTU-sized packets</text>
+
+  <!-- application buffer -->
+  <g filter="url(#shadow)">
+    <rect x="64" y="136" width="1152" height="64" fill="#0f2b22" stroke="#34d399" stroke-width="2.5"/>
+    <line x1="588" y1="136" x2="588" y2="200" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4 4" opacity=".55"/>
+    <line x1="1112" y1="136" x2="1112" y2="200" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4 4" opacity=".55"/>
+    <text x="640" y="164" text-anchor="middle" font-size="16" font-weight="650" fill="#34d399">Application buffer &#8212; one RDMA WRITE work request, 9,000 B</text>
+    <text x="326" y="188" text-anchor="middle" font-size="11" fill="#9fb0c5">bytes 0&#8211;4,095</text>
+    <text x="850" y="188" text-anchor="middle" font-size="11" fill="#9fb0c5">4,096&#8211;8,191</text>
+    <text x="1164" y="188" text-anchor="middle" font-size="11" fill="#9fb0c5">8,192&#8211;8,999</text>
+  </g>
+
+  <!-- arrow -->
+  <line x1="640" y1="208" x2="640" y2="264" stroke="#9fb0c5" stroke-width="2"/>
+  <path d="M632,262 L648,262 L640,276 Z" fill="#9fb0c5"/>
+  <text x="664" y="240" font-size="15" font-weight="600" fill="#e5eef9">RNIC packetizes &#8212; QP path MTU = 4,096 B</text>
+
+  <!-- packet 1 -->
+  <text x="64" y="296" font-size="13" font-weight="600" fill="#9fb0c5">Packet 1 &#8212; RDMA Write First</text>
+  <g filter="url(#shadow)" font-size="16" font-weight="650">
+    <rect x="64" y="304" width="96" height="64" fill="#152944" stroke="#49627e" stroke-width="2"/>
+    <text x="112" y="332" text-anchor="middle" fill="#e5eef9" font-size="14">BTH</text>
+    <text x="112" y="354" text-anchor="middle" font-size="12" font-weight="450" fill="#9fb0c5">12 B</text>
+    <rect x="160" y="304" width="96" height="64" fill="#2b230f" stroke="#fbbf24" stroke-width="2.5"/>
+    <text x="208" y="332" text-anchor="middle" fill="#fbbf24" font-size="14">RETH</text>
+    <text x="208" y="354" text-anchor="middle" font-size="12" font-weight="450" fill="#9fb0c5">16 B</text>
+    <rect x="256" y="304" width="524" height="64" fill="#0f2b22" stroke="#34d399" stroke-width="2.5"/>
+    <text x="518" y="332" text-anchor="middle" fill="#34d399">4,096 B RDMA data</text>
+    <text x="518" y="354" text-anchor="middle" font-size="12" font-weight="450" fill="#9fb0c5">= path MTU</text>
+  </g>
+  <text x="800" y="326" font-size="13" fill="#9fb0c5">RETH: remote address, rkey, total DMA length 9,000 B &#8212;</text>
+  <text x="800" y="346" font-size="13" fill="#9fb0c5">only the First packet carries it</text>
+
+  <!-- packet 2 -->
+  <text x="64" y="392" font-size="13" font-weight="600" fill="#9fb0c5">Packet 2 &#8212; RDMA Write Middle</text>
+  <g filter="url(#shadow)" font-size="16" font-weight="650">
+    <rect x="64" y="400" width="96" height="64" fill="#152944" stroke="#49627e" stroke-width="2"/>
+    <text x="112" y="428" text-anchor="middle" fill="#e5eef9" font-size="14">BTH</text>
+    <text x="112" y="450" text-anchor="middle" font-size="12" font-weight="450" fill="#9fb0c5">12 B</text>
+    <rect x="160" y="400" width="524" height="64" fill="#0f2b22" stroke="#34d399" stroke-width="2.5"/>
+    <text x="422" y="428" text-anchor="middle" fill="#34d399">4,096 B RDMA data</text>
+    <text x="422" y="450" text-anchor="middle" font-size="12" font-weight="450" fill="#9fb0c5">= path MTU, exactly</text>
+  </g>
+  <text x="704" y="436" font-size="13" fill="#9fb0c5">no RETH &#8212; the receiver RNIC places the data by BTH PSN</text>
+
+  <!-- packet 3 -->
+  <text x="64" y="488" font-size="13" font-weight="600" fill="#9fb0c5">Packet 3 &#8212; RDMA Write Last</text>
+  <g filter="url(#shadow)">
+    <rect x="64" y="496" width="96" height="64" fill="#152944" stroke="#49627e" stroke-width="2"/>
+    <text x="112" y="524" text-anchor="middle" font-size="14" font-weight="650" fill="#e5eef9">BTH</text>
+    <text x="112" y="546" text-anchor="middle" font-size="12" fill="#9fb0c5">12 B</text>
+    <rect x="160" y="496" width="104" height="64" fill="#0f2b22" stroke="#34d399" stroke-width="2.5"/>
+    <text x="212" y="534" text-anchor="middle" font-size="13" font-weight="650" fill="#34d399">808 B</text>
+  </g>
+  <text x="280" y="524" font-size="13" fill="#9fb0c5">remaining 808 B = 9,000 &#8722; 2 &#215; 4,096</text>
+  <text x="280" y="546" font-size="13" fill="#9fb0c5">the Last packet may be any size up to the path MTU</text>
+
+  <text x="64" y="600" font-size="15" fill="#9fb0c5">Standard path-MTU values: 256 &#183; 512 &#183; 1,024 &#183; 2,048 &#183; 4,096 B &#8212; a 9,000 B interface MTU enables the 4,096 B step, not a 9,000 B RoCE payload.</text>
+  <text x="64" y="626" font-size="15" fill="#9fb0c5">Segmentation applies to RC and UC QPs. UD messages are single-packet, so there the path MTU caps the whole message.</text>
+
+  <text x="1216" y="658" text-anchor="end" font-size="14" font-weight="500" fill="#9fb0c5">RoCE QoS Concepts</text>
+</svg>

@@ -1099,6 +1099,39 @@ Everything this section stacked up — the RoCEv2 encapsulation from the top, th
 
 {{< embed src="/posts/roce-qos-concepts-and-packet-examples/rocev2-vxlan-evpn-workflow.html" title="RoCEv2 over VXLAN EVPN packet workflow" height="1000" >}}
 
+#### Beyond the example payload: RDMA operation size versus RoCE path MTU
+
+The DMA Data field in the walkthrough is the actual application payload — the bytes the verbs layer handed to the RNIC — but its 1,024 B is only an example size chosen to keep the hex readable. Real transfers are bigger, and the important distinction is that two different sizes live at two different layers:
+
+- **The RDMA operation size** is whatever the application posts in one work request — 9 KB, 1 MB, or more.
+- **The RoCE data per packet** is capped by the **QP path MTU** — usually 4,096 B at most.
+
+Standard Linux/RoCE path-MTU choices are 256, 512, 1024, 2048, and 4096 bytes (see the [`ibv_modify_qp` path-MTU values](https://man7.org/linux/man-pages/man3/ibv_modify_qp.3.html) and the [NVIDIA RDMA Aware Networks Programming User Manual](https://docs.nvidia.com/networking/display/rdmaawareprogrammingv17)). Setting the Ethernet interface MTU to 9000 therefore lets the RNIC step up to the full 4,096-byte path MTU — but not to a 9,000-byte RoCE payload per packet. Larger operations are simply segmented by the RNIC automatically, with no software in the loop. A 9,000-byte RDMA Write over a 4,096-byte path MTU becomes three packets:
+
+![A 9,000-byte RDMA Write work request packetized by the RNIC at a 4,096-byte path MTU into three RoCE packets: Write First with BTH and RETH carrying 4,096 bytes, Write Middle with BTH carrying exactly 4,096 bytes, and Write Last with BTH carrying the remaining 808 bytes](/posts/roce-qos-concepts-and-packet-examples/roce-mtu-packetization.svg)
+
+Only the *First* packet carries the RETH with the remote address, rkey, and total DMA length — the receiver's RNIC places the Middle and Last packets from that starting address plus the BTH sequence numbers, the same state-in-hardware trade this section keeps returning to. (This segmentation applies to RC and UC QPs; UD messages are single-packet and therefore genuinely MTU-limited.)
+
+Each of those packets is then wrapped in VXLAN **independently** — the tunnel never sees the 9,000-byte operation, only its 4,096-byte slices:
+
+![Full VXLAN-encapsulated RoCE packet stack — outer Ethernet, IPv4, UDP and VXLAN headers around the inner Ethernet, IPv4, UDP, BTH, RETH, 4,096-byte RDMA data and iCRC — with the outer IPv4 packet totaling 4,206 bytes shown to scale against a 9,000-byte underlay MTU](/posts/roce-qos-concepts-and-packet-examples/roce-vxlan-mtu-budget.svg)
+
+The MTU budget works out comfortably for a jumbo underlay:
+
+- A 4,096-byte RDMA data packet with RETH produces roughly a **4,206-byte outer IPv4 packet**, so a 9,000-byte underlay MTU accommodates it easily.
+- Transporting a complete 9,000-byte *inner IP packet* would instead need approximately **9,050 bytes of underlay L3 MTU**, plus allowance for VLAN tags or other encapsulations.
+- The headroom must exist end to end, because VXLAN VTEPs are not supposed to fragment ([RFC 7348](https://www.rfc-editor.org/rfc/rfc7348)) — the same silent-breakage rule as the overhead arithmetic earlier in this section.
+
+So the typical configuration layers up as:
+
+```text
+Application RDMA operation:      any supported large size
+RoCE QP path MTU:                4096 B         ← per-packet data ceiling
+Ethernet / VXLAN underlay MTU:   9000 or 9216 B
+```
+
+In short: grow the RDMA operation size freely within device and application limits, and treat 4,096 B as the normal maximum RoCE data chunk per packet.
+
 #### ECN across the tunnel: how underlay congestion reaches the RNIC
 
 The walkthrough above lists DSCP/ECN among the mutable fields normalized out of the iCRC — here is why that matters operationally. The entire DCQCN loop of section 10 depends on one thing: a CE mark reaching the destination RNIC. But once the packet is VXLAN-encapsulated, the RNIC's copy of the IP header is buried inside the tunnel — a congested spine parses only as far as the outer header, so the outer header is the only place it can mark. Getting that mark back into the header the RNIC actually reads is a three-step relay, defined by the tunnel-ECN rules of RFC 6040 and extended to shim-header tunnels like VXLAN by RFC 9601:
@@ -1132,5 +1165,8 @@ The operational catch: the outer-to-inner CE propagation at decap is a capabilit
 - [SONiC configuration reference](https://github.com/sonic-net/SONiC/wiki/Configuration)
 - [NVIDIA: Matching RoCEv2 BTH opcode and destination QP](https://docs.nvidia.com/networking/display/mlnxdpdk2211231051lts/matching%2Broce%2Bib%2Bbth%2Bopcode/dest_qp)
 - [Broadcom: Introduction to Congestion Control for RoCE](https://docs.broadcom.com/doc/NCC-WP1XX)
+- [`ibv_modify_qp(3)` man page — QP path-MTU values](https://man7.org/linux/man-pages/man3/ibv_modify_qp.3.html)
+- [NVIDIA RDMA Aware Networks Programming User Manual](https://docs.nvidia.com/networking/display/rdmaawareprogrammingv17)
+- [RFC 7348: Virtual eXtensible Local Area Network (VXLAN)](https://www.rfc-editor.org/rfc/rfc7348)
 - [RFC 6040: Tunnelling of Explicit Congestion Notification](https://www.rfc-editor.org/rfc/rfc6040)
 - [RFC 9601: Propagating Explicit Congestion Notification Across IP Tunnel Headers Separated by a Shim](https://www.rfc-editor.org/rfc/rfc9601)

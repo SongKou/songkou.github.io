@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-labelledby="title desc">
+  <title id="title">One upstream per tree is a local rule</title>
+  <desc id="desc">Source S feeds R0, which connects to equal-cost routers R1 and R2. Receiver routers A and B each connect to both R1 and R2. A selects R1 as its upstream, B selects R2, so R0 replicates the same (S,G) toward both branches. Each receiver router still has exactly one incoming interface for the tree.</desc>
+  <defs>
+    <style>
+      .bg{fill:#fff}.node{fill:#eef6ff;stroke:#7c9bbd;stroke-width:2}.label{font:600 19px Arial,sans-serif;fill:#17212b;text-anchor:middle}.sub{font:15px Arial,sans-serif;fill:#506070;text-anchor:middle}.detail{font:15px Arial,sans-serif;fill:#506070}.step{font:600 17px Arial,sans-serif;fill:#17212b}.line{stroke:#d2dbe5;stroke-width:3;fill:none}.data{stroke:#138a5b;stroke-width:5;fill:none}.phase{font:600 18px Arial,sans-serif;fill:#17212b}.key{font:14px Arial,sans-serif;fill:#506070}
+    </style>
+    <marker id="data-arrow" markerUnits="userSpaceOnUse" markerWidth="15" markerHeight="12" refX="12" refY="6" orient="auto"><path d="M0 0L14 6L0 12Z" fill="#138a5b"/></marker>
+  </defs>
+  <rect class="bg" width="1200" height="560"/>
+  <text x="50" y="38" class="phase">“One upstream per tree” is a local rule — the same (S,G) still branches across the network</text>
+  <line x1="50" y1="62" x2="85" y2="62" class="data"/><text x="93" y="67" class="key">chosen branch (data for one and the same (S,G))</text>
+  <line x1="430" y1="62" x2="465" y2="62" class="line"/><text x="473" y="67" class="key">eligible equal-cost candidate, not selected by that router</text>
+
+  <path class="line" d="M600 95V185M600 185L430 290M600 185L770 290M430 290V405M770 290V405M430 290L770 405M770 290L430 405"/>
+  <path class="data" marker-end="url(#data-arrow)" d="M600 118V161"/>
+  <path class="data" marker-end="url(#data-arrow)" d="M549 216L478 261"/>
+  <path class="data" marker-end="url(#data-arrow)" d="M651 216L722 261"/>
+  <path class="data" marker-end="url(#data-arrow)" d="M430 314V379"/>
+  <path class="data" marker-end="url(#data-arrow)" d="M770 314V379"/>
+
+  <rect class="node" x="525" y="74" width="150" height="42" rx="9"/><text class="label" x="600" y="101">Source S</text>
+  <rect class="node" x="545" y="163" width="110" height="44" rx="9"/><text class="label" x="600" y="191">R0</text>
+  <rect class="node" x="375" y="268" width="110" height="44" rx="9"/><text class="label" x="430" y="296">R1</text>
+  <rect class="node" x="715" y="268" width="110" height="44" rx="9"/><text class="label" x="770" y="296">R2</text>
+  <rect class="node" x="335" y="381" width="190" height="48" rx="9"/><text class="label" x="430" y="411">Receiver router A</text>
+  <rect class="node" x="675" y="381" width="190" height="48" rx="9"/><text class="label" x="770" y="411">Receiver router B</text>
+
+  <text class="detail" x="840" y="182">R0 replicates (S,G):</text>
+  <text class="detail" x="840" y="204">both branches have receivers</text>
+  <text class="sub" x="430" y="454">local selection: upstream R1</text>
+  <text class="sub" x="770" y="454">local selection: upstream R2</text>
+
+  <text x="50" y="515" class="detail">Each receiver router keeps exactly one incoming interface for the tree — the routers need no globally identical</text>
+  <text x="50" y="540" class="detail">hash choice. R0 sending a copy down both branches is normal multicast replication, not ECMP spraying.</text>
+</svg>

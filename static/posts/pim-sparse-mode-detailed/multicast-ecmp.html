@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Multicast ECMP upstream selection</title>
+<style>
+  /* pinned to the blog's m10c palette: #353b43 page; the #3f464f card is set on .mc-hugo-embed below */
+  html { color-scheme: dark; }
+  html, body { margin: 0; background: #353b43; }
+</style>
+</head>
+<body>
+<div class="mc-hugo-embed" id="mc-walk">
+  <div class="viz-controls"><button type="button" class="btn" data-mc-fail aria-pressed="false">Fail next hop B</button><span data-mc-status aria-live="polite">All three equal-cost next hops available</span></div>
+  <div class="text-small">Illustrative (S,G) → upstream RPF selections · not packet direction or actual Cisco hash outputs</div>
+  <div class="mc-panels">
+    <section><h3>1 · Source hash</h3><code>ip multicast multipath</code><div class="text-small">Hash input: S</div><svg class="mc-diagram" role="img" aria-label="Source hash upstream selections"></svg><div class="mc-result" aria-live="polite"></div></section>
+    <section><h3>2 · Basic source + group</h3><code>ip multicast multipath s-g-hash basic</code><div class="text-small">Hash inputs: S, G</div><svg class="mc-diagram" role="img" aria-label="Basic source and group hash upstream selections"></svg><div class="mc-result" aria-live="polite"></div></section>
+    <section><h3>3 · Next-hop-based</h3><code>ip multicast multipath s-g-hash next-hop-based</code><div class="text-small">Hash inputs: S, G, next-hop IP</div><svg class="mc-diagram" role="img" aria-label="Next-hop-based hash upstream selections"></svg><div class="mc-result" aria-live="polite"></div></section>
+  </div>
+  <div class="viz-row text-small"><span><i class="mc-swatch"></i> Unchanged selection</span><span><i class="mc-swatch mc-moved"></i> Moved after failure</span></div>
+  <div class="text-small">S1 = 10.1.1.1 · S2 = 10.1.1.2 · G1/G2/G3 = 232.1.1.1 / .2 / .3</div>
+  <div class="text-small">Next hops A/B/C = 192.0.2.1 / .2 / .3 · all selections are local to one receiving router</div>
+</div>
+<style>
+.mc-hugo-embed {
+  /* m10c-pinned dark palette — single source, no light/media variants */
+  --foreground: #d6dde3; --muted: #99a3ae;
+  --viz-series-1: #70b8ec; --viz-series-2: #ffb16c;
+  color: var(--foreground); background: #3f464f;
+  font: 400 14px/1.5 system-ui, sans-serif;
+  padding: 20px; border-radius: 8px; max-width: 100%;
+  box-sizing: border-box;
+}
+.mc-hugo-embed *, .mc-hugo-embed *::before, .mc-hugo-embed *::after {box-sizing:border-box}
+.mc-hugo-embed h3 {font:500 17px/1.4 system-ui,sans-serif;margin:0 0 12px;color:inherit}
+.mc-hugo-embed .text-small {font-size:12px;line-height:1.5}
+.mc-hugo-embed .viz-controls, .mc-hugo-embed .viz-row {display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:12px}
+.mc-hugo-embed .btn {font:inherit;color:inherit;background:transparent;border:1px solid currentColor;border-radius:5px;padding:8px 12px;min-height:44px;cursor:pointer}
+.mc-hugo-embed .btn:focus-visible {outline:3px solid var(--viz-series-1);outline-offset:3px}
+.mc-hugo-embed code {display:block;font:12px/1.5 ui-monospace,monospace;color:inherit;background:transparent;padding:0;white-space:normal;overflow-wrap:anywhere;min-height:62px;margin-bottom:12px}
+.mc-hugo-embed .mc-panels {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;margin:20px 0 16px}
+.mc-hugo-embed section {min-width:0}
+.mc-hugo-embed .mc-diagram {display:block;width:100%;height:302px;margin-top:12px}
+.mc-hugo-embed .mc-diagram text {fill:var(--foreground);font-size:12px}
+.mc-hugo-embed .mc-result {min-height:44px}
+.mc-hugo-embed .mc-swatch {display:inline-block;width:22px;border-top:3px solid var(--viz-series-1);vertical-align:middle;margin-right:5px}
+.mc-hugo-embed .mc-moved {border-color:var(--viz-series-2);border-top-style:dashed}
+@media(max-width:760px){.mc-hugo-embed .mc-panels{grid-template-columns:1fr;gap:24px}.mc-hugo-embed code{min-height:0}.mc-hugo-embed .mc-result{min-height:0}}
+</style>
+<script>
+(() => {
+const root=document.getElementById('mc-walk');
+const button=root.querySelector('[data-mc-fail]');
+const svgs=[...root.querySelectorAll('.mc-diagram')];
+const results=[...root.querySelectorAll('.mc-result')];
+const initial=[[0,0,0,1,1,1],[0,1,2,2,0,1],[0,1,2,1,2,0]];
+const failed=[[2,2,2,0,0,0],[2,0,0,2,0,2],[0,2,2,0,2,0]];
+const labels=['S1, G1','S1, G2','S1, G3','S2, G1','S2, G2','S2, G3'];
+let down=false;
+function draw(){
+svgs.forEach((svg,m)=>{
+const w=Math.max(220,svg.clientWidth),h=302,x1=75,x2=w-60;
+svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+const map=down?failed[m]:initial[m];
+let content='<title>Illustrative upstream RPF selections</title><text x="0" y="16">Multicast tree</text><text x="'+(w-6)+'" y="16" text-anchor="end">Next hop</text>';
+map.forEach((hop,i)=>{const y=52+i*42,ny=72+hop*90,moved=down&&hop!==initial[m][i];content+=`<path d="M ${x1} ${y} C ${x1+45} ${y}, ${x2-45} ${ny}, ${x2} ${ny}" fill="none" stroke="var(--viz-series-${moved?2:1})" stroke-width="2" ${moved?'stroke-dasharray="5 4"':''}/><text x="0" y="${y+4}">${labels[i]}</text><circle cx="${x1}" cy="${y}" r="3" fill="var(--viz-series-${moved?2:1})"/>`;});
+[0,1,2].forEach((n)=>{const y=72+n*90,isDown=down&&n===1;content+=`<circle cx="${x2}" cy="${y}" r="6" fill="var(--${isDown?'muted':'viz-series-1'})"/><text x="${x2+13}" y="${y+4}">${['A','B','C'][n]}${isDown?' ×':''}</text>`;});
+svg.innerHTML=content;
+const count=map.filter((v,i)=>v!==initial[m][i]).length;
+results[m].textContent=down?`${count} of 6 trees move${m===2?' · only B’s trees':' · surviving paths can also change'}`:['Same source → same upstream','Different groups can use different upstreams','Next-hop identity affects the selection'][m];
+});
+}
+button.addEventListener('click',()=>{down=!down;button.setAttribute('aria-pressed',String(down));button.textContent=down?'Restore next hop B':'Fail next hop B';root.querySelector('[data-mc-status]').textContent=down?'B unavailable · A and C remain equal-cost':'All three equal-cost next hops available';draw();});
+new ResizeObserver(draw).observe(root);draw();
+})();
+</script>
+<script>
+(() => {
+  let last = 0;
+  const report = () => {
+    const height = Math.ceil(document.body.getBoundingClientRect().height);
+    if (height === last) return;
+    last = height;
+    parent.postMessage({ type: "embed-height", height }, "*");
+  };
+  new ResizeObserver(report).observe(document.body);
+  window.addEventListener("load", report);
+})();
+</script>
+</body>
+</html>

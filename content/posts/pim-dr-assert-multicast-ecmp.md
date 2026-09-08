@@ -6,7 +6,7 @@ categories = ['Network']
 tags = ['PIM', 'Multicast', 'ECMP', 'RPF', 'Routing', 'Network']
 +++
 
-Several questions come up whenever two PIM routers share a receiver VLAN over equal-cost paths: if the **DR** and the **Assert winner** are different routers, which one forwards the multicast? Does a single stream ever spread its packets across both paths? If you change nothing, do 500 streams split evenly across the two routers—or does that take configuration? And what changes if the switch becomes a Layer 3 router? This post works through each, with the underlying PIM mechanics and a clear line between what the standards mandate and what is vendor-specific.
+Several questions come up whenever two PIM routers share a receiver VLAN over equal-cost paths: if the **DR** and the **Assert winner** are different routers, which one forwards the multicast? Does a single stream ever spread its packets across both paths? If you change nothing, do 500 streams split evenly across the two routers—or does that take configuration? And what changes if the switch becomes a Layer 3 router? This post works through each, with the underlying PIM mechanics and a clear line between what the standards mandate and what is vendor-specific. For the per-tree ECMP mechanics themselves — hash modes, RPF agreement, failure behavior — see [section 21 of the PIM Sparse Mode post](/posts/pim-sparse-mode-detailed/#21-multicast-ecmp).
 
 ## Start here: PIM DR versus PIM Assert
 

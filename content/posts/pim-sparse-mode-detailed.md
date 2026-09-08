@@ -6,7 +6,7 @@ categories = ['Network']
 tags = ['PIM', 'Multicast', 'PIM-SM', 'Anycast RP', 'MSDP', 'Routing', 'Network']
 +++
 
-A step-by-step walk through the PIM Sparse Mode (PIM-SM) control plane — from a receiver's IGMP report through shared-tree construction, source registration, the native source tree, and the optional shortest-path-tree switchover — then how to make the Rendezvous Point redundant with Anycast RP. For the Designated Router versus Assert election and multicast-ECMP behavior, see the companion post [PIM DR, Assert, and Multicast ECMP](/posts/pim-dr-assert-multicast-ecmp/).
+A step-by-step walk through the PIM Sparse Mode (PIM-SM) control plane — from a receiver's IGMP report through shared-tree construction, source registration, the native source tree, and the optional shortest-path-tree switchover — then how to make the Rendezvous Point redundant with Anycast RP. [Section 21](#21-multicast-ecmp) covers how multicast trees spread across equal-cost paths; for the Designated Router versus Assert election — and how multicast ECMP interacts with those elections when two PIM routers share a receiver VLAN — see the companion post [PIM DR, Assert, and Multicast ECMP](/posts/pim-dr-assert-multicast-ecmp/).
 
 ## 1. Overview
 
@@ -608,7 +608,191 @@ show ip mroute <group>          ! (S,G) should appear on BOTH RPs
 
 If `(S,G)` shows up on RP1 but only `(*,G)` on RP2, you have either missed a member in the RP set or the RP-ID is not reachable. Vendor syntax differs slightly — Arista puts it under `router pim sparse-mode`, Juniper uses `anycast-pim` with an `rp-set` stanza — but the two-address model (a shared anycast address plus a unique per-member RP-ID) is identical everywhere.
 
-## 21. Key Idea
+## 21. Multicast ECMP
+
+Multicast ECMP uses multiple equal-cost routes by distributing multicast **trees** across different upstream paths. In conventional PIM multicast, a router generally selects one upstream path for each multicast tree, while different trees can use different paths.
+
+This section covers native IP multicast with PIM-SM and SSM. Multicast carried inside tunnels (MVPN, VXLAN underlays) can involve additional load-balancing mechanisms. For how these rules interact with the DR and Assert elections on shared segments, see the companion post [PIM DR, Assert, and Multicast ECMP](/posts/pim-dr-assert-multicast-ecmp/).
+
+### 21.1 The basic terms
+
+ECMP means Equal-Cost Multipath: a router has several equally preferred routes toward an address. For multicast, these terms matter (the first five are the notation from section 1):
+
+| Term | Meaning |
+|---|---|
+| `S` | Source IP address |
+| `G` | Multicast destination group |
+| `(S,G)` | Traffic from one particular source to one group |
+| `(*,G)` | Shared-tree state for a group, independent of a particular source |
+| RP | Rendezvous Point, the root of a shared tree |
+| RPF interface / IIF | The expected incoming interface for multicast traffic |
+| OIL / OIF list | The outgoing interfaces that need a copy of the traffic |
+
+For example, `(10.1.1.10, 232.1.1.1)` identifies multicast traffic sent by `10.1.1.10` to group `232.1.1.1`.
+
+PIM uses routing information to build trees toward a source or RP. This information commonly comes from unicast routing, but a separate multicast routing topology can also supply it ([RFC 7761](https://www.rfc-editor.org/rfc/rfc7761.html)).
+
+### 21.2 Why multicast ECMP is different from unicast ECMP
+
+With unicast, the typical decision is:
+
+> Which next hop should I use to send this packet toward its destination?
+
+With multicast, there are two decisions:
+
+> Which **upstream** path should deliver this tree's traffic *to me*?
+>
+> Which **downstream** interfaces need a copy?
+
+ECMP primarily affects the upstream selection. Replication serves the downstream receivers.
+
+A multicast router can therefore have one incoming interface and several outgoing interfaces. Sending copies on those outgoing interfaces is normal multicast replication.
+
+### 21.3 A concrete example
+
+A diamond topology: the source `S` sits behind first-hop router R0, and R3 — the receiver-side router — has equal-cost paths toward `S` through R1 and R2. Suppose the receiver requests `(S,G1)`, and R3's multicast ECMP selection chooses R1:
+
+1. R3 learns that a local receiver wants `(S,G1)`.
+2. R3 looks up the route toward `S`.
+3. R1 and R2 are both eligible equal-cost upstream neighbors.
+4. R3 selects R1 for this tree.
+5. R3 directs its PIM Join toward R1.
+6. The Join continues toward the source.
+7. Multicast data flows back along the established branch.
+
+```text
+Join direction:    R3 → R1 → R0
+Data direction:    R0 → R1 → R3 → Receiver
+```
+
+For another group, `G2`, R3 might select R2:
+
+![Multicast ECMP on a diamond topology: for (S,G1) R3 selects R1 and the tree runs R0-R1-R3; for (S,G2) R3 selects R2, so both equal-cost uplinks carry traffic, one tree each](/posts/pim-sparse-mode-detailed/pim-mcast-ecmp-two-trees.svg)
+
+Both paths now carry traffic, with each tree using its selected upstream path. This is the basic multicast ECMP mechanism: distribute upstream **Join** choices, and the data follows those choices in reverse. [RFC 2991](https://www.rfc-editor.org/rfc/rfc2991.html) explains why per-tree — never per-packet — selection is the safe granularity when multipath meets RPF.
+
+### 21.4 How the RPF check fits in
+
+In the steady-state source-tree example, R3 records something like:
+
+```text
+Multicast entry:     (S,G1)
+Incoming interface:  link to R1
+Outgoing interfaces: receiver-facing interface
+```
+
+When a packet arrives:
+
+| Arrival interface | Expected result |
+|---|---|
+| From R1 | Passes the incoming-interface check |
+| From R2 | Normally **fails** the RPF check for this tree |
+
+The important detail: having two equal-cost routes does **not** automatically make both interfaces valid incoming interfaces for the same tree. The upstream Join selection and the expected incoming interface must agree — otherwise packets arrive through a path the router rejects. The actual PIM forwarding rules also account for shared trees and transitions between trees ([RFC 7761, Section 4.2](https://www.rfc-editor.org/rfc/rfc7761.html#section-4.2)).
+
+This is why an upstream router cannot simply alternate packets between R1 and R2 independently of downstream multicast state.
+
+### 21.5 How the router selects a path
+
+The selection method depends on the platform and configuration. Common approaches:
+
+| Selection method | Consequence |
+|---|---|
+| Deterministic tie-break | Many or all trees may select the same upstream |
+| Source-based hash | Groups from the same source tend to share an upstream |
+| Source-and-group hash | Different groups from one source can select different upstreams |
+| Hash incorporating next-hop identity | Mapping also depends on the candidate upstream neighbors |
+
+Cisco documents source-based, source-and-group-based, and next-hop-aware multicast load splitting ([IP Multicast Load Splitting across Equal-Cost Paths](https://www.cisco.com/c/en/us/td/docs/routers/ios/config/17-x/ip-multicast/b-ip-multicast/m_imc_load_splt_ecmp-0.html)). Note that enabling unicast ECMP alone does not establish which multicast selection method is active — without `ip multicast multipath`, the RPF tie-break picks one path deterministically.
+
+The three Cisco modes, interactive — six `(S,G)` trees hashed across three equal-cost next hops under each mode; press **Fail next hop B** to see how many trees move (and, for the non-next-hop-aware hashes, how even surviving selections can churn):
+
+{{< embed src="/posts/pim-sparse-mode-detailed/multicast-ecmp.html" title="Multicast ECMP upstream selection modes" height="1000" >}}
+
+Consider one source sending four groups. An illustrative mapping:
+
+| Stream | Source-only selection | Source-and-group selection |
+|---|---|---|
+| `(S,G1)` | R1 | R1 |
+| `(S,G2)` | R1 | R2 |
+| `(S,G3)` | R1 | R2 |
+| `(S,G4)` | R1 | R1 |
+
+With source-only selection, every stream has the same source input. Adding the group provides more opportunities to distribute traffic. These mappings are examples — a hash does not promise an even split.
+
+### 21.6 One large stream usually stays on one path
+
+Suppose there are two 10-Gbps upstream links and one 8-Gbps `(S,G)` stream. With conventional per-tree multicast ECMP, that stream selects **one** upstream link and the other carries none of it — the two links never become a 20-Gbps pipe for a single stream. (A 15-Gbps stream would not fit at all; that problem needs faster links, not a better hash.)
+
+Now suppose there are four streams, each at 3 Gbps. If two select each path, each link carries 6 Gbps. Equal stream *counts* still do not guarantee equal bandwidth, though — take a different set of four streams, again two per path:
+
+| Path | Streams | Total |
+|---|---|---|
+| R1 | 8 Gbps + 100 Mbps | 8.1 Gbps |
+| R2 | 100 Mbps + 100 Mbps | 200 Mbps |
+
+A hash distributes identifiers; it does not inherently measure traffic rates. Multicast ECMP is therefore most useful when there are enough independently selectable trees — Cisco describes this as load splitting across multicast *states*, not packets.
+
+### 21.7 Shared trees and source trees can choose different paths
+
+The routing lookup depends on the tree:
+
+| Tree | Upstream lookup target |
+|---|---|
+| Shared tree `(*,G)` | RP address |
+| Source tree `(S,G)` | Source address `S` |
+
+In Any-Source Multicast, a receiver can initially receive traffic through the RP tree and later switch to a shortest-path tree toward `S` (the section 10 switchover). The equal-cost candidates toward the RP may differ from those toward `S`, so the selected incoming path can change during that switch.
+
+Source-Specific Multicast joins `(S,G)` directly and does not require an RP for that delivery ([RFC 7761, Section 4.8](https://www.rfc-editor.org/rfc/rfc7761.html#section-4.8); [RFC 4607](https://www.rfc-editor.org/rfc/rfc4607.html)).
+
+### 21.8 "One upstream per tree" is a local rule
+
+It does not mean an `(S,G)` uses only one link everywhere in the network:
+
+![Two receiver routers behind equal-cost routers R1 and R2: A selects R1 upstream, B selects R2, so R0 replicates the same (S,G) toward both branches while each receiver router keeps exactly one incoming interface](/posts/pim-sparse-mode-detailed/pim-mcast-ecmp-local-rule.svg)
+
+- Receiver router A selects R1 upstream.
+- Receiver router B selects R2 upstream.
+
+The source-side router can replicate the same stream toward both R1 and R2 because both branches have receivers. Each receiver router still has one selected upstream for that tree — across the network, the tree naturally branches.
+
+Likewise, the routers do not need to make an identical hash choice globally. Each router selects its own eligible upstream, and its Join builds the corresponding branch.
+
+### 21.9 What happens when a path fails?
+
+If R3's selected upstream path through R1 fails, R3 must select another eligible upstream and update its multicast state. Conceptually:
+
+```text
+Before:  (S,G1) arrives through R1
+         Failure detected
+         New upstream selected: R2
+         Join established through R2
+After:   forwarding resumes through R2
+```
+
+Interruption depends on failure detection, route convergence, PIM processing, and forwarding-table updates. An available equal-cost route alone does not guarantee lossless failover.
+
+Some implementations provide make-before-break behavior and controls for redistributing Joins ([Juniper: Configuring PIM Join Load Balancing](https://www.juniper.net/documentation/us/en/software/junos/multicast/topics/task/mcast-pim-join-load-balance.html), [PIM make-before-break example](https://www.juniper.net/documentation/us/en/software/junos/multicast/topics/topic-map/pim-mbb.html)). Whether existing trees move when a path returns also depends on the implementation and configuration — the interactive figure in section 21.5 shows the churn difference between the hash modes on a failure.
+
+### 21.10 How to troubleshoot it
+
+For a particular `(S,G)`, work through these questions:
+
+1. **Which address is the RPF lookup using?** The source or the RP?
+2. **Are multiple eligible equal-cost routes actually present?** Inspect the routing information used by multicast.
+3. **Which upstream did multicast select?** Check the tree's RPF neighbor and incoming interface.
+4. **Does the Join follow that upstream?** Inspect PIM neighbors and multicast state hop by hop.
+5. **Where do the packets actually arrive?** Compare interface counters or captures with the selected incoming interface.
+6. **Are downstream interfaces present?** Passing RPF is insufficient if no interface needs the traffic.
+7. **Does the selection method fit the traffic?** One source with many groups can distribute poorly under source-only selection.
+8. **Are you expecting equal bandwidth from unequal streams?** Check traffic rates, not just tree counts.
+
+The key relationship to remember:
+
+> Multicast ECMP selects upstream branches for trees; PIM Joins establish those branches; RPF validates incoming traffic; replication delivers copies downstream.
+
+## 22. Key Idea
 
 PIM-SM separates source discovery from optimized forwarding:
 

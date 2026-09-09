@@ -38,6 +38,19 @@
 }
 
 // ---------------------------------------------------------------------------
+// Opt-in wide embeds — keep article prose at the theme's readable width while
+// allowing dense interactive diagrams to use otherwise-empty desktop space.
+// ---------------------------------------------------------------------------
+@media (min-width: 940px) {
+  .post-content .embed-frame--wide {
+    // Content starts after the 20rem sidebar + 2.5rem left padding. Preserve
+    // another 2.5rem at the viewport's right edge and cap very wide displays.
+    width: calc(100vw - 25rem);
+    max-width: 90rem;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Post index / table of contents — rendered by layouts/shortcodes/toc.html
 // ---------------------------------------------------------------------------
 .post-toc {

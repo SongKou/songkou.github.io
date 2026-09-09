@@ -908,7 +908,11 @@ html>body{padding:0}</style>
     <button type="button" class="btn" data-case="b" aria-pressed="true">1 · B — same VRF, different VLAN</button>
     <button type="button" class="btn" data-case="c" aria-pressed="false">2 · C — same VLAN</button>
     <button type="button" class="btn" data-case="d" aria-pressed="false">3 · D — leaked VRF</button>
-    <button type="button" class="btn" data-case="e" aria-pressed="false">4 · E — route not imported</button>
+    <button type="button" class="btn" data-case="f" aria-pressed="false">4 · F — remote, same VLAN, single domain</button>
+    <button type="button" class="btn" data-case="g" aria-pressed="false">5 · F — remote, same VLAN, multi-domain</button>
+    <button type="button" class="btn" data-case="h" aria-pressed="false">6 · G — remote, different VLAN, single domain</button>
+    <button type="button" class="btn" data-case="i" aria-pressed="false">7 · G — remote, different VLAN, multi-domain</button>
+    <button type="button" class="btn" data-case="e" aria-pressed="false">8 · E — route not imported</button>
   </div>
 
   <div class="card vx-summary" aria-live="polite">
@@ -956,6 +960,7 @@ html>body{padding:0}</style>
       <h3 id="vx-fabric-heading">2 · Across the fabric</h3>
       <p class="text-small text-muted" id="vx-fabric-context"></p>
       <div class="vx-packet" id="vx-fabric-packet" aria-label="VXLAN-encapsulated packet fields"></div>
+      <div class="vx-fabric-segments" id="vx-fabric-segments" aria-label="Three VXLAN packets across the multi-domain fabric" hidden></div>
     </section>
 
     <section class="vx-stage" aria-labelledby="vx-output-heading">
@@ -994,6 +999,10 @@ html>body{padding:0}</style>
     <p><strong>Control plane:</strong> RT, RD, and EVPN route types decide what is installed, but none of them appears as a packet header.</p>
     <p><strong>Assumptions:</strong> remote destination leaves; direct EVPN route import for VRF_B; no default, static, policy, or service route from VRF_A to VRF_C.</p>
     <p>Asymmetric IRB is standards-defined here for same-VRF A→B. RT leaking alone does not provide the destination MAC-VRF state needed for a generic asymmetric A→D path, so that case retains the symmetric IP-VRF path.</p>
+    <p><strong>Address legend:</strong> 192.0.2.11 = Leaf 1’s VTEP loopback (Site A — the loopback the NVE/VXLAN interface sources tunnels from); 203.0.113.21 = Leaf 4’s VTEP loopback (Site B); 192.0.2.100 / 203.0.113.200 = VIP-A / VIP-B, each site’s gateway VIP — an anycast loopback configured with the same address on both of that site’s border gateways (on NX-OS, the loopback named under evpn multisite border-gateway interface). Site A numbers from 192.0.2.0/24, Site B from 203.0.113.0/24.</p>
+    <p><strong>Cases 4–7 — two DCI and two forwarding models:</strong> cases 4 and 6 stretch one EVPN domain across the DCI, so leaf VTEP loopbacks must be reachable site to site and the packet rides one tunnel. Cases 5 and 7 keep each site a separate EVPN domain stitched at border gateways. In Cisco Multi-Site the redundant BGWs share the anycast VIP shown; underlay ECMP picks one per flow, replies may transit the other, and the designated-forwarder election applies to BUM only. Arista’s multi-domain EVPN gateways (RFC 9014) perform the same three-leg decap/re-encap stitch, but each gateway re-originates routes with its own VTEP IP (redundancy through ECMP across the re-originated routes, or an MLAG shared VTEP) rather than a site-wide anycast VIP.</p>
+    <p><strong>Different VLAN does not always mean destination L2 VNI:</strong> cases 6 and 7 cross from VLAN 10 to VLAN 20. Symmetric IRB carries the routed packet in tenant <code>L3VNI_A 50001</code>; asymmetric IRB carries the already-routed frame in destination <code>L2VNI_20 1020</code>. The VNI is normally consistent across the three Multi-Site tunnel legs. Cisco’s separately named “asymmetric VNI” feature means remapping VNI numbers between sites, not asymmetric IRB.</p>
+    <p><strong>Multi-domain and IRB references:</strong> Cisco documents the BGW as a VXLAN tunnel termination and re-origination point and the Multi-Site VIP as the data-plane address used both inside a site and between sites. See the <a href="https://www.cisco.com/c/en/us/products/collateral/switches/nexus-9000-series-switches/white-paper-c11-739942.html" target="_blank" rel="noopener noreferrer">Cisco Multi-Site design white paper</a>, the vendor-neutral <a href="https://www.rfc-editor.org/rfc/rfc9014.html" target="_blank" rel="noopener noreferrer">RFC 9014 EVPN overlay interconnect model</a>, and <a href="https://www.rfc-editor.org/rfc/rfc9135.html#section-4" target="_blank" rel="noopener noreferrer">RFC 9135’s symmetric/asymmetric IRB comparison</a>.</p>
     <p>Server access links may be untagged. The leaf maps the local VLAN/bridge domain to a VNI. If both endpoints are on one leaf, forwarding is local and there is no VXLAN header.</p>
   </div>
 </div>
@@ -1100,6 +1109,43 @@ html>body{padding:0}</style>
   #vxlan-packet-walk-8f32 .vx-packet {
     display: grid;
     gap: 5px;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-stages[data-segmented="true"] {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 2.4fr) minmax(0, 0.8fr);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-fabric-segments {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-fabric-segments[hidden],
+  #vxlan-packet-walk-8f32 .vx-packet[hidden] {
+    display: none;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-fabric-segment {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--card) 82%, transparent);
+  }
+
+  #vxlan-packet-walk-8f32 .vx-fabric-segment h4,
+  #vxlan-packet-walk-8f32 .vx-fabric-segment p {
+    margin-block: 0 8px;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-fabric-segment .vx-field {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  #vxlan-packet-walk-8f32 .vx-fabric-segment .vx-field > code {
+    text-align: left;
   }
 
   #vxlan-packet-walk-8f32 .vx-field {
@@ -1223,6 +1269,14 @@ html>body{padding:0}</style>
 
   @media (max-width: 820px) {
     #vxlan-packet-walk-8f32 .vx-stages {
+      grid-template-columns: 1fr;
+    }
+
+    #vxlan-packet-walk-8f32 .vx-stages[data-segmented="true"] {
+      grid-template-columns: 1fr;
+    }
+
+    #vxlan-packet-walk-8f32 .vx-fabric-segments {
       grid-template-columns: 1fr;
     }
 
@@ -1407,6 +1461,222 @@ html>body{padding:0}</style>
       output: [
         f('drop', 'No output frame', 'A default, static, policy, or service route would change this result')
       ]
+    },
+    f: {
+      mode: 'L2 VNI · single domain, stretched',
+      summary: 'F sits in Site B, but both sites form ONE EVPN domain (the multi-pod model): the tunnel is leaf-to-leaf end to end, and the DCI routers only forward the outer IP packet — nothing re-encapsulates.',
+      ingressAction: 'MAC lookup → F behind Leaf 4 directly',
+      fabricAction: 'One tunnel · L2VNI_10 1010',
+      egressTitle: 'Egress Leaf 4 · Site B',
+      egressAction: 'VNI → VLAN 10 · MAC lookup',
+      destinationTitle: 'Server F · Site B',
+      destinationDetail: '10.10.10.66 · VLAN 10 · VRF_A · remote site',
+      routeLine: 'Type-2 for F reaches Site A with next hop 203.0.113.21 (Leaf 4’s own VTEP) unchanged — one overlay, so Site A leaves need underlay reachability to Site B leaf loopbacks',
+      flowLabel: 'Server A to Server F at the remote site, single EVPN domain: one leaf-to-leaf VXLAN tunnel using L2 VNI 1010.',
+      accessContext: 'F is on-link despite living in another site — the stretched VNI makes both sites one broadcast domain. After ARP (often answered locally by suppression), A addresses F directly.',
+      access: [
+        f('local', 'Local context', 'access port → VLAN 10 / bridge domain 10'),
+        f('ethernet', 'Ethernet · 14 B', 'MAC-A → MAC-F'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.10.66 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged application payload')
+      ],
+      fabricContext: 'Exactly the in-fabric packet of case 3 — the DCI is just more underlay hops. Gateways or WAN routers route the outer IP; no VXLAN processing anywhere in transit.',
+      fabric: [
+        f('outer', 'Outer Ethernet · 14 B', 'rewritten at every underlay hop, DCI included'),
+        f('outer', 'Outer IPv4 · 20 B', '192.0.2.11 (Leaf 1 VTEP) → 203.0.113.21 (Leaf 4 VTEP) · end to end'),
+        f('outer', 'UDP · 8 B', 'entropy source port → 4789'),
+        f('overlay', 'VXLAN · 8 B', 'I=1 · L2VNI_10 1010'),
+        f('ethernet', 'Inner Ethernet · 14 B', 'MAC-A → MAC-F · preserved'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.10.66 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged')
+      ],
+      outputContext: 'The single decapsulation happens at Leaf 4: L2VNI_10 selects VLAN 10, and F receives the frame. Simple — at the price of every leaf loopback and all EVPN state stretching across the DCI (shared fate, no site isolation).',
+      output: [
+        f('local', 'Local context', 'VLAN 10 → Server F access port'),
+        f('ethernet', 'Ethernet · 14 B', 'MAC-A → MAC-F · preserved'),
+        f('ip', 'IPv4', '10.10.10.11 → 10.10.10.66 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged')
+      ]
+    },
+    g: {
+      mode: 'L2 VNI · multi-domain, stitched',
+      summary: 'Same flow, but each site is its own EVPN domain (Cisco Multi-Site, Arista multi-domain EVPN gateway): border gateways terminate each tunnel, look the frame up again, and start the next — three tunnels, one inner frame.',
+      ingressAction: 'MAC lookup → F behind VIP-A',
+      fabricAction: '3 stitched tunnels · L2VNI_10 1010',
+      egressTitle: 'Egress Leaf 4 · Site B',
+      egressAction: 'VNI → VLAN 10 · MAC lookup',
+      destinationTitle: 'Server F · Site B',
+      destinationDetail: '10.10.10.66 · VLAN 10 · VRF_A · remote site',
+      routeLine: 'Site A leaves learn F behind VIP-A (local BGWs re-originate remote-site routes, so leaves never learn a remote VTEP); the BGWs themselves hold F behind VIP-B',
+      flowLabel: 'Server A to Server F at the remote site, multi-domain: three stitched VXLAN tunnels using L2 VNI 1010.',
+      accessContext: 'Identical to case 4 — the host cannot tell which DCI model the fabric uses. A addresses F directly on the stretched subnet.',
+      access: [
+        f('local', 'Local context', 'access port → VLAN 10 / bridge domain 10'),
+        f('ethernet', 'Ethernet · 14 B', 'MAC-A → MAC-F'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.10.66 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged application payload')
+      ],
+      fabricContext: 'Three separate VXLAN packets carry one untouched inner frame. BGW-A terminates the site-A tunnel and originates the DCI tunnel; BGW-B terminates that tunnel and originates the site-B tunnel.',
+      fabricSegments: [
+        {
+          title: '2A · Packet arriving at BGW-A',
+          context: 'Site-A tunnel · Leaf 1 → local border-gateway VIP',
+          fields: [
+            f('outer', 'Outer Ethernet', 'last Site-A underlay hop → BGW-A · rewritten hop by hop'),
+            f('outer', 'Outer IPv4', '192.0.2.11 (Leaf 1 VTEP) → 192.0.2.100 (VIP-A)'),
+            f('outer', 'UDP', 'entropy source port → 4789'),
+            f('overlay', 'VXLAN', 'I=1 · L2VNI_10 1010'),
+            f('ethernet', 'Inner Ethernet', 'MAC-A → MAC-F'),
+            f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.10.66 · TTL 64')
+          ]
+        },
+        {
+          title: '2B · Packet in the DCI',
+          context: 'New tunnel · BGW-A VIP → BGW-B VIP',
+          fields: [
+            f('outer', 'Outer Ethernet', 'rewritten at each DCI underlay hop'),
+            f('outer', 'Outer IPv4', '192.0.2.100 (VIP-A) → 203.0.113.200 (VIP-B)'),
+            f('outer', 'UDP', 'new entropy source port → 4789'),
+            f('overlay', 'VXLAN', 'I=1 · L2VNI_10 1010'),
+            f('ethernet', 'Inner Ethernet', 'MAC-A → MAC-F · unchanged'),
+            f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.10.66 · TTL 64')
+          ]
+        },
+        {
+          title: '2C · Packet leaving BGW-B',
+          context: 'New Site-B tunnel · remote VIP → Leaf 4',
+          fields: [
+            f('outer', 'Outer Ethernet', 'BGW-B → next Site-B underlay hop · rewritten hop by hop'),
+            f('outer', 'Outer IPv4', '203.0.113.200 (VIP-B) → 203.0.113.21 (Leaf 4 VTEP)'),
+            f('outer', 'UDP', 'new entropy source port → 4789'),
+            f('overlay', 'VXLAN', 'I=1 · L2VNI_10 1010'),
+            f('ethernet', 'Inner Ethernet', 'MAC-A → MAC-F · unchanged'),
+            f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.10.66 · TTL 64')
+          ]
+        }
+      ],
+      fabric: [
+        f('local', 'Leg 1 · inside Site A', 'the packet BGW-A receives from the Site A spines'),
+        f('outer', 'Leg 1 · Outer IPv4', '192.0.2.11 (Leaf 1 VTEP) → 192.0.2.100 (VIP-A)'),
+        f('overlay', 'Leg 1 · VXLAN', 'I=1 · VNI 1010 · UDP 4789'),
+        f('local', 'At BGW-A', 'decap → MAC lookup in VNI 1010 → F is behind VIP-B → re-encap'),
+        f('outer', 'Leg 2 · Outer IPv4 · DCI', '192.0.2.100 (VIP-A) → 203.0.113.200 (VIP-B)'),
+        f('overlay', 'Leg 2 · VXLAN', 'VNI 1010 · unchanged across the stitch'),
+        f('local', 'At BGW-B', 'decap → MAC lookup → F is behind Leaf 4 → re-encap'),
+        f('outer', 'Leg 3 · Outer IPv4', '203.0.113.200 (VIP-B) → 203.0.113.21 (Leaf 4 VTEP)'),
+        f('overlay', 'Leg 3 · VXLAN', 'VNI 1010'),
+        f('ethernet', 'Inner Ethernet · all legs', 'MAC-A → MAC-F · identical on every leg'),
+        f('ip', 'Inner IPv4 · all legs', '10.10.10.11 → 10.10.10.66 · TTL 64 · bridged, never routed')
+      ],
+      outputContext: 'L2VNI_10 selects VLAN 10 at Site B; Leaf 4 bridges on MAC-F. Nothing of Site A’s internal underlay crossed the DCI — only VIP-A did. That containment is the point of the extra two tunnels.',
+      output: [
+        f('local', 'Local context', 'VLAN 10 → Server F access port'),
+        f('ethernet', 'Ethernet · 14 B', 'MAC-A → MAC-F · preserved'),
+        f('ip', 'IPv4', '10.10.10.11 → 10.10.10.66 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged')
+      ]
+    },
+    h: {
+      mode: 'Symmetric IRB · L3 VNI · single domain',
+      summary: 'G is in VLAN 20 at Site B. Leaf 1 routes into VRF_A’s L3 VNI, one tunnel crosses the DCI, and Leaf 4 routes out to VLAN 20.',
+      ingressAction: 'VLAN 10 → VRF_A IP lookup',
+      fabricAction: 'One tunnel · L3VNI_A 50001',
+      egressTitle: 'Egress Leaf 4 · Site B',
+      egressAction: 'L3VNI_A → VRF_A → VLAN 20',
+      destinationTitle: 'Server G · Site B',
+      destinationDetail: '10.10.20.77 · VLAN 20 · VRF_A · remote site',
+      routeLine: 'Symmetric IRB: G’s EVPN IP route resolves directly to Leaf 4 VTEP 203.0.113.21 with service VNI 50001; VLAN 20’s L2 VNI is not carried on the tunnel',
+      flowLabel: 'Server A in VLAN 10 to Server G in VLAN 20 at the remote site, single EVPN domain, using symmetric IRB and one L3 VNI 50001 tunnel.',
+      accessContext: 'G is off-subnet, so A sends the original packet to VRF_A’s anycast gateway on VLAN 10.',
+      access: [
+        f('local', 'Local context', 'access port → VLAN 10 / VRF_A'),
+        f('ethernet', 'Ethernet · 14 B', 'MAC-A → GW-A-MAC'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.77 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged application payload')
+      ],
+      fabricContext: 'The ingress leaf routes once, then sends a router-to-router frame directly to the remote leaf across the tenant L3 VNI.',
+      fabric: [
+        f('outer', 'Outer Ethernet · 14 B', 'rewritten at every underlay hop, DCI included'),
+        f('outer', 'Outer IPv4 · 20 B', '192.0.2.11 (Leaf 1 VTEP) → 203.0.113.21 (Leaf 4 VTEP)'),
+        f('outer', 'UDP · 8 B', 'entropy source port → 4789'),
+        f('overlay', 'VXLAN · 8 B', 'I=1 · L3VNI_A 50001'),
+        f('ethernet', 'Inner Ethernet · 14 B', 'RMAC-Leaf1 → RMAC-Leaf4'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.77 · TTL 63'),
+        f('ip', 'L4 + data', 'unchanged')
+      ],
+      outputContext: 'L3VNI_A selects VRF_A; Leaf 4 performs the second IP lookup and emits a VLAN 20 frame to G.',
+      output: [
+        f('local', 'Local context', 'VLAN 20 → Server G access port'),
+        f('ethernet', 'Ethernet · 14 B', 'GW-A-MAC → MAC-G'),
+        f('ip', 'IPv4', '10.10.10.11 → 10.10.20.77 · TTL 62'),
+        f('ip', 'L4 + data', 'unchanged')
+      ]
+    },
+    i: {
+      mode: 'Symmetric IRB · L3 VNI · multi-domain',
+      summary: 'G is in VLAN 20 at Site B. The routed IP-VRF path is stitched through both BGWs as three L3-VNI tunnels; VLAN 20 appears only on the final access side.',
+      ingressAction: 'VLAN 10 → VRF_A IP lookup',
+      fabricAction: '3 stitched tunnels · L3VNI_A 50001',
+      egressTitle: 'Egress Leaf 4 · Site B',
+      egressAction: 'L3VNI_A → VRF_A → VLAN 20',
+      destinationTitle: 'Server G · Site B',
+      destinationDetail: '10.10.20.77 · VLAN 20 · VRF_A · remote site',
+      routeLine: 'Symmetric IRB: Site A resolves G’s IP route through VIP-A; each BGW re-originates the IP-VRF next hop, while service VNI 50001 identifies VRF_A on every tunnel leg',
+      flowLabel: 'Server A in VLAN 10 to Server G in VLAN 20 at the remote site, multi-domain, using three stitched L3 VNI 50001 tunnels.',
+      accessContext: 'G is off-subnet, so A sends to the local anycast gateway; the access frame is identical to case 6.',
+      access: [
+        f('local', 'Local context', 'access port → VLAN 10 / VRF_A'),
+        f('ethernet', 'Ethernet · 14 B', 'MAC-A → GW-A-MAC'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.77 · TTL 64'),
+        f('ip', 'L4 + data', 'unchanged application payload')
+      ],
+      fabricContext: 'Each BGW terminates an L3-VNI tunnel, performs the VRF lookup, rewrites the router-to-router inner Ethernet header, and originates the next tunnel.',
+      fabricSegments: [
+        {
+          title: '2A · Packet arriving at BGW-A',
+          context: 'Site-A IP-VRF tunnel · Leaf 1 → local BGW VIP',
+          fields: [
+            f('outer', 'Outer Ethernet', 'last Site-A underlay hop → BGW-A'),
+            f('outer', 'Outer IPv4', '192.0.2.11 (Leaf 1 VTEP) → 192.0.2.100 (VIP-A)'),
+            f('outer', 'UDP', 'entropy source port → 4789'),
+            f('overlay', 'VXLAN', 'I=1 · L3VNI_A 50001'),
+            f('ethernet', 'Inner Ethernet', 'RMAC-Leaf1 → RMAC-BGW-A'),
+            f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.77 · TTL 63')
+          ]
+        },
+        {
+          title: '2B · Packet in the DCI',
+          context: 'New IP-VRF tunnel · BGW-A VIP → BGW-B VIP',
+          fields: [
+            f('outer', 'Outer Ethernet', 'rewritten at each DCI underlay hop'),
+            f('outer', 'Outer IPv4', '192.0.2.100 (VIP-A) → 203.0.113.200 (VIP-B)'),
+            f('outer', 'UDP', 'new entropy source port → 4789'),
+            f('overlay', 'VXLAN', 'I=1 · L3VNI_A 50001'),
+            f('ethernet', 'Inner Ethernet', 'RMAC-BGW-A → RMAC-BGW-B'),
+            f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.77 · TTL 62')
+          ]
+        },
+        {
+          title: '2C · Packet leaving BGW-B',
+          context: 'New Site-B IP-VRF tunnel · remote VIP → Leaf 4',
+          fields: [
+            f('outer', 'Outer Ethernet', 'BGW-B → next Site-B underlay hop'),
+            f('outer', 'Outer IPv4', '203.0.113.200 (VIP-B) → 203.0.113.21 (Leaf 4 VTEP)'),
+            f('outer', 'UDP', 'new entropy source port → 4789'),
+            f('overlay', 'VXLAN', 'I=1 · L3VNI_A 50001'),
+            f('ethernet', 'Inner Ethernet', 'RMAC-BGW-B → RMAC-Leaf4'),
+            f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.77 · TTL 61')
+          ]
+        }
+      ],
+      fabric: [],
+      outputContext: 'Leaf 4 performs the final VRF lookup and emits a VLAN 20 frame to G. Unlike the same-VLAN bridge case, the inner router MACs and tenant TTL change at routed stitch points.',
+      output: [
+        f('local', 'Local context', 'VLAN 20 → Server G access port'),
+        f('ethernet', 'Ethernet · 14 B', 'GW-A-MAC → MAC-G'),
+        f('ip', 'IPv4', '10.10.10.11 → 10.10.20.77 · TTL 60'),
+        f('ip', 'L4 + data', 'unchanged')
+      ]
     }
   };
 
@@ -1452,6 +1722,96 @@ html>body{padding:0}</style>
     e: {
       mode: 'No route · model-independent',
       summary: 'The VRF_A lookup fails before either IRB forwarding model can create a VXLAN packet.'
+    },
+    f: {
+      mode: 'L2 stretch · model-independent',
+      summary: 'A and F share one stretched bridge domain, so no IRB lookup occurs; the model choice changes nothing on this path.'
+    },
+    g: {
+      mode: 'L2 stretch · model-independent',
+      summary: 'A and F share one stretched bridge domain, so no IRB lookup occurs; the model choice changes nothing on this path.'
+    },
+    h: {
+      mode: 'Asymmetric IRB · L2 VNI · single domain',
+      summary: 'Leaf 1 routes into G’s destination bridge domain, then one L2-VNI tunnel crosses the DCI. Leaf 4 only bridges the resulting VLAN 20 frame.',
+      ingressAction: 'VLAN 10 → VRF_A → VLAN 20 MAC',
+      fabricAction: 'One tunnel · L2VNI_20 1020',
+      egressAction: 'L2VNI_20 → VLAN 20 · bridge only',
+      routeLine: 'Asymmetric IRB: Leaf 1 must hold remote VLAN 20 and G’s MAC/IP adjacency; the tunnel uses destination L2VNI_20 1020, not tenant L3VNI_A 50001',
+      flowLabel: 'Server A in VLAN 10 to Server G in VLAN 20 at the remote site, single EVPN domain, using asymmetric IRB and destination L2 VNI 1020.',
+      fabricContext: 'Leaf 1 has already routed the packet and built the destination-VLAN Ethernet frame; the DCI carries it unchanged in L2VNI_20.',
+      fabric: [
+        f('outer', 'Outer Ethernet · 14 B', 'rewritten at every underlay hop, DCI included'),
+        f('outer', 'Outer IPv4 · 20 B', '192.0.2.11 (Leaf 1 VTEP) → 203.0.113.21 (Leaf 4 VTEP)'),
+        f('outer', 'UDP · 8 B', 'entropy source port → 4789'),
+        f('overlay', 'VXLAN · 8 B', 'I=1 · destination L2VNI_20 1020'),
+        f('ethernet', 'Inner Ethernet · 14 B', 'IRB-MAC-20 → MAC-G'),
+        f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.77 · TTL 63'),
+        f('ip', 'L4 + data', 'unchanged')
+      ],
+      outputContext: 'L2VNI_20 selects VLAN 20; Leaf 4 performs only a MAC lookup, so the tenant TTL remains 63.',
+      output: [
+        f('local', 'Local context', 'VLAN 20 → Server G access port'),
+        f('ethernet', 'Ethernet · 14 B', 'IRB-MAC-20 → MAC-G · preserved'),
+        f('ip', 'IPv4', '10.10.10.11 → 10.10.20.77 · TTL 63'),
+        f('ip', 'L4 + data', 'unchanged')
+      ]
+    },
+    i: {
+      mode: 'Asymmetric IRB · L2 VNI · multi-domain',
+      summary: 'Leaf 1 routes once into VLAN 20. Both BGWs then bridge and stitch the already-routed frame across three destination-L2-VNI tunnels.',
+      ingressAction: 'VLAN 10 → VRF_A → VLAN 20 MAC',
+      fabricAction: '3 stitched tunnels · L2VNI_20 1020',
+      egressAction: 'L2VNI_20 → VLAN 20 · bridge only',
+      routeLine: 'Asymmetric IRB: all participating leaves and BGWs need destination BD20/MAC state; L2VNI_20 1020 stays constant while the three outer tunnel headers change',
+      flowLabel: 'Server A in VLAN 10 to Server G in VLAN 20 at the remote site, multi-domain, using asymmetric IRB and three stitched destination L2 VNI 1020 tunnels.',
+      fabricContext: 'Only Leaf 1 routes. BGW-A and BGW-B terminate and re-originate L2-VNI tunnels but preserve the destination-VLAN frame and tenant TTL.',
+      fabricSegments: [
+        {
+          title: '2A · Packet arriving at BGW-A',
+          context: 'Site-A bridge tunnel · Leaf 1 → local BGW VIP',
+          fields: [
+            f('outer', 'Outer Ethernet', 'last Site-A underlay hop → BGW-A'),
+            f('outer', 'Outer IPv4', '192.0.2.11 (Leaf 1 VTEP) → 192.0.2.100 (VIP-A)'),
+            f('outer', 'UDP', 'entropy source port → 4789'),
+            f('overlay', 'VXLAN', 'I=1 · L2VNI_20 1020'),
+            f('ethernet', 'Inner Ethernet', 'IRB-MAC-20 → MAC-G'),
+            f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.77 · TTL 63')
+          ]
+        },
+        {
+          title: '2B · Packet in the DCI',
+          context: 'New bridge tunnel · BGW-A VIP → BGW-B VIP',
+          fields: [
+            f('outer', 'Outer Ethernet', 'rewritten at each DCI underlay hop'),
+            f('outer', 'Outer IPv4', '192.0.2.100 (VIP-A) → 203.0.113.200 (VIP-B)'),
+            f('outer', 'UDP', 'new entropy source port → 4789'),
+            f('overlay', 'VXLAN', 'I=1 · L2VNI_20 1020'),
+            f('ethernet', 'Inner Ethernet', 'IRB-MAC-20 → MAC-G · unchanged'),
+            f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.77 · TTL 63')
+          ]
+        },
+        {
+          title: '2C · Packet leaving BGW-B',
+          context: 'New Site-B bridge tunnel · remote VIP → Leaf 4',
+          fields: [
+            f('outer', 'Outer Ethernet', 'BGW-B → next Site-B underlay hop'),
+            f('outer', 'Outer IPv4', '203.0.113.200 (VIP-B) → 203.0.113.21 (Leaf 4 VTEP)'),
+            f('outer', 'UDP', 'new entropy source port → 4789'),
+            f('overlay', 'VXLAN', 'I=1 · L2VNI_20 1020'),
+            f('ethernet', 'Inner Ethernet', 'IRB-MAC-20 → MAC-G · unchanged'),
+            f('ip', 'Inner IPv4', '10.10.10.11 → 10.10.20.77 · TTL 63')
+          ]
+        }
+      ],
+      fabric: [],
+      outputContext: 'L2VNI_20 selects VLAN 20; Leaf 4 bridges to MAC-G without another IP lookup, so TTL remains 63.',
+      output: [
+        f('local', 'Local context', 'VLAN 20 → Server G access port'),
+        f('ethernet', 'Ethernet · 14 B', 'IRB-MAC-20 → MAC-G · preserved'),
+        f('ip', 'IPv4', '10.10.10.11 → 10.10.20.77 · TTL 63'),
+        f('ip', 'L4 + data', 'unchanged')
+      ]
     }
   };
 
@@ -1476,6 +1836,32 @@ html>body{padding:0}</style>
       row.append(label, value);
       container.append(row);
     });
+  };
+
+  const renderFabricSegments = segments => {
+    const container = byId('vx-fabric-segments');
+    container.replaceChildren();
+
+    (segments || []).forEach(segment => {
+      const panel = document.createElement('section');
+      panel.className = 'vx-fabric-segment';
+
+      const title = document.createElement('h4');
+      title.textContent = segment.title;
+      const context = document.createElement('p');
+      context.className = 'text-small text-muted';
+      context.textContent = segment.context;
+      const packet = document.createElement('div');
+      packet.className = 'vx-packet';
+      renderFields(packet, segment.fields);
+
+      panel.append(title, context, packet);
+      container.append(panel);
+    });
+
+    container.hidden = !segments?.length;
+    byId('vx-fabric-packet').hidden = Boolean(segments?.length);
+    root.querySelector('.vx-stages').dataset.segmented = String(Boolean(segments?.length));
   };
 
   const render = (key, model) => {
@@ -1513,6 +1899,7 @@ html>body{padding:0}</style>
 
     renderFields(byId('vx-access-packet'), item.access);
     renderFields(byId('vx-fabric-packet'), item.fabric);
+    renderFabricSegments(item.fabricSegments);
     renderFields(byId('vx-output-packet'), item.output);
 
     const fabricNode = byId('vx-fabric-node');

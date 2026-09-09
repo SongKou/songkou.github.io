@@ -1,7 +1,7 @@
 +++
 title = 'NCCL and NVLink Notes'
 date = 2026-08-05T21:00:00+08:00
-lastmod = 2026-08-24T22:00:00+08:00
+lastmod = 2026-09-09T14:30:00+08:00
 draft = false
 categories = ['Network']
 tags = ['NCCL', 'NVLink', 'NVSwitch', 'AllReduce', 'RoCEv2', 'AI Networking', 'GPU', 'GPUDirect RDMA', 'nccl-tests']
@@ -183,6 +183,20 @@ This family does no arithmetic — it only moves data. The four members are dist
 ![AllGather - every rank contributes its shard, every rank ends with the full set](/posts/nvlink-nccl-scaleup-scaleout/nccl-allgather.svg)
 
 A one-line mnemonic for the whole zoo: **"All-" means every rank ends with the final result; "Reduce" means arithmetic happened; "Scatter" means the result was sliced and distributed.** Communication volume in this family is on the order of `(P−1) × N × S` per rank.
+
+#### AllReduce vs AllGather, side by side
+
+The shared "All-" prefix is exactly why these two are the most-confused pair in the zoo: both end with every rank holding identical content, so the picture "afterwards, everyone has everything" fits either. They differ on every other axis:
+
+| | AllReduce (4.1) | AllGather |
+|---|---|---|
+| Each rank contributes | a **full-size** tensor — P same-shaped *versions of the same quantity* (P gradients) | one **shard** — the *i*-th 1/P *piece* of a tensor no rank holds in full |
+| Arithmetic | yes — element-wise: `out[i]` combines every rank's `in[i]` (sum, max, …) | none — bytes are copied, never combined |
+| Element *i* of the result | depends on **all P ranks'** values at position *i* (their sum — or the max among them) | comes from **exactly one** rank — the one whose shard covers position *i* |
+| Result size per rank | equal to each input — nothing grows | `P×N×S` — grows P-fold, concatenated in rank order |
+| Typical job | merge DDP's gradient replicas | reassemble FSDP's sharded parameters |
+
+The instinct to keep: AllReduce answers *"we each computed a version of the same thing — combine them"*; AllGather answers *"we each hold a different piece — hand everyone the whole."* The figures above carry the same distinction in color: AllGather's output keeps every shard's color, because the data only moved; AllReduce's output turns a single dark color, because the inputs were merged and the originals are gone. It is also why the identity in section 6.1 decomposes cleanly — ReduceScatter performs *all* of the arithmetic and leaves the result sharded; the AllGather half only moves finished pieces and never touches a value.
 
 ### 4.3 Full-exchange: AlltoAll
 

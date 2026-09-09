@@ -3,12 +3,6 @@
     <marker id="an" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
       <path d="M0,0 L10,5 L0,10 z" fill="#1F3B5C"/>
     </marker>
-    <linearGradient id="sumgrad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#57A64A"/>
-      <stop offset="0.33" stop-color="#E05C7A"/>
-      <stop offset="0.66" stop-color="#E67E22"/>
-      <stop offset="1" stop-color="#3A7BD5"/>
-    </linearGradient>
   </defs>
 
   <rect x="0" y="0" width="1080" height="800" fill="#ffffff"/>
@@ -74,65 +68,95 @@
     <text x="660" y="396">2</text>
     <text x="900" y="396">3</text>
   </g>
-  <g stroke="#8A8880" stroke-width="1.5">
-    <rect x="220" y="374" width="36" height="32" fill="#F2C4CE"/><rect x="258" y="374" width="36" height="32" fill="#CBE6C0"/>
-    <rect x="460" y="374" width="36" height="32" fill="#F2C4CE"/><rect x="498" y="374" width="36" height="32" fill="#CBE6C0"/>
-    <rect x="700" y="374" width="36" height="32" fill="#F2C4CE"/><rect x="738" y="374" width="36" height="32" fill="#CBE6C0"/>
-    <rect x="940" y="374" width="36" height="32" fill="#F2C4CE"/><rect x="978" y="374" width="36" height="32" fill="#CBE6C0"/>
+  <g fill="#1F3B5C" stroke="#8A8880" stroke-width="1.5">
+    <rect x="220" y="374" width="36" height="32"/><rect x="258" y="374" width="36" height="32"/>
+    <rect x="460" y="374" width="36" height="32"/><rect x="498" y="374" width="36" height="32"/>
+    <rect x="700" y="374" width="36" height="32"/><rect x="738" y="374" width="36" height="32"/>
+    <rect x="940" y="374" width="36" height="32"/><rect x="978" y="374" width="36" height="32"/>
   </g>
-  <g font-size="15" font-weight="bold" fill="#2C2C2A" text-anchor="middle">
+  <g font-size="15" font-weight="bold" fill="#ffffff" text-anchor="middle">
     <text x="238" y="395">18</text><text x="276" y="395">14</text>
     <text x="478" y="395">18</text><text x="516" y="395">14</text>
     <text x="718" y="395">18</text><text x="756" y="395">14</text>
     <text x="958" y="395">18</text><text x="996" y="395">14</text>
   </g>
-  <text x="540" y="445" font-size="12" fill="#5F5E5A" text-anchor="middle">element-wise: 5+2+7+4 = 18,  1+3+8+2 = 14 &#8212; and all four ranks hold the same [18, 14]</text>
+  <text x="540" y="445" font-size="12" fill="#5F5E5A" text-anchor="middle">element-wise: 5+2+7+4 = 18, 1+3+8+2 = 14 &#8212; all four ranks hold the same [18, 14]; dark = merged result</text>
 
   <line x1="60" y1="470" x2="1020" y2="470" stroke="#D3D1C7" stroke-width="1.5" stroke-dasharray="6 5"/>
 
   <!-- ===== tensor view ===== -->
-  <text x="40" y="505" font-size="13" fill="#5F5E5A">The same operation at tensor scale &#8212; per-GPU gradients A/B/C/D merged into one identical sum on every card:</text>
+  <text x="40" y="505" font-size="13" fill="#5F5E5A">The same operation at tensor scale &#8212; each GPU's full gradient drawn as four slices (letter = whose data, digit = slice position). Corresponding slices merge:</text>
 
-  <g stroke="#8A8880" stroke-width="1">
-    <rect x="120" y="530" width="72" height="180" fill="#57A64A"/>
-    <rect x="215" y="530" width="72" height="180" fill="#E05C7A"/>
-    <rect x="310" y="530" width="72" height="180" fill="#E67E22"/>
-    <rect x="405" y="530" width="72" height="180" fill="#3A7BD5"/>
-  </g>
-  <g font-size="18" font-weight="bold" fill="#ffffff" text-anchor="middle">
-    <text x="156" y="626">A</text>
-    <text x="251" y="626">B</text>
-    <text x="346" y="626">C</text>
-    <text x="441" y="626">D</text>
-  </g>
-  <g font-size="11" fill="#5F5E5A" text-anchor="middle">
-    <text x="156" y="730">GPU0</text>
-    <text x="251" y="730">GPU1</text>
-    <text x="346" y="730">GPU2</text>
-    <text x="441" y="730">GPU3</text>
-  </g>
-
-  <line x1="505" y1="620" x2="588" y2="620" stroke="#1F3B5C" stroke-width="4" marker-end="url(#an)"/>
-  <text x="548" y="600" font-size="12" font-weight="bold" fill="#1F3B5C" text-anchor="middle">AllReduce</text>
-
-  <g stroke="#8A8880" stroke-width="1">
-    <rect x="620" y="530" width="72" height="180" fill="url(#sumgrad)"/>
-    <rect x="715" y="530" width="72" height="180" fill="url(#sumgrad)"/>
-    <rect x="810" y="530" width="72" height="180" fill="url(#sumgrad)"/>
-    <rect x="905" y="530" width="72" height="180" fill="url(#sumgrad)"/>
+  <!-- input columns: GPU i holds its own full tensor, four slices -->
+  <g stroke="#8A8880" stroke-width="0.8">
+    <rect x="110" y="530" width="78" height="40" fill="#57A64A"/>
+    <rect x="110" y="574" width="78" height="40" fill="#57A64A" fill-opacity="0.8"/>
+    <rect x="110" y="618" width="78" height="40" fill="#57A64A" fill-opacity="0.6"/>
+    <rect x="110" y="662" width="78" height="40" fill="#57A64A" fill-opacity="0.45"/>
+    <rect x="205" y="530" width="78" height="40" fill="#E05C7A"/>
+    <rect x="205" y="574" width="78" height="40" fill="#E05C7A" fill-opacity="0.8"/>
+    <rect x="205" y="618" width="78" height="40" fill="#E05C7A" fill-opacity="0.6"/>
+    <rect x="205" y="662" width="78" height="40" fill="#E05C7A" fill-opacity="0.45"/>
+    <rect x="300" y="530" width="78" height="40" fill="#E67E22"/>
+    <rect x="300" y="574" width="78" height="40" fill="#E67E22" fill-opacity="0.8"/>
+    <rect x="300" y="618" width="78" height="40" fill="#E67E22" fill-opacity="0.6"/>
+    <rect x="300" y="662" width="78" height="40" fill="#E67E22" fill-opacity="0.45"/>
+    <rect x="395" y="530" width="78" height="40" fill="#3A7BD5"/>
+    <rect x="395" y="574" width="78" height="40" fill="#3A7BD5" fill-opacity="0.8"/>
+    <rect x="395" y="618" width="78" height="40" fill="#3A7BD5" fill-opacity="0.6"/>
+    <rect x="395" y="662" width="78" height="40" fill="#3A7BD5" fill-opacity="0.45"/>
   </g>
   <g font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">
-    <text x="656" y="586">A</text><text x="656" y="602">+</text><text x="656" y="618">B</text><text x="656" y="634">+</text><text x="656" y="650">C</text><text x="656" y="666">+</text><text x="656" y="682">D</text>
-    <text x="751" y="586">A</text><text x="751" y="602">+</text><text x="751" y="618">B</text><text x="751" y="634">+</text><text x="751" y="650">C</text><text x="751" y="666">+</text><text x="751" y="682">D</text>
-    <text x="846" y="586">A</text><text x="846" y="602">+</text><text x="846" y="618">B</text><text x="846" y="634">+</text><text x="846" y="650">C</text><text x="846" y="666">+</text><text x="846" y="682">D</text>
-    <text x="941" y="586">A</text><text x="941" y="602">+</text><text x="941" y="618">B</text><text x="941" y="634">+</text><text x="941" y="650">C</text><text x="941" y="666">+</text><text x="941" y="682">D</text>
+    <text x="149" y="555">A0</text><text x="244" y="555">B0</text><text x="339" y="555">C0</text><text x="434" y="555">D0</text>
+  </g>
+  <g font-size="12" font-weight="bold" fill="#2C2C2A" text-anchor="middle">
+    <text x="149" y="599">A1</text><text x="149" y="643">A2</text><text x="149" y="687">A3</text>
+    <text x="244" y="599">B1</text><text x="244" y="643">B2</text><text x="244" y="687">B3</text>
+    <text x="339" y="599">C1</text><text x="339" y="643">C2</text><text x="339" y="687">C3</text>
+    <text x="434" y="599">D1</text><text x="434" y="643">D2</text><text x="434" y="687">D3</text>
   </g>
   <g font-size="11" fill="#5F5E5A" text-anchor="middle">
-    <text x="656" y="730">GPU0</text>
-    <text x="751" y="730">GPU1</text>
-    <text x="846" y="730">GPU2</text>
-    <text x="941" y="730">GPU3</text>
+    <text x="149" y="725">GPU0</text>
+    <text x="244" y="725">GPU1</text>
+    <text x="339" y="725">GPU2</text>
+    <text x="434" y="725">GPU3</text>
   </g>
 
-  <text x="40" y="775" font-size="12" fill="#5F5E5A">AllReduce removes the difference between replicas &#8212; it does not reduce per-card memory: every card still holds the full-size result.</text>
+  <line x1="505" y1="616" x2="588" y2="616" stroke="#1F3B5C" stroke-width="4" marker-end="url(#an)"/>
+  <text x="548" y="596" font-size="12" font-weight="bold" fill="#1F3B5C" text-anchor="middle">AllReduce</text>
+
+  <!-- output columns: every GPU holds ALL merged slices, same size as one input -->
+  <g stroke="#8A8880" stroke-width="0.8">
+    <rect x="620" y="530" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="620" y="574" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="620" y="618" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="620" y="662" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="715" y="530" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="715" y="574" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="715" y="618" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="715" y="662" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="810" y="530" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="810" y="574" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="810" y="618" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="810" y="662" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="905" y="530" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="905" y="574" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="905" y="618" width="78" height="40" fill="#1F3B5C"/>
+    <rect x="905" y="662" width="78" height="40" fill="#1F3B5C"/>
+  </g>
+  <g font-size="9" font-weight="bold" fill="#ffffff" text-anchor="middle">
+    <text x="659" y="555">A0+B0+C0+D0</text><text x="659" y="599">A1+B1+C1+D1</text><text x="659" y="643">A2+B2+C2+D2</text><text x="659" y="687">A3+B3+C3+D3</text>
+    <text x="754" y="555">A0+B0+C0+D0</text><text x="754" y="599">A1+B1+C1+D1</text><text x="754" y="643">A2+B2+C2+D2</text><text x="754" y="687">A3+B3+C3+D3</text>
+    <text x="849" y="555">A0+B0+C0+D0</text><text x="849" y="599">A1+B1+C1+D1</text><text x="849" y="643">A2+B2+C2+D2</text><text x="849" y="687">A3+B3+C3+D3</text>
+    <text x="944" y="555">A0+B0+C0+D0</text><text x="944" y="599">A1+B1+C1+D1</text><text x="944" y="643">A2+B2+C2+D2</text><text x="944" y="687">A3+B3+C3+D3</text>
+  </g>
+  <g font-size="11" fill="#5F5E5A" text-anchor="middle">
+    <text x="659" y="725">GPU0</text>
+    <text x="754" y="725">GPU1</text>
+    <text x="849" y="725">GPU2</text>
+    <text x="944" y="725">GPU3</text>
+  </g>
+
+  <text x="40" y="752" font-size="12" fill="#5F5E5A">Merged cells go dark: corresponding slices were combined by arithmetic &#8212; and the output is the same size as each input.</text>
+  <text x="40" y="774" font-size="12" fill="#5F5E5A">AllReduce removes the difference between replicas &#8212; it does not reduce per-card memory: every card still holds the full-size result.</text>
 </svg>

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1060" viewBox="0 0 1080 1060" font-family="Arial, Helvetica, sans-serif" role="img" aria-labelledby="title desc">
+  <title id="title">From parallelism decisions to NCCL execution</title>
+  <desc id="desc">The framework selects parallelism and GPU groups. NCCL initializes communicators and discovers topology. For each communication request, NCCL plans and executes the operation, then dependent computation consumes the result. Communicators are reused until shutdown.</desc>
+  <defs>
+    <marker id="ar" markerWidth="7" markerHeight="7" refX="9" refY="5" viewBox="0 0 10 10" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1F3B5C"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1080" height="1060" fill="#ffffff"/>
+  <text x="40" y="36" font-size="20" font-weight="bold" fill="#2C2C2A">Who chooses what in NCCL?</text>
+  <text x="40" y="60" font-size="13" fill="#6B6B66">Framework decisions &#8594; communicator setup &#8594; repeated execution</text>
+
+  <!-- ===================== Framework: workload design ===================== -->
+  <rect x="40" y="88" width="1000" height="140" rx="12" fill="#E3EDFA" stroke="#3A7BD5" stroke-width="1.5"/>
+  <text x="60" y="114" font-size="13" font-weight="bold" fill="#3A7BD5">FRAMEWORK &#183; WORKLOAD DESIGN</text>
+  <text x="60" y="146" font-size="17" font-weight="bold" fill="#1F3B5C">1. Choose TP / PP / DP and assign GPU groups</text>
+  <text x="60" y="172" font-size="13" fill="#2C2C2A">Model memory, batch / concurrency, hardware, performance goals</text>
+  <text x="60" y="192" font-size="13" fill="#2C2C2A">The framework decides the partition and participating ranks.</text>
+  <line x1="540" y1="228" x2="540" y2="252" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- ===================== NCCL: communicator setup ===================== -->
+  <rect x="40" y="256" width="1000" height="200" rx="12" fill="#E5F3E2" stroke="#57A64A" stroke-width="1.5"/>
+  <text x="60" y="282" font-size="13" font-weight="bold" fill="#57A64A">NCCL &#183; COMMUNICATOR SETUP</text>
+  <text x="60" y="314" font-size="17" font-weight="bold" fill="#1F3B5C">2. Initialize communicators</text>
+  <text x="60" y="338" font-size="13" fill="#2C2C2A">Join supplied ranks and exchange participant information</text>
+  <line x1="540" y1="350" x2="540" y2="372" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="60" y="400" font-size="17" font-weight="bold" fill="#1F3B5C">3. Discover topology and prepare paths</text>
+  <text x="60" y="424" font-size="13" fill="#2C2C2A">GPU links, network capabilities, communication graphs</text>
+  <line x1="540" y1="456" x2="540" y2="480" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- ===================== Runtime loop ===================== -->
+  <rect x="40" y="484" width="1000" height="430" rx="12" fill="#FCFBF8" stroke="#D3D1C7" stroke-width="1"/>
+  <text x="60" y="510" font-size="13" font-weight="bold" fill="#6B6B66">RUNTIME &#183; REPEAT FOR EACH COMMUNICATION REQUEST</text>
+
+  <rect x="70" y="528" width="800" height="86" rx="8" fill="#E3EDFA" stroke="#3A7BD5" stroke-width="1.5"/>
+  <text x="90" y="560" font-size="16" font-weight="bold" fill="#1F3B5C">4. Framework requests a specific operation</text>
+  <text x="90" y="586" font-size="13" fill="#2C2C2A">AllReduce, AllGather, ReduceScatter, or Send/Recv</text>
+  <line x1="470" y1="614" x2="470" y2="636" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar)"/>
+
+  <rect x="70" y="640" width="800" height="86" rx="8" fill="#E5F3E2" stroke="#57A64A" stroke-width="1.5"/>
+  <text x="90" y="672" font-size="16" font-weight="bold" fill="#1F3B5C">5. NCCL plans the operation</text>
+  <text x="90" y="698" font-size="13" fill="#2C2C2A">Algorithm, protocol, chunking, and execution resources</text>
+  <line x1="470" y1="726" x2="470" y2="748" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar)"/>
+
+  <rect x="70" y="752" width="800" height="86" rx="8" fill="#E5F3E2" stroke="#57A64A" stroke-width="1.5"/>
+  <text x="90" y="784" font-size="16" font-weight="bold" fill="#1F3B5C">6. Execute on a CUDA stream</text>
+  <text x="90" y="810" font-size="13" fill="#2C2C2A">Dependent computation waits for the result to be ready</text>
+
+  <path d="M870 795 H960 V571 H873" fill="none" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar)"/>
+  <text x="975" y="687" font-size="12" fill="#6B6B66" text-anchor="middle" transform="rotate(-90 975 687)">next request</text>
+
+  <text x="70" y="874" font-size="13" fill="#6B6B66">Reuse communicators &#183; overlap independent computation where possible</text>
+  <line x1="540" y1="914" x2="540" y2="938" stroke="#1F3B5C" stroke-width="2" marker-end="url(#ar)"/>
+
+  <!-- ===================== Shutdown ===================== -->
+  <rect x="290" y="942" width="500" height="56" rx="8" fill="#FBEADB" stroke="#E67E22" stroke-width="1.5"/>
+  <text x="540" y="977" font-size="16" font-weight="bold" fill="#1F3B5C" text-anchor="middle">7. Complete work and release resources</text>
+
+  <line x1="40" y1="1018" x2="1040" y2="1018" stroke="#D8D8D2" stroke-width="1"/>
+  <text x="540" y="1044" font-size="13" fill="#6B6B66" text-anchor="middle">NCCL optimizes execution; the application defines the required result.</text>
+</svg>

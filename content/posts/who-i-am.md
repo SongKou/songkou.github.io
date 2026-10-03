@@ -64,6 +64,6 @@ This part is independent lab and study work rather than production experience. T
 
 ## Contact
 
-You can find me on GitHub as [SongKou](https://github.com/SongKou). The [source for this site](https://github.com/SongKou/songkou.github.io) lives there too.
+You can find me on [LinkedIn](https://www.linkedin.com/in/song-kou-62715210).
 
 This is a personal blog. The labs are independent work and the views are my own, not my employer's.

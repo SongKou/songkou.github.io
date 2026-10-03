@@ -1,0 +1,36 @@
+{{- /*
+  Overrides themes/m10c/layouts/_default/list.html. The only change is the
+  "Pinned" marker.
+
+  Pinning needs no code here: Hugo's default page order puts any post with a
+  non-zero `weight` in its front matter ahead of the dated posts, so
+  `weight = 1` is what sticks a post to the top of the home page. This
+  template just labels such a post so the list does not look mis-sorted once
+  newer posts appear below it.
+*/ -}}
+{{ define "main" }}
+  <article>
+    {{ with .Title -}}<h1>{{- . -}}</h1>{{- end }}
+    {{ with .Content -}}<div class="post-content">{{- . -}}</div>{{- end }}
+    <ul class="posts-list">
+      {{ range where .Paginator.Pages "Type" "!=" "page" }}
+        <li class="posts-list-item">
+          <a class="posts-list-item-title" href="{{ .RelPermalink }}">{{ .Title }}</a>
+          <span class="posts-list-item-description">
+            {{- if .Weight }}
+            {{ partial "icon.html" (dict "ctx" $ "name" "bookmark") }}
+            Pinned
+            <span class="posts-list-item-separator">-</span>
+            {{- end }}
+            {{ partial "icon.html" (dict "ctx" $ "name" "calendar") }}
+            {{ .PublishDate.Format "Jan 2, 2006" }}
+            <span class="posts-list-item-separator">-</span>
+            {{ partial "icon.html" (dict "ctx" $ "name" "clock") }}
+            {{ .ReadingTime }} min read
+          </span>
+        </li>
+      {{ end }}
+    </ul>
+    {{ partial "pagination.html" $ }}
+  </article>
+{{ end }}

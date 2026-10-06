@@ -2,6 +2,9 @@
 title = 'Cheat_Sheet'
 date = 2026-07-21T04:00:00+08:00
 draft = false
+# Pinned second on the home page: weighted posts sort ahead of dated ones,
+# lowest weight first (Who I Am is weight 1). Delete the line to unpin.
+weight = 2
 categories = ['Network']
 tags = ['Cheat Sheet', 'SaltStack', 'Arista', 'VXLAN', 'EVPN', 'RDMA', 'Cumulus', 'Cisco Nexus', 'Network']
 +++

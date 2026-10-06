@@ -1,9 +1,7 @@
 +++
 title = 'Who I Am'
 date = 2026-10-03T12:00:00+08:00
-# Draft: the site build skips this post, so it is not on the live site.
-# Set draft to false to publish it. Preview locally with: hugo server -D
-draft = true
+draft = false
 # Pinned: a non-zero weight sorts this post ahead of every dated post, so it
 # stays first on the home page. Delete the line to unpin it.
 weight = 1
